@@ -33,7 +33,7 @@ interface UIState {
 }
 
 // Single demo credential
-export const CRED = { user: 'admin@margin.io', pass: 'margin' }
+export const CRED = { user: 'vijay@margin.io', pass: 'marginio' }
 const isAuthed = () => { try { return localStorage.getItem('ul_auth') === '1' } catch { return false } }
 
 function defaultScenario(country: CountryId): Scenario {

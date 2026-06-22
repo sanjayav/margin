@@ -98,10 +98,10 @@ function Sidebar() {
 
       <div className="mt-auto space-y-2">
         <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-[11px] font-bold text-brand-400">AD</div>
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-[11px] font-bold text-brand-400">VJ</div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold text-[#F5F0E6]">Admin</div>
-            <div className="truncate text-[10px] text-[#8A8174]">admin@margin.io</div>
+            <div className="truncate text-xs font-semibold text-[#F5F0E6]">Vijay</div>
+            <div className="truncate text-[10px] text-[#8A8174]">vijay@margin.io</div>
           </div>
           <button onClick={logout} title="Sign out" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A8174] transition hover:bg-white/[0.06] hover:text-white">
             <Icon name="reset" size={14} />
