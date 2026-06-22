@@ -8,12 +8,12 @@
 // the live UI. This is what keeps the answers as trustworthy as the chart.
 // ───────────────────────────────────────────────────────────────────────────
 import Anthropic from '@anthropic-ai/sdk'
-import { getPack, PACK_LIST } from '../src/engine/rulepacks'
-import { FLEET } from '../src/data/fleet'
-import { buildTree, aggregateParent, fmtNum } from '../src/engine/engine'
-import { recommend } from '../src/engine/recommend'
-import type { CountryId, Scenario, Vehicle } from '../src/engine/types'
-import { getCurrent } from './_store'
+import { getPack, PACK_LIST } from '../src/engine/rulepacks/index.js'
+import { FLEET } from '../src/data/fleet.js'
+import { buildTree, aggregateParent, fmtNum } from '../src/engine/engine.js'
+import { recommend } from '../src/engine/recommend.js'
+import type { CountryId, Scenario, Vehicle } from '../src/engine/types.js'
+import { getCurrent } from './_store.js'
 
 const MODEL = 'claude-opus-4-8'
 type Fleets = Record<CountryId, Vehicle[]>

@@ -1,8 +1,8 @@
 // GET /api/fleet?country=EU — live normalized fleet + provenance from the store
 // (Neon in prod, local file store in dev). Falls back to the bundled extract on
 // the client only if this returns { fallback: true }.
-import { getCurrent } from './_store'
-import type { CountryId } from '../src/engine/types'
+import { getCurrent } from './_store.js'
+import type { CountryId } from '../src/engine/types.js'
 
 export default async function handler(req: any, res: any) {
   const country = String(req.query?.country ?? 'EU').toUpperCase() as CountryId

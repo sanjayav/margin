@@ -4,8 +4,8 @@
 // €-per-gram return, re-runs the real engine, and repeats until the fleet is
 // below the limit. Returns a ranked, costed to-do list.
 // ───────────────────────────────────────────────────────────────────────────
-import type { Aggregate, RulePack, Scenario, Vehicle } from './types'
-import { aggregate, applyScenario, fmtInt } from './engine'
+import type { Aggregate, RulePack, Scenario, Vehicle } from './types.js'
+import { aggregate, applyScenario, fmtInt } from './engine.js'
 
 export interface Action {
   id: string

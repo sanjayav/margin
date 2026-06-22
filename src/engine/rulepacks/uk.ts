@@ -4,7 +4,7 @@
 // CO₂ chart as a target = baseline × the year's non-ZE allowance, mirroring the
 // UK_VETS workbook Assumptions (CRTS/VRTS NZE allowance %).
 // ───────────────────────────────────────────────────────────────────────────
-import type { RulePack, Vehicle, LimitContext } from '../types'
+import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
 // non-ZE allowance share by year (workbook Assumptions rows 2-3)
 const ALLOW_CAR: Record<number, number> = {

@@ -7,7 +7,7 @@
 // RulePack argument. Nothing about EU/India/etc. is hard-coded below.
 // ───────────────────────────────────────────────────────────────────────────
 
-import type { Aggregate, FineMath, RulePack, Scenario, Vehicle, LimitContext } from './types'
+import type { Aggregate, FineMath, RulePack, Scenario, Vehicle, LimitContext } from './types.js'
 
 export const fmtInt = (n: number) =>
   Math.round(n).toLocaleString('en-US')

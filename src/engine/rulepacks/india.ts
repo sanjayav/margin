@@ -3,7 +3,7 @@
 // Limit & fleet figure are in L/100km (petrol-equivalent fuel consumption).
 // Mirrors the India_CAFE_III workbook Assumptions + Calculator.
 // ───────────────────────────────────────────────────────────────────────────
-import type { RulePack, Vehicle, LimitContext } from '../types'
+import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
 const A = 0.002          // slope, per kg
 const C = 1170           // kg reference (kerb / unladen mass)

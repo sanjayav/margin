@@ -2,9 +2,9 @@
 // Seeds from the bundled official extract (fast, always works). For the full
 // EEA load use `npm run ingest:eu`. Cron-gated via CRON_SECRET (Vercel sends it
 // as a Bearer token); open in local dev when no secret is set.
-import { putDataset, SOURCES, backend } from './_store'
-import fleet from '../src/data/fleet_data'
-import type { CountryId, Vehicle } from '../src/engine/types'
+import { putDataset, SOURCES, backend } from './_store.js'
+import fleet from '../src/data/fleet_data.js'
+import type { CountryId, Vehicle } from '../src/engine/types.js'
 
 function authed(req: any): boolean {
   const secret = process.env.CRON_SECRET

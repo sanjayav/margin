@@ -7,8 +7,8 @@
 import { neon } from '@neondatabase/serverless'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CountryId, Vehicle } from '../src/engine/types'
-import fleet from '../src/data/fleet_data'
+import type { CountryId, Vehicle } from '../src/engine/types.js'
+import fleet from '../src/data/fleet_data.js'
 
 export interface StoreMeta { source: string; url: string | null; lastRefreshed: string | null; datasetVersion: string; live: boolean }
 export interface CurrentData { meta: StoreMeta; vehicles: Vehicle[] }

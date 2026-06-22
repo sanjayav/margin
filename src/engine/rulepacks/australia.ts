@@ -3,7 +3,7 @@
 // Two break-pointed mass-limit lines (Type 1 cars, Type 2 light commercials).
 // Mirrors Australia_NVES NVES Parameters sheet. Credits trade at A$50/unit.
 // ───────────────────────────────────────────────────────────────────────────
-import type { RulePack, Vehicle, LimitContext } from '../types'
+import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
 type P = { head: number; maf: number; ref: number; lower: number; upper: number }
 // year → { Type 1, Type 2 }

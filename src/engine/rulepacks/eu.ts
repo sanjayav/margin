@@ -2,7 +2,7 @@
 // RULE PACK · European Union (Regulation (EU) 2019/631, 2025/1214 flexibility)
 // Mirrors the EU_CO2_Three_Parent workbook's Assumptions + Calculator sheets.
 // ───────────────────────────────────────────────────────────────────────────
-import type { RulePack, Vehicle, LimitContext } from '../types'
+import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
 // Annex-I style mass-based target proxy
 const BASE_CAR = 95 // g CO₂/km, 2021 fleet-wide reference
