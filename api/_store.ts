@@ -8,7 +8,7 @@ import { neon } from '@neondatabase/serverless'
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CountryId, Vehicle } from '../src/engine/types'
-import fleet from '../src/data/fleet_data.json'
+import fleet from '../src/data/fleet_data'
 
 export interface StoreMeta { source: string; url: string | null; lastRefreshed: string | null; datasetVersion: string; live: boolean }
 export interface CurrentData { meta: StoreMeta; vehicles: Vehicle[] }
@@ -22,6 +22,10 @@ export const SOURCES: Record<string, { name: string; url: string }> = {
 
 export const backend: 'neon' | 'local' = process.env.DATABASE_URL ? 'neon' : 'local'
 const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null
+// Vercel's serverless filesystem is read-only (except /tmp), so the local JSON
+// file store only makes sense in dev. On Vercel without Neon we return null and
+// the client falls back to the bundled extract.
+const onVercel = !!process.env.VERCEL
 
 // ── local file store ────────────────────────────────────────────────────────
 const DATA_DIR = join(process.cwd(), '.data')
@@ -69,6 +73,7 @@ export async function getCurrent(market: CountryId): Promise<CurrentData | null>
       vehicles: rows.map(mapRow),
     }
   }
+  if (onVercel) return null // read-only FS in serverless → use bundled extract
   const db = ensureSeed()
   const d = db[market]
   if (!d) return null

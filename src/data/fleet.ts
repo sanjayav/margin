@@ -1,5 +1,5 @@
 import type { CountryId, Vehicle } from '../engine/types'
-import raw from './fleet_data.json'
+import raw from './fleet_data'
 
 const data = raw as unknown as Record<CountryId, Vehicle[]>
 

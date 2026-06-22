@@ -3,7 +3,7 @@
 // EEA load use `npm run ingest:eu`. Cron-gated via CRON_SECRET (Vercel sends it
 // as a Bearer token); open in local dev when no secret is set.
 import { putDataset, SOURCES, backend } from './_store'
-import fleet from '../src/data/fleet_data.json'
+import fleet from '../src/data/fleet_data'
 import type { CountryId, Vehicle } from '../src/engine/types'
 
 function authed(req: any): boolean {
