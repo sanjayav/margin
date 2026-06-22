@@ -102,7 +102,9 @@ export default function Assistant() {
             {error && (
               <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
                 {error}
-                <div className="mt-1 text-ink-500">Tip: the assistant needs the API server running (`vercel dev`) and ANTHROPIC_API_KEY set. The sliders and charts work without it.</div>
+                {/^\s*ANTHROPIC_API_KEY/i.test(error) && (
+                  <div className="mt-1 text-ink-500">Set <span className="font-mono">ANTHROPIC_API_KEY</span> in the environment (locally: <span className="font-mono">.env</span> + restart; on Vercel: project env vars + redeploy). The sliders and charts work without it.</div>
+                )}
               </div>
             )}
           </div>
