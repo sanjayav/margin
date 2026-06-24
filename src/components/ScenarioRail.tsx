@@ -117,6 +117,11 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const makerOverrides = useStore((s) => s.makerOverrides)
   const patch = useStore((s) => s.patchScenario)
   const reset = useStore((s) => s.resetScenario)
+  const savedScenarios = useStore((s) => s.savedScenarios)
+  const saveScenario = useStore((s) => s.saveScenario)
+  const loadScenario = useStore((s) => s.loadScenario)
+  const deleteScenario = useStore((s) => s.deleteScenario)
+  const myScenarios = savedScenarios.filter((s) => s.country === country)
 
   const level = screen === 'analyze' ? drillPath.length : 0
   const maker = drillPath[0] ?? ''
@@ -317,6 +322,26 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
             <div className="px-2.5 py-1.5"><Row label={`A · ${snapA.label}`} o={{ ...aOut, fine: level >= 2 ? (aOut.makerFine ?? 0) : aOut.fine }} cur={pack.currency} dim /><Row label="B · live now" o={{ ...cur, fine: riskFine }} cur={pack.currency} /></div>
           </div>
         )}
+      </div>
+
+      {/* saved scenarios */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="label">Saved scenarios</span>
+          <button onClick={() => { const n = window.prompt('Name this scenario'); if (n != null) saveScenario(n) }} className="text-[10px] font-semibold text-brand transition hover:underline">+ Save current</button>
+        </div>
+        {myScenarios.length === 0
+          ? <div className="text-[10px] text-ink-500">None yet — capture the current assumptions to reuse or compare.</div>
+          : (
+            <div className="space-y-1">
+              {myScenarios.slice(0, 6).map((s) => (
+                <div key={s.id} className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1">
+                  <button onClick={() => loadScenario(s.id)} title="Load" className="flex flex-1 items-center gap-1.5 truncate text-left text-[11px] font-medium text-ink-200 transition hover:text-brand"><Icon name="reset" size={10} className="shrink-0 rotate-180" /> {s.label}</button>
+                  <button onClick={() => deleteScenario(s.id)} title="Delete" className="shrink-0 text-ink-500 transition hover:text-danger"><Icon name="close" size={11} /></button>
+                </div>
+              ))}
+            </div>
+          )}
       </div>
 
       {/* FLEET / BRAND / MODEL */}

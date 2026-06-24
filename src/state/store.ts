@@ -40,6 +40,13 @@ interface UIState {
   setAi: (b: boolean) => void
   setPooling: (b: boolean) => void
 
+  savedScenarios: SavedScenario[]
+  saveScenario: (label: string) => void
+  loadScenario: (id: string) => void
+  deleteScenario: (id: string) => void
+  /** Hydrate the workspace from a shared deep-link (gated to owned modules). */
+  applyShared: (s: SharedState) => void
+
   setCountry: (c: CountryId) => void
   setScreen: (s: AnyScreen) => void
   setParent: (p: string) => void
@@ -68,6 +75,13 @@ function loadEnt(): { modules: CountryId[]; ai: boolean; pooling: boolean } {
 }
 function saveEnt(modules: CountryId[], ai: boolean, pooling: boolean) { try { localStorage.setItem(ENT_KEY, JSON.stringify({ modules, ai, pooling })) } catch { /* ignore */ } }
 const ENT0 = loadEnt()
+
+// Named, durable scenarios (persisted) — promotes the ephemeral A/B snapshot.
+export interface SavedScenario { id: string; label: string; country: CountryId; scenario: Scenario; overrides: Record<string, Partial<Scenario>>; createdAt: number }
+export interface SharedState { country?: CountryId; screen?: ScreenId; planTab?: PlanTab; drillPath?: string[]; scenario?: Scenario; overrides?: Record<string, Partial<Scenario>> }
+const SCEN_KEY = 'ul_scenarios'
+function loadScenarios(): SavedScenario[] { try { const r = JSON.parse(localStorage.getItem(SCEN_KEY) || '[]'); return Array.isArray(r) ? r : [] } catch { return [] } }
+function saveScenarios(list: SavedScenario[]) { try { localStorage.setItem(SCEN_KEY, JSON.stringify(list)) } catch { /* ignore */ } }
 
 // Scope key for the current drill level: null (market), "Maker" (brand), or
 // "Maker/Model" (model). Variant level (3) still scopes to its model.
@@ -136,6 +150,34 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setAi: (b) => { saveEnt(get().subscribedModules, b, get().poolingAddon); set({ aiEnabled: b }) },
   setPooling: (b) => { saveEnt(get().subscribedModules, get().aiEnabled, b); set({ poolingAddon: b }) },
+
+  savedScenarios: loadScenarios(),
+  saveScenario: (label) => {
+    const { scenario, makerOverrides, country, savedScenarios } = get()
+    const item: SavedScenario = { id: `${Date.now()}-${Math.round(Math.random() * 1e6)}`, label: label.trim() || `Scenario ${savedScenarios.length + 1}`, country, scenario, overrides: makerOverrides, createdAt: Date.now() }
+    const next = [item, ...savedScenarios].slice(0, 60)
+    saveScenarios(next); set({ savedScenarios: next })
+  },
+  loadScenario: (id) => {
+    const it = get().savedScenarios.find((x) => x.id === id)
+    if (!it || it.country !== get().country) return // scenarios load within their own module
+    set({ scenario: it.scenario, makerOverrides: it.overrides, drillPath: [] })
+  },
+  deleteScenario: (id) => { const next = get().savedScenarios.filter((x) => x.id !== id); saveScenarios(next); set({ savedScenarios: next }) },
+  applyShared: (sh) => {
+    const c = sh.country
+    if (c && !get().subscribedModules.includes(c)) { set({ view: 'platform', platformScreen: 'modules' }); return }
+    set({
+      country: c ?? get().country,
+      scenario: sh.scenario ?? get().scenario,
+      makerOverrides: sh.overrides ?? {},
+      drillPath: Array.isArray(sh.drillPath) ? sh.drillPath : [],
+      selectedParent: sh.drillPath?.[0] ?? get().selectedParent,
+      screen: sh.screen ?? 'analyze',
+      planTab: sh.planTab ?? 'under',
+      view: 'module',
+    })
+  },
 
   setCountry: (c) =>
     set({

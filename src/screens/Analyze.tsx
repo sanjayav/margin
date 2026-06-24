@@ -13,6 +13,7 @@ import { useCountUp } from '../lib/useCountUp'
 import { useProvenance } from '../lib/provenance'
 import { recommend } from '../engine/recommend'
 import { buildMakerReport, openPrintReport } from '../lib/report'
+import { buildShareUrl } from '../lib/share'
 
 function nodeAt(root: Aggregate, path: string[]): Aggregate {
   let n = root
@@ -84,6 +85,8 @@ export default function Analyze() {
   const crumbs = [tree.label, ...drill]
   const reportParent = drill[0] ?? node.label
   const exportReport = () => openPrintReport(`Margin · ${node.label}`, buildMakerReport(node, pack, scenario, meta, recommend(raw, pack, scenario, reportParent), new Date().toISOString().slice(0, 10)))
+  const [copied, setCopied] = useState(false)
+  const copyLink = async () => { const url = buildShareUrl(); try { await navigator.clipboard.writeText(url) } catch { /* ignore */ } setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
   return (
     <div className="space-y-5">
@@ -98,6 +101,7 @@ export default function Analyze() {
         ))}
         {drill.length > 0 && <button onClick={() => setDrill(drill.slice(0, -1))} className="ml-1 flex items-center gap-1 rounded-lg border border-black/[0.08] px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100"><Icon name="reset" size={12} /> Up</button>}
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={copyLink} className="btn-ghost px-3 py-1.5 text-xs"><Icon name={copied ? 'check' : 'link'} size={14} /> {copied ? 'Copied' : 'Copy link'}</button>
           <button onClick={() => showProv({ agg: node, pack, scenario, meta })} className="btn-ghost px-3 py-1.5 text-xs"><Icon name="shield" size={14} /> Show the working</button>
           <button onClick={exportReport} className="btn-ghost px-3 py-1.5 text-xs"><Icon name="section" size={14} /> Export</button>
         </div>

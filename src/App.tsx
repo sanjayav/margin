@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useStore, type ScreenId } from './state/store'
 import { useCompliance } from './lib/useCompliance'
-import { fmtMoney } from './engine/engine'
+import { fmtMoney, fmtNum } from './engine/engine'
 import { MODULE_META } from './lib/modules'
 import { StatusPill } from './components/ui'
 import Icon, { type IconName } from './components/Icon'
@@ -9,6 +9,7 @@ import { ScenarioRail } from './components/ScenarioRail'
 import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import PlatformShell from './components/PlatformShell'
+import { applySharedFromHash } from './lib/share'
 import Analyze from './screens/Analyze'
 import Analytics from './screens/Analytics'
 import Data from './screens/Data'
@@ -105,13 +106,17 @@ function Sidebar() {
 }
 
 function TopBar() {
-  const { pack, tree, parent } = useCompliance()
+  const { pack, tree } = useCompliance()
   const screen = useStore((s) => s.screen)
+  const year = useStore((s) => s.scenario.year)
   const item = NAV.find((n) => n.id === screen)
-  // real exposure = sum of per-maker fines (fines are assessed per maker)
-  const marketFine = (tree.children ?? []).reduce((a, c) => a + c.fine, 0)
+  // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
+  const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
+  const marketFine = makers.reduce((a, c) => a + c.fine, 0)
+  const over = makers.filter((c) => c.status === 'fine').length
+  const under = tree.gap <= 0
   return (
-    <header className="flex items-center justify-between border-b border-white/[0.08] px-7 py-3.5" style={{ background: CHROME }}>
+    <header className="flex items-center justify-between border-b border-white/[0.08] px-7 py-3" style={{ background: CHROME }}>
       <div className="flex items-center gap-3.5">
         <div className="grid h-10 w-10 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.05] text-brand-400">
           <Icon name={item?.icon ?? 'gauge'} size={20} />
@@ -122,18 +127,25 @@ function TopBar() {
             <span className="text-[#5E574C]">/</span>
             <span>{tree.label}</span>
           </div>
-          <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-white">{item?.label}</h1>
+          <h1 className="font-display text-[21px] font-bold leading-tight tracking-tight text-white">{item?.label}</h1>
         </div>
       </div>
-      <div className="flex items-center gap-5">
-        <div className="text-right">
-          <div className="label text-[#8A8174]">Market fine exposure</div>
-          <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}</div>
+      {/* board verdict */}
+      <div className="flex items-center gap-3.5">
+        <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 ${under ? 'border-safe/25 bg-safe/[0.08]' : 'border-danger/25 bg-danger/[0.08]'}`}>
+          <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger animate-pulse'}`} />
+          <div className="leading-tight">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9A9082]">{pack.name} {year} · {under ? 'Under the line' : 'Over the line'}</div>
+            <div className="num text-[13px] font-bold text-white">
+              {fmtNum(tree.avgMetric, 1)}<span className="font-medium text-[#9A9082]"> / {fmtNum(tree.limit, 1)} {pack.metricUnit}</span>
+              <span className={under ? 'text-safe' : 'text-[#FF7A6B]'}> · {tree.gap > 0 ? '+' : ''}{fmtNum(tree.gap, 1)}</span>
+            </div>
+          </div>
         </div>
         <div className="h-10 w-px bg-white/[0.10]" />
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="label text-[#8A8174]">{parent.label}</div>
-          <StatusPill status={parent.status} />
+        <div className="text-right">
+          <div className="label text-[#8A8174]">€-at-risk</div>
+          <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}<span className="ml-1.5 text-[11px] font-medium text-[#9A9082]">{over} of {makers.length} over</span></div>
         </div>
       </div>
     </header>
@@ -183,6 +195,7 @@ export default function App() {
   const view = useStore((s) => s.view)
   const loadFleet = useStore((s) => s.loadFleet)
   useEffect(() => { if (authed) loadFleet() }, [loadFleet, authed])
+  useEffect(() => { applySharedFromHash() }, []) // hydrate a deep-link if present
 
   if (!authed) return <Login />
   return view === 'platform' ? <PlatformShell /> : <ModuleShell />
