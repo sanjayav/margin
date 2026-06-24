@@ -23,7 +23,12 @@ export interface DashboardAction {
 export function applyActions(actions: DashboardAction[]) {
   const s = useStore.getState()
   for (const a of actions) {
-    if (a.country && a.country !== s.country) s.setCountry(a.country)
+    // The AI may only move the workspace into a SUBSCRIBED module — route through
+    // the gated enterModule (never the raw setCountry), and ignore unowned markets.
+    if (a.country && a.country !== s.country) {
+      if (!s.subscribedModules.includes(a.country)) continue
+      s.enterModule(a.country)
+    }
     if (a.parent) s.setParent(a.parent)
     if (a.screen) s.setScreen(a.screen as any)
     const patch: Record<string, unknown> = {}

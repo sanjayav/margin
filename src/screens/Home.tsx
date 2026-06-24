@@ -21,8 +21,9 @@ export default function Home() {
   const ai = useStore((s) => s.aiEnabled)
   const enter = useStore((s) => s.enterModule)
   const goto = useStore((s) => s.setPlatformScreen)
+  const dataVersion = useStore((s) => s.dataVersion)
 
-  const summaries = useMemo(() => Object.fromEntries(owned.map((c) => [c, moduleSummary(c)])), [owned])
+  const summaries = useMemo(() => Object.fromEntries(owned.map((c) => [c, moduleSummary(c)])), [owned, dataVersion])
   const locked = ALL_MODULES.filter((c) => !owned.includes(c))
   const totalUnits = owned.reduce((a, c) => a + summaries[c].units, 0)
   const totalMakers = owned.reduce((a, c) => a + summaries[c].makers, 0)
@@ -62,6 +63,16 @@ export default function Home() {
           <h2 className="font-display text-[15px] font-bold tracking-tight text-ink-100">Your modules</h2>
           <button onClick={() => goto('subscription')} className="text-[11px] font-semibold text-brand hover:underline">Manage subscription</button>
         </div>
+        {owned.length === 0 && (
+          <div className="card flex flex-col items-center gap-3 p-10 text-center">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-brand/10 text-brand"><Icon name="layers" size={22} /></span>
+            <div>
+              <div className="font-display text-[15px] font-bold text-ink-100">No modules yet</div>
+              <div className="mt-1 text-[12px] text-ink-500">Subscribe to a market to start analysing — EU, India, Australia or the UK.</div>
+            </div>
+            <button onClick={() => goto('modules')} className="btn-primary"><Icon name="layers" size={15} /> Browse modules</button>
+          </div>
+        )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {owned.map((c, i) => {
             const m = MODULE_META[c], s = summaries[c]

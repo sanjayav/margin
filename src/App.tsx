@@ -12,23 +12,25 @@ import PlatformShell from './components/PlatformShell'
 import Analyze from './screens/Analyze'
 import Analytics from './screens/Analytics'
 import Data from './screens/Data'
+import Pooling from './screens/Pooling'
 import Plan from './screens/Plan'
 import Intelligence from './screens/Intelligence'
 import Admin from './screens/Admin'
 import Login from './screens/Login'
 
-const NAV: { id: ScreenId; label: string; icon: IconName; tier: string }[] = [
+// `addon` items only appear in the workspace nav when the org owns that add-on.
+const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling' }[] = [
   { id: 'analyze', label: 'Analyze', icon: 'scatter', tier: 'Core' },
   { id: 'analytics', label: 'Analytics', icon: 'layers', tier: 'Core' },
   { id: 'data', label: 'Data', icon: 'database', tier: 'Core' },
   { id: 'plan', label: 'Plan', icon: 'target', tier: 'Core' },
+  { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
   { id: 'intel', label: 'Intelligence', icon: 'activity', tier: 'Plus' },
   { id: 'admin', label: 'Admin', icon: 'settings', tier: 'Plus' },
 ]
 
-const PLAN_TABS: { id: 'under' | 'pool' | 'forecast'; label: string; icon: IconName }[] = [
+const PLAN_TABS: { id: 'under' | 'forecast'; label: string; icon: IconName }[] = [
   { id: 'under', label: 'Get under the line', icon: 'target' },
-  { id: 'pool', label: 'Pooling & trading', icon: 'handshake' },
   { id: 'forecast', label: 'Forecast', icon: 'trending' },
 ]
 
@@ -39,9 +41,11 @@ function Sidebar() {
   const planTab = useStore((s) => s.planTab)
   const setScreen = useStore((s) => s.setScreen)
   const country = useStore((s) => s.country)
+  const poolingAddon = useStore((s) => s.poolingAddon)
   const exitToPlatform = useStore((s) => s.exitToPlatform)
   const { pack } = useCompliance()
   const m = MODULE_META[country]
+  const nav = NAV.filter((n) => !n.addon || (n.addon === 'pooling' && poolingAddon))
 
   return (
     <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
@@ -67,7 +71,7 @@ function Sidebar() {
       </button>
 
       <div className="label px-1.5 pb-1.5 text-[#8A8174]">Workspace</div>
-      {NAV.map((n) => {
+      {nav.map((n) => {
         const active = screen === n.id
         return (
           <div key={n.id}>
@@ -76,7 +80,7 @@ function Sidebar() {
               {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
               <Icon name={n.icon} size={18} className={active ? 'text-brand-400' : 'text-[#7E766A] group-hover:text-[#B8AE9C]'} />
               <span className="flex-1 font-medium">{n.label}</span>
-              <span className={`text-[9px] font-semibold uppercase tracking-wider ${n.tier === 'Core' ? 'text-brand-400/70' : 'text-[#6E665A]'}`}>{n.tier}</span>
+              <span className={`text-[9px] font-semibold uppercase tracking-wider ${n.tier === 'Core' ? 'text-brand-400/70' : n.tier === 'Add-on' ? 'text-accent' : 'text-[#6E665A]'}`}>{n.tier}</span>
             </button>
             {n.id === 'plan' && (
               <div className="mb-1 ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
@@ -136,12 +140,26 @@ function TopBar() {
   )
 }
 
-const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'analytics', 'plan'])
+const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'analytics', 'pooling', 'plan'])
+
+function PoolingLocked() {
+  const goto = useStore((s) => s.exitToPlatform)
+  return (
+    <div className="mx-auto max-w-md py-16 text-center">
+      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-accent/10 text-accent"><Icon name="handshake" size={26} /></span>
+      <h2 className="font-display mt-4 text-[18px] font-bold text-ink-100">Pooling & credit market</h2>
+      <p className="mt-2 text-sm text-ink-400">The pooling optimiser is a cross-cutting add-on — find the cheapest legal partition, value each settlement, and trade credits across your markets.</p>
+      <button onClick={() => goto('subscription')} className="btn-primary mx-auto mt-5"><Icon name="card" size={15} /> Add Pooling</button>
+    </div>
+  )
+}
 
 function ModuleShell() {
   const screen = useStore((s) => s.screen)
   const aiEnabled = useStore((s) => s.aiEnabled)
-  const Screen = { analyze: Analyze, analytics: Analytics, data: Data, plan: Plan, intel: Intelligence, admin: Admin }[screen]
+  const poolingAddon = useStore((s) => s.poolingAddon)
+  const Screen = { analyze: Analyze, analytics: Analytics, data: Data, pooling: Pooling, plan: Plan, intel: Intelligence, admin: Admin }[screen]
+  const gated = screen === 'pooling' && !poolingAddon
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -149,9 +167,9 @@ function ModuleShell() {
         <TopBar />
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
-            <Screen />
+            {gated ? <PoolingLocked /> : <Screen />}
           </main>
-          {RAIL_SCREENS.has(screen) && <ScenarioRail />}
+          {RAIL_SCREENS.has(screen) && !gated && <ScenarioRail />}
         </div>
       </div>
       {aiEnabled && <Assistant />}

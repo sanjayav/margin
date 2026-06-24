@@ -3,14 +3,14 @@ import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
 import { parentsFor, setLiveFleet } from '../data/fleet'
 
-export type ScreenId = 'analyze' | 'analytics' | 'data' | 'plan' | 'intel' | 'admin'
-export type PlanTab = 'under' | 'pool' | 'forecast'
+export type ScreenId = 'analyze' | 'analytics' | 'data' | 'pooling' | 'plan' | 'intel' | 'admin'
+export type PlanTab = 'under' | 'forecast'
 // The two-level shell: 'platform' = global launcher (home/modules/subscription);
 // 'module' = a single country workspace (the analyze/analytics/… sidebar).
 export type AppView = 'platform' | 'module'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // legacy ids still accepted by setScreen and mapped to the new structure
-type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | PlanTab
+type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | 'pool' | PlanTab
 
 interface UIState {
   country: CountryId
@@ -30,12 +30,15 @@ interface UIState {
   subscribedModules: CountryId[]
   /** AI Analyst add-on — cross-cutting, usable inside every owned module. */
   aiEnabled: boolean
+  /** Pooling & credit-market add-on — cross-cutting optimiser, where the regime allows it. */
+  poolingAddon: boolean
   enterModule: (c: CountryId) => void
   exitToPlatform: (to?: PlatformScreen) => void
   setPlatformScreen: (p: PlatformScreen) => void
   subscribe: (c: CountryId) => void
   unsubscribe: (c: CountryId) => void
   setAi: (b: boolean) => void
+  setPooling: (b: boolean) => void
 
   setCountry: (c: CountryId) => void
   setScreen: (s: AnyScreen) => void
@@ -52,14 +55,18 @@ interface UIState {
 
 // Entitlement persistence (mock; replaced by server-issued claims once billing lands).
 const ENT_KEY = 'ul_entitlement'
-function loadEnt(): { modules: CountryId[]; ai: boolean } {
+const VALID_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK']
+function loadEnt(): { modules: CountryId[]; ai: boolean; pooling: boolean } {
   try {
     const r = JSON.parse(localStorage.getItem(ENT_KEY) || '')
-    if (r && Array.isArray(r.modules)) return { modules: r.modules, ai: !!r.ai }
+    if (r && Array.isArray(r.modules)) {
+      const modules = r.modules.filter((m: unknown): m is CountryId => VALID_MODULES.includes(m as CountryId))
+      return { modules, ai: !!r.ai, pooling: r.pooling !== false }
+    }
   } catch { /* fall through */ }
-  return { modules: ['EU', 'UK'], ai: true } // demo default: two modules + AI
+  return { modules: ['EU', 'UK'], ai: true, pooling: true } // demo default: two modules + AI + Pooling
 }
-function saveEnt(modules: CountryId[], ai: boolean) { try { localStorage.setItem(ENT_KEY, JSON.stringify({ modules, ai })) } catch { /* ignore */ } }
+function saveEnt(modules: CountryId[], ai: boolean, pooling: boolean) { try { localStorage.setItem(ENT_KEY, JSON.stringify({ modules, ai, pooling })) } catch { /* ignore */ } }
 const ENT0 = loadEnt()
 
 // Scope key for the current drill level: null (market), "Maker" (brand), or
@@ -102,6 +109,7 @@ export const useStore = create<UIState>((set, get) => ({
   platformScreen: 'home',
   subscribedModules: ENT0.modules,
   aiEnabled: ENT0.ai,
+  poolingAddon: ENT0.pooling,
 
   enterModule: (c) => {
     if (!get().subscribedModules.includes(c)) { set({ view: 'platform', platformScreen: 'subscription' }); return }
@@ -118,9 +126,16 @@ export const useStore = create<UIState>((set, get) => ({
   },
   exitToPlatform: (to) => set({ view: 'platform', ...(to ? { platformScreen: to } : {}) }),
   setPlatformScreen: (p) => set({ platformScreen: p }),
-  subscribe: (c) => { const m = [...new Set([...get().subscribedModules, c])]; saveEnt(m, get().aiEnabled); set({ subscribedModules: m }) },
-  unsubscribe: (c) => { const m = get().subscribedModules.filter((x) => x !== c); saveEnt(m, get().aiEnabled); set({ subscribedModules: m }) },
-  setAi: (b) => { saveEnt(get().subscribedModules, b); set({ aiEnabled: b }) },
+  subscribe: (c) => { const m = [...new Set([...get().subscribedModules, c])]; saveEnt(m, get().aiEnabled, get().poolingAddon); set({ subscribedModules: m }) },
+  unsubscribe: (c) => {
+    const m = get().subscribedModules.filter((x) => x !== c)
+    saveEnt(m, get().aiEnabled, get().poolingAddon)
+    // if you're currently inside the module you just dropped, bounce to the platform
+    const leaving = get().view === 'module' && get().country === c
+    set({ subscribedModules: m, ...(leaving ? { view: 'platform' as const, platformScreen: 'subscription' as const } : {}) })
+  },
+  setAi: (b) => { saveEnt(get().subscribedModules, b, get().poolingAddon); set({ aiEnabled: b }) },
+  setPooling: (b) => { saveEnt(get().subscribedModules, get().aiEnabled, b); set({ poolingAddon: b }) },
 
   setCountry: (c) =>
     set({
@@ -131,7 +146,8 @@ export const useStore = create<UIState>((set, get) => ({
       makerOverrides: {},
     }),
   setScreen: (s) => {
-    if (s === 'under' || s === 'pool' || s === 'forecast') set({ screen: 'plan', planTab: s })
+    if (s === 'pool') set({ screen: 'pooling' })
+    else if (s === 'under' || s === 'forecast') set({ screen: 'plan', planTab: s })
     else if (s === 'cockpit' || s === 'chart' || s === 'maker') set({ screen: 'analyze' })
     else set({ screen: s })
   },

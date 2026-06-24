@@ -1,19 +1,17 @@
 import { useStore, type PlanTab } from '../state/store'
 import Icon, { type IconName } from '../components/Icon'
 import GetUnderLine from './GetUnderLine'
-import Pooling from './Pooling'
 import Forecast from './Forecast'
 
 const TABS: { id: PlanTab; label: string; icon: IconName }[] = [
   { id: 'under', label: 'Get under the line', icon: 'target' },
-  { id: 'pool', label: 'Pooling & trading', icon: 'handshake' },
   { id: 'forecast', label: 'Forecast', icon: 'trending' },
 ]
 
 export default function Plan() {
   const planTab = useStore((s) => s.planTab)
   const setScreen = useStore((s) => s.setScreen)
-  const View = { under: GetUnderLine, pool: Pooling, forecast: Forecast }[planTab]
+  const View = { under: GetUnderLine, forecast: Forecast }[planTab]
 
   return (
     <div className="space-y-5">

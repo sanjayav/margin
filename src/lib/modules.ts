@@ -24,6 +24,7 @@ export const MODULE_META: Record<CountryId, ModuleMeta> = {
 }
 
 export const AI_PRICE_GBP = 400
+export const POOLING_PRICE_GBP = 350
 export const ALL_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK']
 
 export interface ModuleSummary {

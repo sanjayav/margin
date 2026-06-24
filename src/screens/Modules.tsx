@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '../state/store'
-import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, moduleSummary } from '../lib/modules'
+import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP, moduleSummary } from '../lib/modules'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import Icon from '../components/Icon'
 
@@ -9,9 +9,11 @@ const INCLUDED = ['Analyze drill-down', 'Analytics charts', 'Raw data viewer', '
 export default function Modules() {
   const owned = useStore((s) => s.subscribedModules)
   const ai = useStore((s) => s.aiEnabled)
+  const pooling = useStore((s) => s.poolingAddon)
   const enter = useStore((s) => s.enterModule)
   const goto = useStore((s) => s.setPlatformScreen)
-  const summaries = useMemo(() => Object.fromEntries(ALL_MODULES.map((c) => [c, moduleSummary(c)])), [])
+  const dataVersion = useStore((s) => s.dataVersion)
+  const summaries = useMemo(() => Object.fromEntries(ALL_MODULES.map((c) => [c, moduleSummary(c)])), [dataVersion])
 
   return (
     <div className="space-y-6">
@@ -58,20 +60,31 @@ export default function Modules() {
         })}
       </div>
 
-      {/* AI add-on */}
-      <div className="card rise flex flex-col items-start justify-between gap-4 p-5 md:flex-row md:items-center">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={20} /></span>
-          <div>
-            <div className="font-display text-[15px] font-bold text-ink-100">AI Analyst add-on</div>
-            <div className="text-[11px] text-ink-500">Ask Margin in plain English — works inside every module you own. Numbers always from the live engine.</div>
+      {/* add-ons */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="card rise flex items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={20} /></span>
+            <div>
+              <div className="font-display text-[14px] font-bold text-ink-100">AI Analyst</div>
+              <div className="text-[11px] text-ink-500">Ask Margin — works in every owned module. £{AI_PRICE_GBP}/mo</div>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-[11px] text-ink-500">£{AI_PRICE_GBP}/mo</div>
           {ai
-            ? <span className="rounded-full bg-safe/10 px-3 py-1.5 text-xs font-bold text-safe">Active</span>
-            : <button onClick={() => goto('subscription')} className="btn-primary px-4 py-2 text-xs">Add AI</button>}
+            ? <span className="shrink-0 rounded-full bg-safe/10 px-3 py-1.5 text-xs font-bold text-safe">Active</span>
+            : <button onClick={() => goto('subscription')} className="btn-primary shrink-0 px-4 py-2 text-xs">Add</button>}
+        </div>
+        <div className="card rise flex items-center justify-between gap-4 p-5">
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Icon name="handshake" size={20} /></span>
+            <div>
+              <div className="font-display text-[14px] font-bold text-ink-100">Pooling & credit market</div>
+              <div className="text-[11px] text-ink-500">Cheapest pool, fair value-split, trading. £{POOLING_PRICE_GBP}/mo</div>
+            </div>
+          </div>
+          {pooling
+            ? <span className="shrink-0 rounded-full bg-safe/10 px-3 py-1.5 text-xs font-bold text-safe">Active</span>
+            : <button onClick={() => goto('subscription')} className="btn-primary shrink-0 px-4 py-2 text-xs">Add</button>}
         </div>
       </div>
     </div>

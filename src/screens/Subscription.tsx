@@ -1,5 +1,5 @@
 import { useStore } from '../state/store'
-import { MODULE_META, ALL_MODULES, AI_PRICE_GBP } from '../lib/modules'
+import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP } from '../lib/modules'
 import Icon from '../components/Icon'
 
 function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
@@ -13,13 +13,15 @@ function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
 export default function Subscription() {
   const owned = useStore((s) => s.subscribedModules)
   const ai = useStore((s) => s.aiEnabled)
+  const pooling = useStore((s) => s.poolingAddon)
   const subscribe = useStore((s) => s.subscribe)
   const unsubscribe = useStore((s) => s.unsubscribe)
   const setAi = useStore((s) => s.setAi)
+  const setPooling = useStore((s) => s.setPooling)
   const enter = useStore((s) => s.enterModule)
 
   const moduleTotal = owned.reduce((a, c) => a + MODULE_META[c].priceGBP, 0)
-  const total = moduleTotal + (ai ? AI_PRICE_GBP : 0)
+  const total = moduleTotal + (ai ? AI_PRICE_GBP : 0) + (pooling ? POOLING_PRICE_GBP : 0)
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
@@ -50,15 +52,30 @@ export default function Subscription() {
         </div>
 
         <div className="card p-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={18} /></span>
-              <div>
-                <div className="font-display text-[14px] font-bold text-ink-100">AI Analyst add-on</div>
-                <div className="text-[11px] text-ink-500">Cross-cutting · works in every owned module · £{AI_PRICE_GBP}/mo</div>
+          <div className="mb-1 flex items-center gap-2">
+            <Icon name="spark" size={16} className="text-brand" />
+            <h2 className="font-display text-[15px] font-bold tracking-tight text-ink-100">Add-ons</h2>
+          </div>
+          <p className="mb-4 text-[11px] text-ink-500">Cross-cutting capabilities — priced once, used inside every module you own.</p>
+          <div className="divide-y divide-black/[0.05]">
+            <div className="flex items-center gap-3 py-3">
+              <span className="grid h-9 w-10 place-items-center rounded-lg text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-ink-100">AI Analyst</div>
+                <div className="truncate text-[11px] text-ink-500">Ask Margin in plain English — numbers from the live engine.</div>
               </div>
+              <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{AI_PRICE_GBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
+              <Switch on={ai} onClick={() => setAi(!ai)} />
             </div>
-            <Switch on={ai} onClick={() => setAi(!ai)} />
+            <div className="flex items-center gap-3 py-3">
+              <span className="grid h-9 w-10 place-items-center rounded-lg bg-accent/15 text-accent"><Icon name="handshake" size={16} /></span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-semibold text-ink-100">Pooling & credit market</div>
+                <div className="truncate text-[11px] text-ink-500">Cheapest legal pool, fair value-split & credit trading where the regime allows.</div>
+              </div>
+              <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{POOLING_PRICE_GBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
+              <Switch on={pooling} onClick={() => setPooling(!pooling)} />
+            </div>
           </div>
         </div>
       </div>
@@ -80,6 +97,12 @@ export default function Subscription() {
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> AI Analyst</span>
                 <span className="dnum text-ink-400">£{AI_PRICE_GBP}</span>
+              </div>
+            )}
+            {pooling && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> Pooling & credit market</span>
+                <span className="dnum text-ink-400">£{POOLING_PRICE_GBP}</span>
               </div>
             )}
           </div>
