@@ -6,8 +6,8 @@
 // standalone excesses), so the real question is who partners with whom and how
 // the value is split.
 // ───────────────────────────────────────────────────────────────────────────
-import type { Aggregate, RulePack, Scenario, Vehicle } from './types'
-import { aggregate, applyScenario, buildTree } from './engine'
+import type { Aggregate, RulePack, Scenario, Vehicle } from './types.js'
+import { aggregate, applyScenario, buildTree } from './engine.js'
 
 export interface Standing {
   parent: string

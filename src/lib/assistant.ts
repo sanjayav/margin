@@ -10,11 +10,15 @@ export interface DashboardAction {
   country?: CountryId
   screen?: string
   parent?: string
+  drillPath?: string[]
   year?: number
   evSharePct?: number
   massShiftKg?: number
   salesMultiplier?: number
   ecoBoostG?: number
+  mix?: Record<string, number>
+  creditPrice?: number
+  phevUF?: boolean
   poolingEnabled?: boolean
   superCreditsEnabled?: boolean
 }
@@ -31,8 +35,9 @@ export function applyActions(actions: DashboardAction[]) {
     }
     if (a.parent) s.setParent(a.parent)
     if (a.screen) s.setScreen(a.screen as any)
+    if (Array.isArray(a.drillPath)) useStore.getState().setDrill(a.drillPath)
     const patch: Record<string, unknown> = {}
-    for (const k of ['year', 'evSharePct', 'massShiftKg', 'salesMultiplier', 'ecoBoostG', 'poolingEnabled', 'superCreditsEnabled'] as const) {
+    for (const k of ['year', 'evSharePct', 'massShiftKg', 'salesMultiplier', 'ecoBoostG', 'mix', 'creditPrice', 'phevUF', 'poolingEnabled', 'superCreditsEnabled'] as const) {
       if (a[k] != null) patch[k] = a[k]
     }
     if (Object.keys(patch).length) useStore.getState().patchScenario(patch)
@@ -47,7 +52,8 @@ export async function ask(message: string, history: ChatMessage[]): Promise<{ an
     body: JSON.stringify({
       message,
       history,
-      context: { country: s.country, parent: s.selectedParent, screen: s.screen, scenario: s.scenario },
+      // ownedModules scopes the analyst to the markets the org has subscribed to.
+      context: { country: s.country, parent: s.selectedParent, screen: s.screen, scenario: s.scenario, ownedModules: s.subscribedModules, ai: s.aiEnabled, pooling: s.poolingAddon },
     }),
   })
   if (!res.ok) {

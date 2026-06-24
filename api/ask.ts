@@ -11,6 +11,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getPack, PACK_LIST } from '../src/engine/rulepacks/index.js'
 import { FLEET } from '../src/data/fleet.js'
 import { buildTree, aggregateParent, fmtNum } from '../src/engine/engine.js'
+import { simulateRisk } from '../src/engine/montecarlo.js'
+import { poolOptimise } from '../src/engine/pooling.js'
 import { recommend } from '../src/engine/recommend.js'
 import type { CountryId, Scenario, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
@@ -137,16 +139,38 @@ const TOOLS: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] },
-        screen: { type: 'string', enum: ['analyze', 'plan', 'under', 'pool', 'forecast', 'intel', 'admin'] },
+        screen: { type: 'string', enum: ['analyze', 'analytics', 'data', 'pooling', 'plan', 'under', 'pool', 'forecast', 'intel', 'admin'] },
         parent: { type: 'string' },
+        drillPath: { type: 'array', items: { type: 'string' }, description: 'Analyze drill scope: [maker] or [maker, model].' },
         year: { type: 'integer' },
         evSharePct: { type: 'number' },
         massShiftKg: { type: 'number' },
         salesMultiplier: { type: 'number' },
         ecoBoostG: { type: 'number' },
+        mix: { type: 'object', description: 'Powertrain shares applied to the current scope, e.g. {"BEV":40,"HEV":35,"ICE":25}.' },
+        creditPrice: { type: 'number' },
+        phevUF: { type: 'boolean', description: 'EU: apply the 2025 PHEV utility-factor correction (default true).' },
         poolingEnabled: { type: 'boolean' },
         superCreditsEnabled: { type: 'boolean' },
       },
+    },
+  },
+  {
+    name: 'simulate_risk',
+    description: 'Monte-Carlo €-at-risk: samples BEV-share, sales and mass uncertainty and re-runs the engine to return the fine distribution (P10/P50/P90, mean) and the probability of a fine, for a maker or the whole market. Use for "how likely", "worst case" or "P90" questions.',
+    input_schema: {
+      type: 'object',
+      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] }, parent: { type: 'string', description: 'Maker, or omit for the whole market.' }, year: { type: 'integer' } },
+      required: ['country'],
+    },
+  },
+  {
+    name: 'optimise_pool',
+    description: 'Find the value-maximising pool and the fair Shapley settlement per maker: who pays or receives and how much, the total fine removed, and the pool\'s residual fine. Use for pooling / credit-trading questions.',
+    input_schema: {
+      type: 'object',
+      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] }, year: { type: 'integer' } },
+      required: ['country'],
     },
   },
 ]
@@ -185,6 +209,32 @@ function runTool(name: string, input: any, actions: any[], fleets: Fleets): stri
       actions.push(input)
       return 'Dashboard updated for the user.'
     }
+    if (name === 'simulate_risk') {
+      const country = input.country as CountryId
+      const raw = fleets[country], pack = getPack(country), s = buildScenario(country, input)
+      let r
+      if (input.parent) {
+        const by: any = {}; let tot = 0
+        for (const v of raw) if (v.year === s.year && v.parent === input.parent) { by[v.powertrain] = (by[v.powertrain] || 0) + v.sales; tot += v.sales }
+        const shares: any = {}; for (const p in by) shares[p] = tot ? (by[p] / tot) * 100 : 0
+        r = simulateRisk({ base: s, groups: [{ key: input.parent, shares }], currentOverrides: {}, fineOf: (sc, ov) => aggregateParent(raw, pack, sc, input.parent, ov).fine, n: 300 })
+      } else {
+        const by: any = {}, tot: any = {}
+        for (const v of raw) if (v.year === s.year) { (by[v.parent] ??= {})[v.powertrain] = (by[v.parent]?.[v.powertrain] || 0) + v.sales; tot[v.parent] = (tot[v.parent] || 0) + v.sales }
+        const groups = Object.entries(by).map(([mk, b]: any) => { const sh: any = {}; for (const p in b) sh[p] = tot[mk] ? (b[p] / tot[mk]) * 100 : 0; return { key: mk, shares: sh } })
+        r = simulateRisk({ base: s, groups, currentOverrides: {}, fineOf: (sc, ov) => { const t = buildTree(raw, pack, sc, ov); return (t.children || []).reduce((a, c) => a + c.fine, 0) }, n: 300 })
+      }
+      return JSON.stringify({ currency: pack.currency, scope: input.parent ?? 'whole market', year: s.year, p10: Math.round(r.p10), p50: Math.round(r.p50), p90: Math.round(r.p90), mean: Math.round(r.mean), probabilityOfAFine: +r.probOver.toFixed(2) })
+    }
+    if (name === 'optimise_pool') {
+      const country = input.country as CountryId
+      const raw = fleets[country], pack = getPack(country), s = buildScenario(country, input)
+      const opt = poolOptimise(raw, pack, s)
+      return JSON.stringify({
+        currency: pack.currency, members: opt.members, fineRemoved: Math.round(opt.savings), pooledResidualFine: Math.round(opt.pooledFine),
+        settlements: opt.split.map((m) => ({ maker: m.parent, role: m.role, standaloneFine: Math.round(m.standaloneFine), shapleyShare: Math.round(m.shapley), receives: m.finalCost < 0 ? Math.round(-m.finalCost) : 0, pays: m.finalCost > 0 ? Math.round(m.finalCost) : 0 })),
+      })
+    }
     return JSON.stringify({ error: `unknown tool ${name}` })
   } catch (e: any) {
     return JSON.stringify({ error: String(e?.message ?? e) })
@@ -200,9 +250,11 @@ function systemPrompt(ctx: any): string {
 
 Your job: answer the user's question precisely and, when they want to see or change something, drive the live screen with update_dashboard.
 
-ACCURACY IS NON-NEGOTIABLE. Never compute or estimate a number yourself. Every emissions figure, limit, gap, fine, cost or share must come from query_compliance or get_recommendations. If a question needs a number, call the tool first, then answer using exactly what it returns. Quote the fine's plain maths (the fineExpression) when you state a fine.
+ACCURACY IS NON-NEGOTIABLE. Never compute or estimate a number yourself. Every emissions figure, limit, gap, fine, cost, probability or share must come from a tool. Use query_compliance for a position; get_recommendations for the cheapest way under the line; simulate_risk for probabilities, ranges or worst-case (P10/P50/P90, chance of a fine); optimise_pool for pooling/credit-trading (who pays or receives, the fair Shapley settlement). Call the tool first, then answer using exactly what it returns; quote the fine's plain maths when you state a fine. update_dashboard drives the live screen and can also set the powertrain mix, credit price, PHEV utility factor and drill scope.
 
-The four markets (country differences live in rule packs):
+Entitlements: the user's organisation has subscribed to these markets ONLY: ${(ctx.ownedModules ?? ['EU', 'IN', 'AU', 'UK']).join(', ')}. Never analyse, mention or switch to any other market.${ctx.pooling === false ? ' The Pooling add-on is not active — do not use optimise_pool or open the pooling screen.' : ''}
+
+The markets you may use (country differences live in rule packs):
 ${packs}
 
 The user is currently looking at: market=${ctx.country}, maker=${ctx.parent}, screen=${ctx.screen}, year=${ctx.scenario?.year}, forced zero-emission share=${ctx.scenario?.evSharePct ?? 'as-sold'}, mass shift=${ctx.scenario?.massShiftKg ?? 0}kg.
