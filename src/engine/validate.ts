@@ -13,7 +13,7 @@
 import type { CountryId, LimitContext, Scenario, Vehicle } from './types.js'
 import { getPack } from './rulepacks/index.js'
 import { aggregate, applyScenario, threeYearAverage, buildTree } from './engine.js'
-import { standings, poolResult } from './pooling.js'
+import { standings, poolResult, poolOptimise } from './pooling.js'
 import { FLEET } from '../data/fleet.js'
 
 export type CheckStatus = 'pass' | 'fail' | 'review'
@@ -109,6 +109,15 @@ export function runValidation(): Check[] {
     const ovU = buildTree(FLEET.EU, p, scenario(), { [`${mk}/${md}`]: { mix: { BEV: 80, ICE: 20 } } }).rawUnits
     inv('eu-scope-volume', 'EU: model-scoped edits preserve total market volume', approx(baseU, ovU, 1),
       `market units ${f(baseU, 0)} = ${f(ovU, 0)} with a model mix override`)
+
+    // Shapley value-split is efficient: shares sum to the pool's savings, and
+    // fair final costs sum to the pool's residual fine (conservation).
+    const opt = poolOptimise(FLEET.EU, p, scenario())
+    const shapSum = opt.split.reduce((a, m) => a + m.shapley, 0)
+    const costSum = opt.split.reduce((a, m) => a + m.finalCost, 0)
+    inv('eu-shapley-efficient', 'EU: Shapley shares sum to savings; final costs sum to the pooled fine',
+      approx(shapSum, opt.savings, 1) && approx(costSum, opt.pooledFine, 1),
+      `Σshapley €${f(shapSum, 0)} = savings €${f(opt.savings, 0)}; Σcost €${f(costSum, 0)} = pooled €${f(opt.pooledFine, 0)}`)
   }
 
   // ── Regulatory anchors (golden numbers tied to the rules) ──────────────────

@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
-import { standings, poolResult, bestForMaker } from '../engine/pooling'
+import { standings, poolResult, bestForMaker, poolOptimise } from '../engine/pooling'
 import { fmtMoney, fmtNum, fmtInt } from '../engine/engine'
 import { Section, StatusPill, Stat, Bar } from '../components/ui'
 import Icon from '../components/Icon'
@@ -20,6 +20,7 @@ export default function Pooling() {
   }, [pack.id, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const grand = useMemo(() => poolResult(raw, pack, scenario, allParents), [raw, pack, scenario, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  const opt = useMemo(() => poolOptimise(raw, pack, scenario), [raw, pack, scenario, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const selected = useMemo(
     () => (members.length >= 1 ? poolResult(raw, pack, scenario, members) : null),
     [raw, pack, scenario, members, dataVersion], // eslint-disable-line react-hooks/exhaustive-deps
@@ -56,6 +57,47 @@ export default function Pooling() {
         <Stat label="Value poolable" value={fmtMoney(standaloneTotal - grand.fine, pack.currency)} sub="total fine removable" accent="text-brand" />
         <Stat label="Surplus available" value={`${fmtInt(surplusTotal)}`} sub={`g·units of headroom to share`} accent="text-accent" />
       </div>
+
+      {/* Optimiser — best pool + Shapley fair value-split */}
+      {opt.savings > 0 && (
+        <Section title="Optimiser · best pool & fair settlement" right={<span className="text-[11px] text-ink-500">Shapley value-split</span>}>
+          <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
+            <Stat label="Recommended pool" value={`${opt.members.length} makers`} sub="value-maximising coalition" />
+            <Stat label="Fine removed" value={fmtMoney(opt.savings, pack.currency)} sub={`pooled residual ${fmtMoney(opt.pooledFine, pack.currency)}`} accent="text-brand" />
+            <Stat label="Settlements" value={`${opt.split.filter((m) => m.finalCost < 0).length} ⇄ ${opt.split.filter((m) => m.finalCost > 0.5).length}`} sub="receive ⇄ pay" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wider text-ink-500">
+                  <th className="px-4 py-2.5">Maker</th>
+                  <th className="px-4 py-2.5">Role</th>
+                  <th className="px-4 py-2.5 text-right">Standalone fine</th>
+                  <th className="px-4 py-2.5 text-right">Fair share of savings</th>
+                  <th className="px-4 py-2.5 text-right">Settlement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {opt.split.map((m) => {
+                  const receives = m.finalCost < 0
+                  return (
+                    <tr key={m.parent} className="border-t border-black/[0.04]">
+                      <td className="px-4 py-2.5 font-medium text-ink-100">{m.parent}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${m.role === 'seller' ? 'border-safe/30 bg-safe/10 text-safe' : m.role === 'buyer' ? 'border-danger/30 bg-danger/10 text-danger' : 'border-black/10 text-ink-500'}`}>{m.role}</span>
+                      </td>
+                      <td className="num px-4 py-2.5 text-right text-ink-500">{fmtMoney(m.standaloneFine, pack.currency)}</td>
+                      <td className="num px-4 py-2.5 text-right font-semibold text-brand">{fmtMoney(m.shapley, pack.currency)}</td>
+                      <td className={`num px-4 py-2.5 text-right font-bold ${receives ? 'text-safe' : 'text-danger'}`}>{receives ? 'receive ' : 'pay '}{fmtMoney(Math.abs(m.finalCost), pack.currency)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-500">The value-maximising pool removes {fmtMoney(opt.savings, pack.currency)} of fines. Each member's fair settlement = its standalone fine − its Shapley share; surplus sellers are paid for the headroom they lend, buyers pay less than their standalone fine, and the settlements net to the pool's residual {fmtMoney(opt.pooledFine, pack.currency)}.</p>
+        </Section>
+      )}
 
       {/* Standings */}
       <Standings rows={rows} pack={pack} maxAbs={maxAbs} />
