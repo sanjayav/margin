@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useStore } from '../state/store'
+import { useStore, scopeKey } from '../state/store'
+import type { Aggregate } from '../engine/types'
 import { useCompliance } from '../lib/useCompliance'
-import { fmtNum, fmtMoney, fmtInt, buildTree, aggregateParent, threeYearAverage } from '../engine/engine'
+import { fmtNum, fmtMoney, buildTree, threeYearAverage } from '../engine/engine'
 import type { Vehicle, Scenario } from '../engine/types'
 import Icon, { type IconName } from './Icon'
 
@@ -11,7 +12,7 @@ const PT_COLOR: Record<string, string> = {
 const ptColor = (p: string) => PT_COLOR[p] ?? '#8C8273'
 const ecoCapFor = (year: number) => (year <= 2024 ? 7 : year <= 2029 ? 6 : 4)
 
-interface Outcome { metric: number; limit: number; gap: number; fine: number; units: number }
+interface Outcome { metric: number; limit: number; gap: number; fine: number; units: number; zlevShare?: number; makerFine?: number }
 
 // ── small UI atoms ──────────────────────────────────────────────────────────
 function Group({ title, icon, children, defaultOpen = true, modified }: { title: string; icon: IconName; children: ReactNode; defaultOpen?: boolean; modified?: boolean }) {
@@ -104,37 +105,54 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const patch = useStore((s) => s.patchScenario)
   const reset = useStore((s) => s.resetScenario)
 
-  const scope = screen === 'analyze' && drillPath.length >= 1 ? drillPath[0] : null
-  const eff: Scenario = scope ? { ...scenario, ...(makerOverrides[scope] ?? {}) } : scenario
-  const drilledParent = drillPath[0] ?? selectedParent
-  const drilledModel = drillPath.length >= 2 ? drillPath[1] : ''
+  const level = screen === 'analyze' ? drillPath.length : 0
+  const maker = drillPath[0] ?? ''
+  const model = drillPath[1] ?? ''
+  const scope = scopeKey(screen, drillPath)
+  const ownOv: Partial<Scenario> = scope ? (makerOverrides[scope] ?? {}) : {}
+  const drilledParent = maker || selectedParent
+  const drilledModel = level >= 2 ? model : ''
+  const outcomeName = level === 0 ? 'market' : level === 1 ? maker.split(' ')[0] : model
+  const levelHint = level === 0 ? 'Editing the whole market — every maker moves together.'
+    : level === 1 ? `Editing ${maker.split(' ')[0]} only — the market total updates.`
+    : level === 2 ? `Shaping ${model} within ${maker.split(' ')[0]}.`
+    : `Tuning a variant within ${model}.`
 
   const [show3yr, setShow3yr] = useState(false)
   const [snapA, setSnapA] = useState<{ scenario: Scenario; overrides: Record<string, Partial<Scenario>>; label: string } | null>(null)
 
-  // outcome for the current scope under any (scenario, overrides)
+  const nodeAt = (root: Aggregate, path: string[]): Aggregate => {
+    let n = root
+    for (const seg of path) { const nx = n.children?.find((c) => c.label === seg); if (!nx) break; n = nx }
+    return n
+  }
+  // outcome for the CURRENT drill node (market / brand / model / variant)
   const outcomeOf = (sc: Scenario, ov: Record<string, Partial<Scenario>>): Outcome => {
-    if (scope) {
-      const n = aggregateParent(raw, pack, sc, scope, ov)
-      return { metric: n.avgMetric, limit: n.limit, gap: n.gap, fine: n.fine, units: n.rawUnits }
-    }
     const t = buildTree(raw, pack, sc, ov)
-    return { metric: t.avgMetric, limit: t.limit, gap: t.gap, fine: (t.children ?? []).reduce((a, c) => a + c.fine, 0), units: t.rawUnits }
+    const node = nodeAt(t, drillPath)
+    const marketFine = (t.children ?? []).reduce((a, c) => a + c.fine, 0)
+    const makerFine = level >= 1 ? nodeAt(t, [maker]).fine : marketFine
+    return { metric: node.avgMetric, limit: node.limit, gap: node.gap, units: node.rawUnits, zlevShare: node.zlevShare, fine: level === 0 ? marketFine : node.fine, makerFine }
   }
 
   const baseScenario: Scenario = { ...scenario, mix: null, massShiftKg: 0, salesMultiplier: 1, ecoBoostG: 0, evSharePct: null, phevUF: true, creditPrice: null }
-  const cur = useMemo(() => outcomeOf(scenario, makerOverrides), [raw, pack, scenario, makerOverrides, scope])
-  const base = useMemo(() => outcomeOf(baseScenario, {}), [raw, pack, scenario.year, scope])
-  const aOut = useMemo(() => (snapA ? outcomeOf(snapA.scenario, snapA.overrides) : null), [snapA, raw, pack, scope])
+  const path = drillPath.join('/')
+  const cur = useMemo(() => outcomeOf(scenario, makerOverrides), [raw, pack, scenario, makerOverrides, path])
+  const base = useMemo(() => outcomeOf(baseScenario, {}), [raw, pack, scenario.year, path])
+  const aOut = useMemo(() => (snapA ? outcomeOf(snapA.scenario, snapA.overrides) : null), [snapA, raw, pack, path])
   const three = useMemo(
-    () => (country === 'EU' && scope ? threeYearAverage(raw, pack, scenario, scope, [2025, 2026, 2027], makerOverrides) : null),
-    [country, scope, raw, pack, scenario, makerOverrides],
+    () => (country === 'EU' && level >= 1 ? threeYearAverage(raw, pack, scenario, maker, [2025, 2026, 2027], makerOverrides) : null),
+    [country, level, maker, raw, pack, scenario, makerOverrides],
   )
-  const headlineFine = show3yr && three ? three.fine : cur.fine
+  // €-at-risk: market/brand show the node's own fine; model/variant show the
+  // brand's fine (models aren't separate liabilities — the brand is assessed).
+  const riskFine = level >= 2 ? (cur.makerFine ?? 0) : (show3yr && three ? three.fine : cur.fine)
+  const riskBase = level >= 2 ? (base.makerFine ?? 0) : base.fine
+  const riskLabel = level >= 2 ? `${maker.split(' ')[0]} at risk` : (show3yr && three ? '€-at-risk · 3-yr avg' : '€-at-risk')
 
-  // powertrain mix baseline scoped to the maker (or market)
+  // powertrain mix baseline scoped to the current level
   const mixInfo = useMemo(() => {
-    const yr = raw.filter((v) => v.year === scenario.year && (!scope || v.parent === scope))
+    const yr = raw.filter((v) => v.year === scenario.year && (level < 1 || v.parent === maker) && (level < 2 || v.model === model))
     const by: Record<string, number> = {}
     let total = 0
     for (const v of yr) { by[v.powertrain] = (by[v.powertrain] ?? 0) + v.sales; total += v.sales }
@@ -142,27 +160,41 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     const shares: Record<string, number> = {}
     pts.forEach((p) => (shares[p] = total ? (by[p] / total) * 100 : 0))
     return { pts, shares }
-  }, [raw, scenario.year, scope])
+  }, [raw, scenario.year, level, maker, model])
 
-  const weights = eff.mix ?? mixInfo.shares
+  const ownMix = scope ? (ownOv.mix ?? null) : (scenario.mix ?? null)
+  const weights = ownMix ?? mixInfo.shares
   const wsum = mixInfo.pts.reduce((a, p) => a + (weights[p] ?? 0), 0) || 1
   const resultShare = (p: string) => ((weights[p] ?? 0) / wsum) * 100
-  const setWeight = (p: string, v: number) => patch({ mix: { ...(eff.mix ?? mixInfo.shares), [p]: v } })
+  const setWeight = (p: string, v: number) => patch({ mix: { ...(ownMix ?? mixInfo.shares), [p]: v } })
+  const massVal = scope ? (ownOv.massShiftKg ?? 0) : scenario.massShiftKg
+  const salesVal = scope ? (ownOv.salesMultiplier ?? 1) : scenario.salesMultiplier
 
-  // presets (operate on the current scope)
-  const presetBEV = (delta: number) => {
-    const bev = mixInfo.shares['BEV'] ?? 0
-    if (!mixInfo.pts.includes('BEV')) return
-    const newBev = Math.max(0, Math.min(100, bev + delta))
-    const scale = 100 - bev > 0 ? (100 - newBev) / (100 - bev) : 0
+  // mix that targets a given BEV %, scaling the rest from as-sold
+  const mixFromBEV = (bev: number) => {
+    const c0 = mixInfo.shares['BEV'] ?? 0
+    const nb = Math.max(0, Math.min(100, bev))
+    const scale = 100 - c0 > 0 ? (100 - nb) / (100 - c0) : 0
     const mix: Record<string, number> = {}
-    for (const p of mixInfo.pts) mix[p] = p === 'BEV' ? newBev : (mixInfo.shares[p] ?? 0) * scale
-    patch({ mix })
+    for (const p of mixInfo.pts) mix[p] = p === 'BEV' ? nb : (mixInfo.shares[p] ?? 0) * scale
+    return mix
   }
-  const mixModified = !!eff.mix
-  const fleetModified = mixModified || eff.massShiftKg !== 0 || eff.salesMultiplier !== 1
+  const presetBEV = (delta: number) => { if (mixInfo.pts.includes('BEV')) patch({ mix: mixFromBEV((mixInfo.shares['BEV'] ?? 0) + delta) }) }
+  // solver: smallest BEV share that brings the current scope under the line
+  const solveToLine = () => {
+    if (!scope || !mixInfo.pts.includes('BEV')) return
+    for (let bev = Math.ceil(mixInfo.shares['BEV'] ?? 0); bev <= 100; bev += 2) {
+      const o = outcomeOf(scenario, { ...makerOverrides, [scope]: { ...ownOv, mix: mixFromBEV(bev) } })
+      if (o.gap <= 0) { patch({ mix: mixFromBEV(bev) }); return }
+    }
+    patch({ mix: mixFromBEV(100) })
+  }
+
+  const mixModified = !!ownMix
+  const fleetModified = mixModified || massVal !== 0 || salesVal !== 1
   const policyModified = scenario.ecoBoostG !== 0 || scenario.phevUF === false || scenario.poolingEnabled || scenario.superCreditsEnabled || scenario.creditPrice != null
   const variants = scenario.extraVariants ?? []
+  const fleetTitle = level === 0 ? 'Market fleet' : level === 1 ? 'Brand levers' : 'Model composition'
 
   // live PHEV utility-factor multiplier for the current year (probe the engine)
   const ufNow = country === 'EU'
@@ -176,17 +208,23 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         <button onClick={reset} className="flex items-center gap-1 text-[11px] font-semibold text-ink-500 transition hover:text-ink-100"><Icon name="reset" size={12} /> Reset</button>
       </div>
 
-      {/* scope */}
-      <div className="-mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-        <span className="text-ink-500">Editing</span>
-        <span className="rounded-md bg-brand/12 px-1.5 py-0.5 text-[10px] font-bold text-brand">{scope ?? 'whole market'}</span>
-        {scope && <span className="text-ink-500">· mix · mass · sales</span>}
+      {/* scope breadcrumb */}
+      <div className="-mt-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-0.5 text-[11px]">
+          {['Market', ...drillPath].map((seg, i) => (
+            <span key={i} className="flex items-center gap-0.5">
+              {i > 0 && <Icon name="chevron" size={10} className="text-ink-600" />}
+              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${i === drillPath.length ? 'bg-brand/12 text-brand' : 'text-ink-500'}`}>{i === 0 ? 'Market' : seg.split(' ')[0]}</span>
+            </span>
+          ))}
+        </div>
+        <div className="text-[10px] text-ink-500">{levelHint}</div>
       </div>
 
       {/* live outcome */}
       <div className="rounded-2xl border border-black/[0.07] bg-gradient-to-b from-black/[0.045] to-transparent p-3.5 shadow-[0_1px_2px_rgba(40,30,15,0.04)]">
         <div className="flex items-center justify-between">
-          <span className="label">Outcome · {(scope ?? 'market').split(' ')[0]}</span>
+          <span className="label">Outcome · {outcomeName}</span>
           <div className="flex items-center gap-1.5">
             {three && (
               <button onClick={() => setShow3yr((v) => !v)} className={`num rounded-md px-1.5 py-0.5 text-[9px] font-bold transition ${show3yr ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{show3yr ? '3-yr' : '1-yr'}</button>
@@ -210,10 +248,10 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         </div>
         <PositionBar fleet={cur.metric} limit={cur.limit} />
         <div className="mt-3 flex items-center justify-between border-t border-black/[0.06] pt-2.5">
-          <span className="text-[11px] font-medium text-ink-400">{show3yr && three ? '€-at-risk · 3-yr avg' : '€-at-risk'}</span>
+          <span className="text-[11px] font-medium text-ink-400">{riskLabel}</span>
           <div className="flex items-center gap-2">
-            <span className={`dnum text-[15px] font-bold ${headlineFine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(headlineFine, pack.currency)}</span>
-            <Delta from={base.fine} to={cur.fine} money currency={pack.currency} />
+            <span className={`dnum text-[15px] font-bold ${riskFine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(riskFine, pack.currency)}</span>
+            <Delta from={riskBase} to={riskFine} money currency={pack.currency} />
           </div>
         </div>
       </div>
@@ -222,8 +260,13 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       <div className="space-y-2">
         <span className="label">Quick scenarios</span>
         <div className="flex flex-wrap gap-1.5">
-          {([['As-sold', reset], ...(mixInfo.pts.includes('BEV') ? [['BEV +20pp', () => presetBEV(20)], ['Slow transition', () => presetBEV(-10)]] as [string, () => void][] : []), ['Heavier +100kg', () => patch({ massShiftKg: 100 })]] as [string, () => void][]).map(([label, fn]) => (
-            <button key={label} onClick={fn} className="rounded-lg border border-black/[0.07] bg-white/50 px-2.5 py-1 text-[10px] font-semibold text-ink-300 transition hover:-translate-y-px hover:border-brand/40 hover:text-brand">{label}</button>
+          {([
+            ['As-sold', reset],
+            ...(mixInfo.pts.includes('BEV') ? [['BEV +20pp', () => presetBEV(20)], ['Slow', () => presetBEV(-10)]] as [string, () => void][] : []),
+            ...(scope && mixInfo.pts.includes('BEV') && cur.gap > 0 ? [['⚡ To the line', solveToLine]] as [string, () => void][] : []),
+            ['Heavier +100kg', () => patch({ massShiftKg: 100 })],
+          ] as [string, () => void][]).map(([label, fn]) => (
+            <button key={label} onClick={fn} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition hover:-translate-y-px ${label.startsWith('⚡') ? 'border-brand/40 bg-brand/10 text-brand' : 'border-black/[0.07] bg-white/50 text-ink-300 hover:border-brand/40 hover:text-brand'}`}>{label}</button>
           ))}
         </div>
         <div className="flex items-center gap-1.5 pt-0.5">
@@ -234,13 +277,13 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         {snapA && aOut && (
           <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] text-[10px]">
             <div className="flex justify-between border-b border-black/[0.05] bg-black/[0.02] px-2.5 py-1 font-semibold uppercase tracking-wide text-ink-500"><span>A ⇄ B</span><span>gap · €-at-risk</span></div>
-            <div className="px-2.5 py-1.5"><Row label={`A · ${snapA.label}`} o={aOut} cur={pack.currency} dim /><Row label="B · live now" o={{ ...cur, fine: headlineFine }} cur={pack.currency} /></div>
+            <div className="px-2.5 py-1.5"><Row label={`A · ${snapA.label}`} o={{ ...aOut, fine: level >= 2 ? (aOut.makerFine ?? 0) : aOut.fine }} cur={pack.currency} dim /><Row label="B · live now" o={{ ...cur, fine: riskFine }} cur={pack.currency} /></div>
           </div>
         )}
       </div>
 
-      {/* FLEET */}
-      <Group title="Fleet" icon="scatter" modified={fleetModified}>
+      {/* FLEET / BRAND / MODEL */}
+      <Group title={fleetTitle} icon="scatter" modified={fleetModified}>
         <div>
           <span className="label">Year <span className="font-normal normal-case text-ink-500">· all makers</span></span>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -253,8 +296,8 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
 
         <div>
           <div className="flex items-center justify-between">
-            <span className="label flex items-center gap-1.5">Powertrain mix{mixModified && <i className="h-1.5 w-1.5 rounded-full bg-brand" />}</span>
-            {eff.mix && <button onClick={() => patch({ mix: null })} className="text-[10px] font-semibold text-ink-500 hover:text-ink-100">as-sold</button>}
+            <span className="label flex items-center gap-1.5">{level >= 2 ? 'Powertrain split' : 'Powertrain mix'}{mixModified && <i className="h-1.5 w-1.5 rounded-full bg-brand" />}</span>
+            {ownMix && <button onClick={() => patch({ mix: null })} className="text-[10px] font-semibold text-ink-500 hover:text-ink-100">as-sold</button>}
           </div>
           <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-ink-800 ring-1 ring-black/[0.04]">
             {mixInfo.pts.map((p) => <div key={p} className="transition-all duration-300" style={{ width: `${resultShare(p)}%`, background: ptColor(p) }} title={`${p} ${Math.round(resultShare(p))}%`} />)}
@@ -272,9 +315,9 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           </div>
         </div>
 
-        <NumSlider label={`${pack.massLabel} shift`} value={eff.massShiftKg} min={-150} max={150} step={5} unit="kg" baseline={0}
+        <NumSlider label={`${pack.massLabel} shift`} value={massVal} min={-150} max={150} step={5} unit="kg" baseline={0}
           onChange={(v) => patch({ massShiftKg: v })} hint="moves fleet & the limit together" />
-        <NumSlider label="Sales volume" value={eff.salesMultiplier} min={0.5} max={1.6} step={0.05} unit="×" baseline={1}
+        <NumSlider label="Sales volume" value={salesVal} min={0.5} max={1.6} step={0.05} unit="×" baseline={1}
           onChange={(v) => patch({ salesMultiplier: v })} />
       </Group>
 
@@ -299,7 +342,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       </Group>
 
       {/* BUILD */}
-      <Group title="Build a variant" icon="spark" defaultOpen={variants.length > 0} modified={variants.length > 0}>
+      <Group title={level >= 2 ? `Add a variant to ${model}` : 'Build a variant'} icon="spark" defaultOpen={variants.length > 0} modified={variants.length > 0}>
         <AddVariant pack={pack} scenario={scenario} parent={drilledParent} defaultModel={drilledModel} variants={variants} ptColor={ptColor}
           onAdd={(v) => patch({ extraVariants: [...variants, v] })}
           onRemove={(i) => patch({ extraVariants: variants.filter((_, k) => k !== i) })} />

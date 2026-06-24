@@ -40,40 +40,57 @@ export function applyScenario(
   if (s.extraVariants?.length) v = [...v, ...s.extraVariants.map((x) => ({ ...x, year: s.year }))]
   if (v.length === 0) return v
 
-  // The effective scenario for a maker = global, with that maker's overrides
-  // layered on top (mix/mass/sales/EV). This lets EU-wide edits at the market
-  // level coexist with OEM-specific edits when drilled into one maker.
-  const eff = (parent: string): Scenario => {
-    const o = overrides[parent]
-    return o ? { ...s, ...o } : s
+  // Overrides are keyed by scope: "Maker" (brand level) or "Maker/Model" (model
+  // level). Edits layer base < maker < model, most-specific wins — so a market
+  // edit, a brand edit, and a model edit can all coexist on the same fleet.
+  const makerOv = (p: string) => overrides[p]
+  const modelOv = (p: string, m: string) => overrides[`${p}/${m}`]
+  const effFor = (x: Vehicle): Scenario => {
+    let e = s
+    const mk = makerOv(x.parent); if (mk) e = { ...e, ...mk }
+    const md = modelOv(x.parent, x.model); if (md) e = { ...e, ...md }
+    return e
   }
 
-  // group by maker, then apply each maker's effective levers within its own fleet
-  const byParent = new Map<string, Vehicle[]>()
-  for (const x of v) (byParent.get(x.parent) ?? byParent.set(x.parent, []).get(x.parent)!).push(x)
+  // 1. Sales multiplier (per vehicle, deepest scope wins).
+  for (const x of v) { const m = effFor(x).salesMultiplier; if (m !== 1) x.sales *= m }
 
-  for (const [parent, group] of byParent) {
-    const e = eff(parent)
+  // 2. Powertrain mix — reweight within the DEEPEST scope that defines a mix
+  //    (model > maker > market), preserving that scope's total volume. A model
+  //    with its own mix is excluded from its maker's reweighting (it's pinned).
+  const groups = new Map<string, { weights: Record<string, number>; items: Vehicle[] }>()
+  for (const x of v) {
+    const md = modelOv(x.parent, x.model)
+    const mk = makerOv(x.parent)
+    let key: string | null = null, weights: Record<string, number> | null = null
+    if (md?.mix) { key = `m:${x.parent}/${x.model}`; weights = md.mix }
+    else if (mk?.mix) { key = `k:${x.parent}`; weights = mk.mix }
+    else if (s.mix) { key = `g:${x.parent}`; weights = s.mix } // market mix applies within each maker
+    if (key && weights) {
+      const g = groups.get(key) ?? { weights, items: [] }
+      g.items.push(x); groups.set(key, g)
+    }
+  }
+  for (const { weights, items } of groups.values()) {
+    const present = [...new Set(items.map((i) => i.powertrain))]
+    let wsum = 0
+    const w: Record<string, number> = {}
+    for (const pt of present) { w[pt] = Math.max(0, weights[pt] ?? 0); wsum += w[pt] }
+    if (wsum <= 0) continue
+    const total = items.reduce((a, i) => a + i.sales, 0)
+    const cur: Record<string, number> = {}
+    for (const i of items) cur[i.powertrain] = (cur[i.powertrain] ?? 0) + i.sales
+    const factor: Record<string, number> = {}
+    for (const pt of present) factor[pt] = cur[pt] > 0 ? ((w[pt] / wsum) * total) / cur[pt] : 0
+    for (const i of items) i.sales *= factor[i.powertrain] ?? 1
+  }
 
-    // 1. Sales multiplier
-    if (e.salesMultiplier !== 1) group.forEach((x) => (x.sales *= e.salesMultiplier))
-
-    // 2. Powertrain mix (renormalized weights), or the simpler ZE-share lever —
-    //    reweighted within this maker so its total volume is preserved.
-    if (e.mix && Object.keys(e.mix).length) {
-      const present = [...new Set(group.map((x) => x.powertrain))]
-      let wsum = 0
-      const w: Record<string, number> = {}
-      for (const pt of present) { w[pt] = Math.max(0, e.mix[pt] ?? 0); wsum += w[pt] }
-      if (wsum > 0) {
-        const total = group.reduce((a, x) => a + x.sales, 0)
-        const cur: Record<string, number> = {}
-        for (const x of group) cur[x.powertrain] = (cur[x.powertrain] ?? 0) + x.sales
-        const factor: Record<string, number> = {}
-        for (const pt of present) factor[pt] = cur[pt] > 0 ? ((w[pt] / wsum) * total) / cur[pt] : 0
-        group.forEach((x) => (x.sales *= factor[x.powertrain] ?? 1))
-      }
-    } else if (e.evSharePct != null) {
+  // 2b. EV-share lever (brand/market scope, only when no mix set) — per maker.
+  const byMaker = new Map<string, Vehicle[]>()
+  for (const x of v) (byMaker.get(x.parent) ?? byMaker.set(x.parent, []).get(x.parent)!).push(x)
+  for (const [parent, group] of byMaker) {
+    const e = makerOv(parent) ? { ...s, ...makerOv(parent) } : s
+    if (!e.mix && e.evSharePct != null) {
       const total = group.reduce((a, x) => a + x.sales, 0)
       const evUnits = group.filter((x) => pack.isZeroEmission(x)).reduce((a, x) => a + x.sales, 0)
       const nonEv = total - evUnits
@@ -84,13 +101,14 @@ export function applyScenario(
         group.forEach((x) => (x.sales *= pack.isZeroEmission(x) ? fe : fn))
       }
     }
+  }
 
-    // 3. Mass shift — moves the maker's fleet and its mass-based limit together.
-    if (e.massShiftKg !== 0) {
-      group.forEach((x) => {
-        x.mass = Math.max(800, x.mass + e.massShiftKg)
-        if (!pack.isZeroEmission(x)) x.co2 = Math.max(0, x.co2 * (1 + (e.massShiftKg / 1500) * 0.35))
-      })
+  // 3. Mass shift (per vehicle, deepest scope wins) — moves fleet & the limit together.
+  for (const x of v) {
+    const ms = effFor(x).massShiftKg
+    if (ms !== 0) {
+      x.mass = Math.max(800, x.mass + ms)
+      if (!pack.isZeroEmission(x)) x.co2 = Math.max(0, x.co2 * (1 + (ms / 1500) * 0.35))
     }
   }
 

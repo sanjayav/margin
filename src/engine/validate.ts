@@ -12,7 +12,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import type { CountryId, LimitContext, Scenario, Vehicle } from './types.js'
 import { getPack } from './rulepacks/index.js'
-import { aggregate, applyScenario, threeYearAverage } from './engine.js'
+import { aggregate, applyScenario, threeYearAverage, buildTree } from './engine.js'
 import { standings, poolResult } from './pooling.js'
 import { FLEET } from '../data/fleet.js'
 
@@ -102,6 +102,13 @@ export function runValidation(): Check[] {
     const best = tys.reduce((a, b) => (b.saved > a.saved ? b : a), tys[0])
     inv('eu-3yr-subadditive', 'EU: 3-year (2025-27) averaging premium ≤ sum of single-year premiums', sub,
       `holds for all ${tys.length} makers; best saving €${f(best?.saved ?? 0, 0)} (Reg 2025/1214)`)
+
+    // hierarchical scoping: a model-scoped mix preserves total market volume
+    const mk = FLEET.EU[0].parent, md = FLEET.EU[0].model
+    const baseU = buildTree(FLEET.EU, p, scenario()).rawUnits
+    const ovU = buildTree(FLEET.EU, p, scenario(), { [`${mk}/${md}`]: { mix: { BEV: 80, ICE: 20 } } }).rawUnits
+    inv('eu-scope-volume', 'EU: model-scoped edits preserve total market volume', approx(baseU, ovU, 1),
+      `market units ${f(baseU, 0)} = ${f(ovU, 0)} with a model mix override`)
   }
 
   // ── Regulatory anchors (golden numbers tied to the rules) ──────────────────

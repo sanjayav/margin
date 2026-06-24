@@ -32,6 +32,13 @@ interface UIState {
   logout: () => void
 }
 
+// Scope key for the current drill level: null (market), "Maker" (brand), or
+// "Maker/Model" (model). Variant level (3) still scopes to its model.
+export function scopeKey(screen: ScreenId, drillPath: string[]): string | null {
+  if (screen !== 'analyze' || drillPath.length === 0) return null
+  return drillPath.length >= 2 ? `${drillPath[0]}/${drillPath[1]}` : drillPath[0]
+}
+
 // Single demo credential
 export const CRED = { user: 'vijay@margin.io', pass: 'marginio' }
 const isAuthed = () => { try { return localStorage.getItem('ul_auth') === '1' } catch { return false } }
@@ -77,10 +84,11 @@ export const useStore = create<UIState>((set, get) => ({
   setParent: (p) => set({ selectedParent: p }),
   patchScenario: (p) => {
     const { drillPath, screen, scenario, makerOverrides } = get()
-    const scope = screen === 'analyze' && drillPath.length >= 1 ? drillPath[0] : null
+    const scope = scopeKey(screen, drillPath)
     if (!scope) { set({ scenario: { ...scenario, ...p } }); return }
-    // When drilled into a maker, mix/mass/sales/EV edits scope to that maker; the
-    // rest (year, eco, pooling, super-credits, variants) stay global.
+    // Drilled in, mix/mass/sales/EV edits scope to the current node (brand at
+    // "Maker", model at "Maker/Model"); the rest (year, eco, pooling, super-
+    // credits, variants, PHEV UF, credit price) stay global.
     const SCOPED = new Set(['mix', 'massShiftKg', 'salesMultiplier', 'evSharePct'])
     const globalPart: any = {}, scopedPart: any = {}
     for (const k of Object.keys(p)) (SCOPED.has(k) ? scopedPart : globalPart)[k] = (p as any)[k]
@@ -93,7 +101,7 @@ export const useStore = create<UIState>((set, get) => ({
   },
   resetScenario: () => {
     const { drillPath, screen, makerOverrides } = get()
-    const scope = screen === 'analyze' && drillPath.length >= 1 ? drillPath[0] : null
+    const scope = scopeKey(screen, drillPath)
     if (scope) { const next = { ...makerOverrides }; delete next[scope]; set({ makerOverrides: next }); return }
     set({ scenario: defaultScenario(get().country), makerOverrides: {} })
   },
