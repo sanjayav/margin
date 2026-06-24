@@ -67,12 +67,28 @@ function buildScenario(country: CountryId, o: any = {}): Scenario {
 function summarize(fleets: Fleets, country: CountryId, parent: string | null, o: any) {
   const pack = getPack(country)
   const scenario = buildScenario(country, o)
-  const agg = parent
-    ? aggregateParent(fleets[country], pack, scenario, parent)
-    : buildTree(fleets[country], pack, scenario)
+  if (!parent) {
+    // Fines are assessed PER MAKER — the whole-market exposure is the SUM of
+    // per-maker fines, NOT the fine of the market-average (which is ~0 because a
+    // clean maker offsets a dirty one in the average).
+    const tree = buildTree(fleets[country], pack, scenario)
+    const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
+    const fine = makers.reduce((a, c) => a + c.fine, 0)
+    const over = makers.filter((c) => c.status === 'fine')
+    return {
+      market: pack.name, entity: 'Whole market', year: scenario.year, unit: pack.metricUnit, currency: pack.currency,
+      fleetAverage: +fmtNum(tree.avgMetric, 2), limit: +fmtNum(tree.limit, 2), averageGap: +fmtNum(tree.gap, 2),
+      marketFine: Math.round(fine),
+      note: 'marketFine is the SUM of per-maker fines. The fleet average being under the line does NOT mean zero fines — assess each maker.',
+      makersOverTheLine: over.length, makers: makers.length,
+      registrations: tree.rawUnits, zeroEmissionSharePct: Math.round(tree.zlevShare * 100),
+      perMaker: makers.map((c) => ({ maker: c.label, fleet: +fmtNum(c.avgMetric, 2), limit: +fmtNum(c.limit, 2), gap: +fmtNum(c.gap, 2), fine: Math.round(c.fine), status: c.status })),
+    }
+  }
+  const agg = aggregateParent(fleets[country], pack, scenario, parent)
   return {
     market: pack.name,
-    entity: parent ?? 'Whole market',
+    entity: parent,
     year: scenario.year,
     unit: pack.metricUnit,
     currency: pack.currency,
@@ -250,7 +266,7 @@ function systemPrompt(ctx: any): string {
 
 Your job: answer the user's question precisely and, when they want to see or change something, drive the live screen with update_dashboard.
 
-ACCURACY IS NON-NEGOTIABLE. Never compute or estimate a number yourself. Every emissions figure, limit, gap, fine, cost, probability or share must come from a tool. Use query_compliance for a position; get_recommendations for the cheapest way under the line; simulate_risk for probabilities, ranges or worst-case (P10/P50/P90, chance of a fine); optimise_pool for pooling/credit-trading (who pays or receives, the fair Shapley settlement). Call the tool first, then answer using exactly what it returns; quote the fine's plain maths when you state a fine. update_dashboard drives the live screen and can also set the powertrain mix, credit price, PHEV utility factor and drill scope.
+ACCURACY IS NON-NEGOTIABLE. Never compute or estimate a number yourself. Every emissions figure, limit, gap, fine, cost, probability or share must come from a tool. Use query_compliance for a single position; get_recommendations for the cheapest way under the line; simulate_risk for probabilities, ranges or worst-case; optimise_pool for pooling/credit-trading. A question mentioning P10/P50/P90, "how likely", "chance", "range" or "worst case" REQUIRES simulate_risk — query_compliance returns only a point estimate. For the WHOLE market, the exposure is the marketFine field (the SUM of per-maker fines); the fleet average being under the line does NOT mean €0 — always check makersOverTheLine. Call the tool first, then answer using exactly what it returns; quote the fine's plain maths when you state a fine. update_dashboard drives the live screen and can also set the powertrain mix, credit price, PHEV utility factor and drill scope.
 
 Entitlements: the user's organisation has subscribed to these markets ONLY: ${(ctx.ownedModules ?? ['EU', 'IN', 'AU', 'UK']).join(', ')}. Never analyse, mention or switch to any other market.${ctx.pooling === false ? ' The Pooling add-on is not active — do not use optimise_pool or open the pooling screen.' : ''}
 
