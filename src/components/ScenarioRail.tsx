@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useStore, scopeKey } from '../state/store'
 import type { Aggregate } from '../engine/types'
 import { useCompliance } from '../lib/useCompliance'
 import { fmtNum, fmtMoney, buildTree, threeYearAverage } from '../engine/engine'
+import { simulateRisk, type RiskResult } from '../engine/montecarlo'
 import type { Vehicle, Scenario } from '../engine/types'
 import Icon, { type IconName } from './Icon'
 
@@ -94,6 +95,18 @@ function PositionBar({ fleet, limit }: { fleet: number; limit: number }) {
   )
 }
 
+function Histogram({ buckets, currency }: { buckets: RiskResult['buckets']; currency: string }) {
+  const max = Math.max(...buckets.map((b) => b.count), 1)
+  return (
+    <div className="mt-2 flex h-8 items-end gap-px">
+      {buckets.map((b, i) => (
+        <div key={i} title={`${fmtMoney(b.x0, currency)} – ${fmtMoney(b.x1, currency)} · ${b.count}`}
+          className="flex-1 rounded-t-sm transition-all" style={{ height: `${(b.count / max) * 100}%`, minHeight: b.count ? '2px' : '0', background: b.x1 <= 1 ? '#0E9F6E' : '#E0484D', opacity: 0.35 + (b.count / max) * 0.45 }} />
+      ))}
+    </div>
+  )
+}
+
 // ── the panel ─────────────────────────────────────────────────────────────--
 export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const { pack, raw, country } = useCompliance()
@@ -147,8 +160,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   // €-at-risk: market/brand show the node's own fine; model/variant show the
   // brand's fine (models aren't separate liabilities — the brand is assessed).
   const riskFine = level >= 2 ? (cur.makerFine ?? 0) : (show3yr && three ? three.fine : cur.fine)
-  const riskBase = level >= 2 ? (base.makerFine ?? 0) : base.fine
-  const riskLabel = level >= 2 ? `${maker.split(' ')[0]} at risk` : (show3yr && three ? '€-at-risk · 3-yr avg' : '€-at-risk')
+  const riskLabel = level >= 2 ? `${maker.split(' ')[0]} at risk` : '€-at-risk'
 
   // powertrain mix baseline scoped to the current level
   const mixInfo = useMemo(() => {
@@ -161,6 +173,23 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     pts.forEach((p) => (shares[p] = total ? (by[p] / total) * 100 : 0))
     return { pts, shares }
   }, [raw, scenario.year, level, maker, model])
+
+  // Monte-Carlo €-at-risk for the current scope — deferred so dragging stays smooth.
+  // At market level each maker drifts on its own BEV share (preserving the spread
+  // that drives fines); drilled in, only the scoped node drifts.
+  const defScenario = useDeferredValue(scenario)
+  const defOv = useDeferredValue(makerOverrides)
+  const riskGroups = useMemo(() => {
+    if (scope) return [{ key: scope, shares: mixInfo.shares }]
+    const by: Record<string, Record<string, number>> = {}, tot: Record<string, number> = {}
+    for (const v of raw) if (v.year === scenario.year) { (by[v.parent] ??= {})[v.powertrain] = (by[v.parent]?.[v.powertrain] ?? 0) + v.sales; tot[v.parent] = (tot[v.parent] ?? 0) + v.sales }
+    return Object.entries(by).map(([mk, b]) => { const shares: Record<string, number> = {}; for (const p in b) shares[p] = tot[mk] ? (b[p] / tot[mk]) * 100 : 0; return { key: mk, shares } })
+  }, [raw, scenario.year, scope, mixInfo])
+  const risk = useMemo(() => simulateRisk({
+    base: defScenario, groups: riskGroups, currentOverrides: defOv,
+    fineOf: (s, ov) => { const o = outcomeOf(s, ov); return level >= 2 ? (o.makerFine ?? 0) : o.fine },
+    n: 220,
+  }), [raw, pack, defScenario, defOv, path, riskGroups, level]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ownMix = scope ? (ownOv.mix ?? null) : (scenario.mix ?? null)
   const weights = ownMix ?? mixInfo.shares
@@ -247,12 +276,20 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           </div>
         </div>
         <PositionBar fleet={cur.metric} limit={cur.limit} />
-        <div className="mt-3 flex items-center justify-between border-t border-black/[0.06] pt-2.5">
-          <span className="text-[11px] font-medium text-ink-400">{riskLabel}</span>
-          <div className="flex items-center gap-2">
-            <span className={`dnum text-[15px] font-bold ${riskFine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(riskFine, pack.currency)}</span>
-            <Delta from={riskBase} to={riskFine} money currency={pack.currency} />
+        <div className="mt-3 border-t border-black/[0.06] pt-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-ink-400">{riskLabel} <span className="text-ink-500">· P50</span></span>
+            <div className="flex items-center gap-2">
+              <span className={`dnum text-[15px] font-bold ${risk.p50 > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(risk.p50, pack.currency)}</span>
+              <span className={`num rounded-full px-1.5 py-0.5 text-[9px] font-bold ${risk.probOver > 0.05 ? 'bg-danger/12 text-danger' : 'bg-safe/12 text-safe'}`}>{Math.round(risk.probOver * 100)}% over</span>
+            </div>
           </div>
+          <div className="mt-1 flex items-center justify-between text-[10px] text-ink-500">
+            <span>P10–P90</span>
+            <span className="num">{fmtMoney(risk.p10, pack.currency)} – {fmtMoney(risk.p90, pack.currency)}</span>
+          </div>
+          <Histogram buckets={risk.buckets} currency={pack.currency} />
+          <div className="mt-1 text-[9px] text-ink-500">{risk.n} draws · ZE share, sales &amp; mass uncertainty</div>
         </div>
       </div>
 
