@@ -80,6 +80,19 @@ function Delta({ from, to, lowerBetter = true, money, currency = '' }: { from: n
   )
 }
 
+function PositionBar({ fleet, limit }: { fleet: number; limit: number }) {
+  const scale = Math.max(limit * 1.5, fleet * 1.08, 1)
+  const fw = Math.min(100, (fleet / scale) * 100)
+  const lw = Math.min(100, (limit / scale) * 100)
+  const over = fleet > limit
+  return (
+    <div className="relative mt-2.5 h-2 w-full rounded-full bg-black/[0.06]">
+      <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-300" style={{ width: `${fw}%`, background: over ? '#E0484D' : '#0E9F6E' }} />
+      <div className="absolute -inset-y-[3px] w-[2px] rounded bg-[#C9A227]" style={{ left: `${lw}%` }} title={`limit ${limit.toFixed(1)}`} />
+    </div>
+  )
+}
+
 // ── the panel ─────────────────────────────────────────────────────────────--
 export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const { pack, raw, country } = useCompliance()
@@ -171,27 +184,35 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       </div>
 
       {/* live outcome */}
-      <div className="rounded-xl border border-black/[0.08] bg-gradient-to-b from-black/[0.035] to-transparent p-3">
+      <div className="rounded-2xl border border-black/[0.07] bg-gradient-to-b from-black/[0.045] to-transparent p-3.5 shadow-[0_1px_2px_rgba(40,30,15,0.04)]">
         <div className="flex items-center justify-between">
           <span className="label">Outcome · {(scope ?? 'market').split(' ')[0]}</span>
-          {three && (
-            <button onClick={() => setShow3yr((v) => !v)} className={`num rounded-md px-1.5 py-0.5 text-[9px] font-bold transition ${show3yr ? 'bg-brand text-white' : 'bg-black/5 text-ink-500'}`}>{show3yr ? '3-yr avg' : 'single yr'}</button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {three && (
+              <button onClick={() => setShow3yr((v) => !v)} className={`num rounded-md px-1.5 py-0.5 text-[9px] font-bold transition ${show3yr ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{show3yr ? '3-yr' : '1-yr'}</button>
+            )}
+            <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${cur.gap > 0 ? 'bg-danger/12 text-danger' : 'bg-safe/12 text-safe'}`}>
+              <i className={`h-1.5 w-1.5 rounded-full ${cur.gap > 0 ? 'bg-danger' : 'bg-safe'}`} />{cur.gap > 0 ? 'Over' : 'Under'}
+            </span>
+          </div>
         </div>
-        <div className="mt-2 flex items-end justify-between">
+        <div className="mt-2.5 flex items-end justify-between">
           <div>
-            <div className="dnum text-[26px] font-bold leading-none text-ink-100">{fmtNum(cur.metric, 1)}</div>
-            <div className="mt-1 text-[10px] text-ink-500">fleet vs limit {fmtNum(cur.limit, 1)} {pack.metricUnit}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">fleet {pack.metricUnit}</div>
+            <div className="flex items-baseline gap-1"><span className="dnum text-[30px] font-bold leading-none text-ink-100">{fmtNum(cur.metric, 1)}</span></div>
+            <div className="mt-1 text-[10px] text-ink-500">limit {fmtNum(cur.limit, 1)}</div>
           </div>
           <div className="text-right">
-            <div className={`dnum text-[18px] font-bold leading-none ${cur.gap > 0 ? 'text-danger' : 'text-safe'}`}>{cur.gap > 0 ? '+' : ''}{fmtNum(cur.gap, 1)}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">gap</div>
+            <div className={`dnum text-[20px] font-bold leading-none ${cur.gap > 0 ? 'text-danger' : 'text-safe'}`}>{cur.gap > 0 ? '+' : ''}{fmtNum(cur.gap, 1)}</div>
             <div className="mt-1"><Delta from={base.gap} to={cur.gap} /></div>
           </div>
         </div>
-        <div className="mt-2.5 flex items-center justify-between border-t border-black/[0.06] pt-2">
-          <span className="text-[11px] text-ink-500">{show3yr && three ? '€-at-risk · 3-yr' : '€-at-risk'}</span>
+        <PositionBar fleet={cur.metric} limit={cur.limit} />
+        <div className="mt-3 flex items-center justify-between border-t border-black/[0.06] pt-2.5">
+          <span className="text-[11px] font-medium text-ink-400">{show3yr && three ? '€-at-risk · 3-yr avg' : '€-at-risk'}</span>
           <div className="flex items-center gap-2">
-            <span className={`dnum text-sm font-bold ${headlineFine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(headlineFine, pack.currency)}</span>
+            <span className={`dnum text-[15px] font-bold ${headlineFine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(headlineFine, pack.currency)}</span>
             <Delta from={base.fine} to={cur.fine} money currency={pack.currency} />
           </div>
         </div>
@@ -199,22 +220,21 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
 
       {/* presets + A/B */}
       <div className="space-y-2">
+        <span className="label">Quick scenarios</span>
         <div className="flex flex-wrap gap-1.5">
-          <button onClick={reset} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] font-semibold text-ink-400 transition hover:text-ink-100">As-sold</button>
-          {mixInfo.pts.includes('BEV') && <button onClick={() => presetBEV(20)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] font-semibold text-ink-400 transition hover:text-ink-100">BEV +20pp</button>}
-          {mixInfo.pts.includes('BEV') && <button onClick={() => presetBEV(-10)} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] font-semibold text-ink-400 transition hover:text-ink-100">Slow transition</button>}
-          <button onClick={() => patch({ massShiftKg: 100 })} className="rounded-lg bg-black/5 px-2 py-1 text-[10px] font-semibold text-ink-400 transition hover:text-ink-100">Heavier +100kg</button>
+          {([['As-sold', reset], ...(mixInfo.pts.includes('BEV') ? [['BEV +20pp', () => presetBEV(20)], ['Slow transition', () => presetBEV(-10)]] as [string, () => void][] : []), ['Heavier +100kg', () => patch({ massShiftKg: 100 })]] as [string, () => void][]).map(([label, fn]) => (
+            <button key={label} onClick={fn} className="rounded-lg border border-black/[0.07] bg-white/50 px-2.5 py-1 text-[10px] font-semibold text-ink-300 transition hover:-translate-y-px hover:border-brand/40 hover:text-brand">{label}</button>
+          ))}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 pt-0.5">
           <button onClick={() => setSnapA({ scenario: { ...scenario }, overrides: { ...makerOverrides }, label: `${scope ?? 'market'} · ${scenario.year}` })}
-            className="flex-1 rounded-lg border border-black/10 bg-black/[0.02] px-2 py-1 text-[10px] font-semibold text-ink-300 transition hover:border-black/20">{snapA ? 'Re-save A' : 'Save as A'}</button>
-          {snapA && <button onClick={() => setSnapA(null)} className="rounded-lg border border-black/10 px-2 py-1 text-[10px] text-ink-500 hover:text-danger">clear</button>}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-black/[0.02] px-2 py-1.5 text-[10px] font-semibold text-ink-300 transition hover:border-black/20 hover:text-ink-100"><Icon name="layers" size={11} /> {snapA ? 'Re-save A' : 'Save current as A'}</button>
+          {snapA && <button onClick={() => setSnapA(null)} className="rounded-lg border border-black/10 px-2 py-1.5 text-[10px] text-ink-500 hover:text-danger">clear</button>}
         </div>
         {snapA && aOut && (
-          <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] p-2 text-[10px]">
-            <div className="mb-1 flex justify-between text-ink-500"><span>compare</span><span>gap · €-at-risk</span></div>
-            <Row label={`A · ${snapA.label}`} o={aOut} cur={pack.currency} dim />
-            <Row label="B · live" o={{ ...cur, fine: headlineFine }} cur={pack.currency} />
+          <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] text-[10px]">
+            <div className="flex justify-between border-b border-black/[0.05] bg-black/[0.02] px-2.5 py-1 font-semibold uppercase tracking-wide text-ink-500"><span>A ⇄ B</span><span>gap · €-at-risk</span></div>
+            <div className="px-2.5 py-1.5"><Row label={`A · ${snapA.label}`} o={aOut} cur={pack.currency} dim /><Row label="B · live now" o={{ ...cur, fine: headlineFine }} cur={pack.currency} /></div>
           </div>
         )}
       </div>
@@ -236,19 +256,17 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
             <span className="label flex items-center gap-1.5">Powertrain mix{mixModified && <i className="h-1.5 w-1.5 rounded-full bg-brand" />}</span>
             {eff.mix && <button onClick={() => patch({ mix: null })} className="text-[10px] font-semibold text-ink-500 hover:text-ink-100">as-sold</button>}
           </div>
-          <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-ink-800">
-            {mixInfo.pts.map((p) => <div key={p} style={{ width: `${resultShare(p)}%`, background: ptColor(p) }} title={`${p} ${Math.round(resultShare(p))}%`} />)}
+          <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-ink-800 ring-1 ring-black/[0.04]">
+            {mixInfo.pts.map((p) => <div key={p} className="transition-all duration-300" style={{ width: `${resultShare(p)}%`, background: ptColor(p) }} title={`${p} ${Math.round(resultShare(p))}%`} />)}
           </div>
-          <div className="mt-3 space-y-3">
+          <div className="mt-3 space-y-2.5">
             {mixInfo.pts.map((p) => (
-              <div key={p}>
-                <div className="flex items-baseline justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-ink-100"><i className="inline-block h-2 w-2 rounded-full" style={{ background: ptColor(p) }} />{p}</span>
-                  <span className="num text-xs font-bold" style={{ color: ptColor(p) }}>{Math.round(resultShare(p))}%</span>
-                </div>
-                <input type="range" className="mt-1.5 w-full" min={0} max={100} step={1} value={Math.round(weights[p] ?? 0)}
+              <div key={p} className="flex items-center gap-2.5">
+                <span className="flex w-[52px] shrink-0 items-center gap-1.5 text-[11px] font-medium text-ink-100"><i className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(p) }} />{p}</span>
+                <input type="range" className="w-full flex-1" min={0} max={100} step={1} value={Math.round(weights[p] ?? 0)}
                   style={{ ['--fill' as string]: `${Math.round(weights[p] ?? 0)}%` }}
                   onChange={(e) => setWeight(p, parseFloat(e.target.value))} />
+                <span className="num w-7 shrink-0 text-right text-[11px] font-bold" style={{ color: ptColor(p) }}>{Math.round(resultShare(p))}%</span>
               </div>
             ))}
           </div>
