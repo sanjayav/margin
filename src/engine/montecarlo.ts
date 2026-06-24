@@ -5,7 +5,8 @@
 // for each draw — so the band is grounded, not a guess. Returns P10/P50/P90, the
 // probability of a fine, and a histogram. No incumbent ships this (see BENCHMARK).
 // ───────────────────────────────────────────────────────────────────────────
-import type { Scenario } from './types.js'
+import type { RulePack, Scenario, Vehicle } from './types.js'
+import { aggregateParent } from './engine.js'
 
 export interface RiskResult {
   p10: number; p50: number; p90: number; mean: number
@@ -78,4 +79,37 @@ export function simulateRisk(opts: RiskOpts): RiskResult {
   for (const f of fines) buckets[clamp(Math.floor(((f - lo) / span) * B), 0, B - 1)].count++
 
   return { p10: q(0.1), p50: q(0.5), p90: q(0.9), mean, probOver, buckets, n }
+}
+
+// ── Forecast confidence bands (per maker) ─────────────────────────────────────
+export interface YearBand { year: number; metric: number; limit: number; p10: number; p50: number; p90: number; probOver: number }
+
+/** For each year, sample the maker's BEV share, sales and mass around as-sold and
+ *  return the fleet-metric P10/P50/P90 ribbon + the probability it's over the line. */
+export function simulateForecastMaker(
+  raw: Vehicle[], pack: RulePack, base: Scenario, parent: string, years: number[],
+  n = 140, bevSigmaPP = 8, salesSigma = 0.08, massSigmaKg = 25,
+): YearBand[] {
+  return years.map((year) => {
+    const by: Record<string, number> = {}
+    let tot = 0
+    for (const v of raw) if (v.year === year && v.parent === parent) { by[v.powertrain] = (by[v.powertrain] ?? 0) + v.sales; tot += v.sales }
+    const shares: Record<string, number> = {}
+    for (const p of Object.keys(by)) shares[p] = tot ? (by[p] / tot) * 100 : 0
+    const baseBev = shares['BEV'] ?? 0
+
+    const det = aggregateParent(raw, pack, { ...base, year, mix: null, salesMultiplier: 1, massShiftKg: 0 }, parent)
+    const metrics: number[] = []
+    let over = 0
+    for (let i = 0; i < n; i++) {
+      const mix = mixFromBEV(shares, clamp(baseBev + gauss() * bevSigmaPP, 0, 100))
+      const sales = Math.max(0.3, base.salesMultiplier * (1 + gauss() * salesSigma))
+      const a = aggregateParent(raw, pack, { ...base, year, mix, salesMultiplier: sales, massShiftKg: base.massShiftKg + gauss() * massSigmaKg }, parent)
+      metrics.push(a.avgMetric)
+      if (a.gap > 0) over++
+    }
+    metrics.sort((a, b) => a - b)
+    const q = (p: number) => metrics[clamp(Math.floor(p * metrics.length), 0, metrics.length - 1)]
+    return { year, metric: det.avgMetric, limit: det.limit, p10: q(0.1), p50: q(0.5), p90: q(0.9), probOver: over / n }
+  })
 }

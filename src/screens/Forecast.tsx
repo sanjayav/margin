@@ -3,6 +3,7 @@ import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { parentsFor } from '../data/fleet'
 import { aggregateParent, fmtMoney, fmtNum } from '../engine/engine'
+import { simulateForecastMaker } from '../engine/montecarlo'
 import type { Scenario } from '../engine/types'
 import { Section, StatusPill } from '../components/ui'
 import Icon from '../components/Icon'
@@ -42,6 +43,8 @@ export default function Forecast() {
     })
   }, [raw, pack, scenario, base, selectedParent])
 
+  // Monte-Carlo confidence ribbon (per maker) — P10/P50/P90 + P(over the line)
+  const bands = useMemo(() => simulateForecastMaker(raw, pack, base, selectedParent, pack.years), [raw, pack, base, selectedParent])
   const overlay = showPlan && planDiffers
   const cumBase = series.reduce((a, s) => a + s.bFine, 0)
   const cumPlan = series.reduce((a, s) => a + s.lFine, 0)
@@ -97,7 +100,7 @@ export default function Forecast() {
       {/* Hero: emissions vs limit over time */}
       <Section title="The line, year by year"
         right={<Legend overlay={overlay} pack={pack} />}>
-        <TrajectoryChart series={series} overlay={overlay} pack={pack} cliffs={cliffs} maxDrop={maxDrop} />
+        <TrajectoryChart series={series} bands={bands} overlay={overlay} pack={pack} cliffs={cliffs} maxDrop={maxDrop} />
       </Section>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -125,6 +128,7 @@ export default function Forecast() {
                 <th className="px-4 py-2.5 text-right">Fleet</th>
                 {overlay && <th className="px-4 py-2.5 text-right text-accent">Your plan</th>}
                 <th className="px-4 py-2.5 text-right">Gap</th>
+                <th className="px-4 py-2.5 text-right">P(over)</th>
                 <th className="px-4 py-2.5 text-right">ZE now → need</th>
                 <th className="px-4 py-2.5 text-right">Fine</th>
                 <th className="px-4 py-2.5 text-right">Status</th>
@@ -139,7 +143,7 @@ export default function Forecast() {
                   <td className="px-4 py-2.5 text-right num">{fmtNum(s.bMetric, 1)}</td>
                   {overlay && <td className="px-4 py-2.5 text-right num text-accent">{fmtNum(s.lMetric, 1)}</td>}
                   <td className={`px-4 py-2.5 text-right num font-semibold ${s.bGap > 0 ? 'text-danger' : 'text-safe'}`}>{s.bGap > 0 ? '+' : ''}{fmtNum(s.bGap, 1)}</td>
-                  <td className="px-4 py-2.5 text-right num text-xs text-ink-400">{s.bShare}% → {s.req == null ? '—' : `${s.req}%`}</td>
+                  <td className={`px-4 py-2.5 text-right num ${(bands[i]?.probOver ?? 0) > 0.5 ? 'text-danger' : (bands[i]?.probOver ?? 0) > 0.1 ? 'text-warn' : 'text-safe'}`}>{Math.round((bands[i]?.probOver ?? 0) * 100)}%</td>
                   <td className={`px-4 py-2.5 text-right num ${s.bFine > 0 ? 'text-danger' : 'text-ink-500'}`}>{fmtMoney(s.bFine, pack.currency)}</td>
                   <td className="px-4 py-2.5 text-right"><StatusPill status={s.bStatus} /></td>
                 </tr>
@@ -160,20 +164,26 @@ function Legend({ overlay, pack }: { overlay: boolean; pack: any }) {
     <div className="flex items-center gap-3 text-[11px] text-ink-500">
       <span className="flex items-center gap-1"><i className="inline-block h-2 w-4 rounded bg-[#E0A100]" />limit</span>
       <span className="flex items-center gap-1"><i className="inline-block h-2 w-4 rounded bg-[#5b8def]" />hold today's mix</span>
+      <span className="flex items-center gap-1"><i className="inline-block h-2 w-4 rounded bg-[#5b8def]/20" />P10–P90</span>
       {overlay && <span className="flex items-center gap-1"><i className="inline-block h-2 w-4 rounded bg-[#3ddc97]" />your plan</span>}
     </div>
   )
 }
 
-function TrajectoryChart({ series, overlay, pack, cliffs, maxDrop }: any) {
+function TrajectoryChart({ series, bands, overlay, pack, cliffs, maxDrop }: any) {
   const [hover, setHover] = useState<number | null>(null)
   const W = 760, H = 320, m = { l: 50, r: 20, t: 18, b: 38 }
   const iw = W - m.l - m.r, ih = H - m.t - m.b
-  const vals = series.flatMap((s: any) => [s.bMetric, s.bLimit, ...(overlay ? [s.lMetric] : [])])
+  const vals = series.flatMap((s: any) => [s.bMetric, s.bLimit, ...(overlay ? [s.lMetric] : [])]).concat((bands ?? []).map((b: any) => b.p90))
   const yMax = Math.max(...vals, 1) * 1.15
   const sx = (i: number) => m.l + (series.length === 1 ? iw / 2 : (iw * i) / (series.length - 1))
   const sy = (v: number) => m.t + ih - (v / yMax) * ih
   const line = (k: string) => series.map((s: any, i: number) => `${i ? 'L' : 'M'}${sx(i).toFixed(1)},${sy(s[k]).toFixed(1)}`).join(' ')
+  // P10–P90 confidence ribbon
+  const ribbon = bands && bands.length
+    ? `M${sx(0)},${sy(bands[0].p90).toFixed(1)} ` + bands.map((b: any, i: number) => `L${sx(i).toFixed(1)},${sy(b.p90).toFixed(1)}`).join(' ')
+      + ' ' + [...bands].map((_: any, i: number) => bands.length - 1 - i).map((i: number) => `L${sx(i).toFixed(1)},${sy(bands[i].p10).toFixed(1)}`).join(' ') + ' Z'
+    : ''
   // gap area between baseline fleet and limit, clipped to over-limit
   const overArea =
     `M${sx(0)},${sy(series[0].bLimit)} ` +
@@ -198,6 +208,7 @@ function TrajectoryChart({ series, overlay, pack, cliffs, maxDrop }: any) {
         </g>
       ) : null))}
 
+      {ribbon && <path d={ribbon} fill="#5b8def" fillOpacity="0.12" />}
       <path d={overArea} fill="url(#gapfill)" />
       <path d={line('bLimit')} fill="none" stroke="#E0A100" strokeWidth="2.5" style={{ filter: 'drop-shadow(0 2px 5px rgba(255,209,102,.2))' }} />
       <path d={line('bMetric')} fill="none" stroke="#5b8def" strokeWidth="2.5" />
