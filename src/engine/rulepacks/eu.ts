@@ -92,8 +92,9 @@ export const EU: RulePack = {
 
   vehicleMetric: (v: Vehicle, s) => {
     if (v.co2 === 0) return 0
-    // PHEV official CO₂ is corrected upward by the revised utility factor from 2025.
-    const co2 = isPHEV(v.powertrain) ? v.co2 * phevUF(s.year) : v.co2
+    // PHEV official CO₂ is corrected upward by the revised utility factor from 2025
+    // (analysts can freeze it via scenario.phevUF = false to see the gross effect).
+    const co2 = isPHEV(v.powertrain) ? v.co2 * (s.phevUF === false ? 1 : phevUF(s.year)) : v.co2
     const eco = Math.min((v.ecoBenefit ?? 0) + s.ecoBoostG, ecoCap(s.year))
     return Math.max(0, co2 - eco)
   },

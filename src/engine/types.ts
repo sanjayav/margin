@@ -38,6 +38,8 @@ export interface Scenario {
   superCreditsEnabled: boolean
   mix?: Record<string, number> | null  // per-powertrain weights; engine renormalizes to shares
   extraVariants?: Vehicle[]   // hypothetical variants the user added
+  phevUF?: boolean            // EU: apply the 2025+ PHEV utility-factor correction (default true)
+  creditPrice?: number | null // override the pack's credit price for trading value
 }
 
 export interface LimitContext {

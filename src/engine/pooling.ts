@@ -79,12 +79,13 @@ export function bestForMaker(raw: Vehicle[], pack: RulePack, s: Scenario, parent
   const surplusGU = surplus.reduce((a, x) => a + x.creditBalance, 0)
   const covered = Math.min(deficitGU, surplusGU)
   const cur = pack.currency
+  const creditPrice = s.creditPrice ?? pack.creditPrice // scenario override wins
   const opts: MarketOption[] = []
 
   if (pack.pooling.enabled && surplus.length > 0) {
     const members = [parent, ...surplus.map((x) => x.parent)]
     const res = poolResult(raw, pack, s, members)
-    const floor = (pack.creditPrice ?? pack.fineRate * 0.4) * covered
+    const floor = (creditPrice ?? pack.fineRate * 0.4) * covered
     const ceiling = F
     const payment = Math.min(Math.max((floor + ceiling) / 2, floor), ceiling)
     opts.push({
@@ -95,12 +96,12 @@ export function bestForMaker(raw: Vehicle[], pack: RulePack, s: Scenario, parent
     })
   }
 
-  if (pack.creditPrice != null && surplusGU > 0) {
-    const cost = covered * pack.creditPrice + (deficitGU - covered) * pack.fineRate
+  if (creditPrice != null && surplusGU > 0) {
+    const cost = covered * creditPrice + (deficitGU - covered) * pack.fineRate
     opts.push({
       type: 'credits',
       label: 'Buy credits',
-      detail: `Cover ${Math.round(covered).toLocaleString()} g·units at ${cur}${pack.creditPrice}/unit${covered < deficitGU ? '; the rest is still fined' : ' — fully covered'}.`,
+      detail: `Cover ${Math.round(covered).toLocaleString()} g·units at ${cur}${creditPrice}/unit${covered < deficitGU ? '; the rest is still fined' : ' — fully covered'}.`,
       cost,
     })
   }
