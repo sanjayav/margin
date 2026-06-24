@@ -102,14 +102,19 @@ export function runValidation(): Check[] {
     const p = getPack('EU')
     anchor('eu-fine-rate', 'EU excess premium is €95 / gCO₂·km / car', p.fineRate === 95,
       `fineRate = €${p.fineRate}`, 'Reg (EU) 2019/631, Article 8(1)')
-    // eco-innovation credit capped at 7 g
-    const m = p.vehicleMetric(veh({ co2: 120, ecoBenefit: 20 }), scenario({ ecoBoostG: 0 }))
-    anchor('eu-eco-cap', 'EU eco-innovation credit capped at 7 g/km', approx(m, 113, 0.01),
-      `120 g − min(20, 7) = ${f(m)} g (expected 113)`, 'Reg (EU) 2019/631, Article 11')
-    // mass slope a = 0.0333 g per kg (cars)
-    const slope = (p.limit(ctx({ avgMass: 2000 })) - p.limit(ctx({ avgMass: 1000 }))) / 1000
-    anchor('eu-mass-slope', 'EU car mass-slope a = 0.0333 g/kg', approx(slope, 0.0333, 0.0005),
-      `engine slope = ${f(slope, 4)} g/kg`, 'Reg (EU) 2019/631, Annex I Part A')
+    // eco-innovation cap stepped DOWN to 6 g/km for 2025-2029 (was 7 g/km ≤2024)
+    const m = p.vehicleMetric(veh({ co2: 120, ecoBenefit: 20 }), scenario({ year: 2025, ecoBoostG: 0 }))
+    anchor('eu-eco-cap-2025', 'EU eco-innovation cap is 6 g/km for 2025-2029 (was 7)', approx(m, 114, 0.01),
+      `engine credits ${f(120 - m, 1)} g (cap ${f(120 - m, 0)}); correct 2025 cap is 6 g → 114 g`, 'Reg (EU) 2023/851 (amends Art 11)')
+    // 2025+ uses a TEST-MASS basis with slope a ~ 0.0144 (0.0333 was the 2020-2024 value)
+    const slope = (p.limit(ctx({ year: 2025, avgMass: 2000 })) - p.limit(ctx({ year: 2025, avgMass: 1000 }))) / 1000
+    anchor('eu-mass-slope-2025', 'EU 2025 car mass-slope a = 0.0144 g/kg (test-mass basis)', approx(slope, 0.0144, 0.0008),
+      `engine slope = ${f(slope, 4)} g/kg; 2025 value is 0.0144 (0.0333 was 2020-2024, MIRO basis)`, 'Commission Impl. Decision (EU) 2023/1623; JRC133502')
+    // ZLEV relaxation should trigger only ABOVE a 25% share (cars), not 15%
+    const at20 = p.limit(ctx({ year: 2025, avgMass: 1600, zlevShare: 0.20 }))
+    const noZ = p.limit(ctx({ year: 2025, avgMass: 1600, zlevShare: 0 }))
+    anchor('eu-zlev-benchmark', 'EU ZLEV benchmark is 25% (cars) for 2025-2029, not 15%', approx(at20, noZ, 0.01),
+      `a 20%-ZE maker (below the real 25% benchmark) is relaxed +${f((at20 / noZ - 1) * 100, 1)}% by the engine; correct = 0% until 25%`, 'Reg (EU) 2023/851; EC Cars & Vans')
   }
   {
     const p = getPack('AU')
@@ -144,22 +149,20 @@ export function runValidation(): Check[] {
     const p = getPack('EU')
     const engineTarget = p.limit(ctx({ year: 2025, avgMass: 1609, zlevShare: 0 }))
     review('eu-baseline', 'EU target uses a universal 95 g baseline, not manufacturer-specific 2021 WLTP',
-      `engine 2025 car target at 1609 kg = ${f(engineTarget)} g (95g NEDC-era curve). Real targets are each maker's 2021 WLTP start × (1−15%); EU-wide reference ≈ 93.6 g WLTP. Per-maker error can be ±10–15 g.`,
-      'Reg (EU) 2019/631 Annex I; ICCT 2025 target analysis')
+      `engine 2025 car target at 1609 kg = ${f(engineTarget)} g (95g NEDC-era curve). Real targets carry each maker's 2021 WLTP position; EU-wide reference = 93.6 g WLTP (CONFIRMED). Per-maker error ±10-15 g.`,
+      'EC Cars & Vans page; ICCT 2025 targets (Oct 2024) — 93.6 g/km')
 
-    const relaxed = p.limit(ctx({ year: 2025, avgMass: 1609, zlevShare: 0.5 }))
-    const base = p.limit(ctx({ year: 2025, avgMass: 1609, zlevShare: 0 }))
-    review('eu-zlev', 'EU ZLEV target relaxation is applied to 2025+; the 2023/851 amendment changed this',
-      `a 50%-ZE maker gets target ${f(relaxed)} vs ${f(base)} g (+${f((relaxed / base - 1) * 100, 1)}% easier). Confirm whether the ZLEV factor still applies post-2023/851 — if not, clean makers' fines are understated.`,
-      'Reg (EU) 2023/851 (Fit for 55 amendment)')
+    review('eu-zlev-definition', 'EU ZLEV share counts vehicles 0-50 g/km, engine counts only 0 g',
+      'isZeroEmission = (co2 === 0), so PHEVs/efficient hybrids under 50 g/km are excluded from the ZLEV share that drives the benchmark relaxation. Undercounts ZLEV share.',
+      'Reg (EU) 2023/851 — ZLEV defined as 0-50 g CO₂/km')
 
-    review('eu-phev-uf', 'EU PHEV utility-factor 2025 correction is not modelled',
-      'PHEV official CO₂ should step up materially from 2025 (WLTP UF revision). Engine uses the static official figure, so PHEV-heavy makers look cleaner than 2025 reality.',
-      'Reg (EU) 2023/443 (WLTP utility factors), applies 2025/2027')
+    review('eu-phev-uf', 'EU PHEV utility-factor revision is not modelled (CONFIRMED, ~2x)',
+      'Euro 6e-bis roughly DOUBLES official PHEV CO₂ — new types 1 Jan 2025, all registrations 1 Jan 2026; a further step (6e-bis-FCM) 2027/2028. Engine uses the static figure, so PHEV-heavy makers look far cleaner than 2025+ reality.',
+      'Commission Reg (EU) 2023/443 (WLTP utility factors)')
 
-    review('eu-3yr-flex', 'EU 2025–2027 three-year averaging flexibility is not modelled',
-      'The 2025 amendment lets makers average 2025–2027 compliance. A maker over in 2025 may still comply on the 3-year pool. Not yet in the engine.',
-      'Reg (EU) 2025 amendment to 2019/631')
+    review('eu-3yr-flex', 'EU 2025-2027 three-year averaging flexibility is not modelled (CONFIRMED)',
+      'Reg (EU) 2025/1214 (17 Jun 2025) lets makers comply on a registration-weighted 2025-2027 average. A maker over in 2025 may still comply on the 3-year pool — materially changes who actually owes a premium.',
+      'Reg (EU) 2025/1214')
   }
   {
     const p = getPack('UK')
