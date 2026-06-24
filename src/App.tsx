@@ -10,6 +10,7 @@ import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import Analyze from './screens/Analyze'
 import Analytics from './screens/Analytics'
+import Data from './screens/Data'
 import Plan from './screens/Plan'
 import Intelligence from './screens/Intelligence'
 import Admin from './screens/Admin'
@@ -18,6 +19,7 @@ import Login from './screens/Login'
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string }[] = [
   { id: 'analyze', label: 'Analyze', icon: 'scatter', tier: 'Core' },
   { id: 'analytics', label: 'Analytics', icon: 'layers', tier: 'Core' },
+  { id: 'data', label: 'Data', icon: 'database', tier: 'Core' },
   { id: 'plan', label: 'Plan', icon: 'target', tier: 'Core' },
   { id: 'intel', label: 'Intelligence', icon: 'activity', tier: 'Plus' },
   { id: 'admin', label: 'Admin', icon: 'settings', tier: 'Plus' },
@@ -156,7 +158,7 @@ export default function App() {
   const authed = useStore((s) => s.authed)
   const loadFleet = useStore((s) => s.loadFleet)
   useEffect(() => { if (authed) loadFleet() }, [loadFleet, authed])
-  const Screen = { analyze: Analyze, analytics: Analytics, plan: Plan, intel: Intelligence, admin: Admin }[screen]
+  const Screen = { analyze: Analyze, analytics: Analytics, data: Data, plan: Plan, intel: Intelligence, admin: Admin }[screen]
 
   if (!authed) return <Login />
 

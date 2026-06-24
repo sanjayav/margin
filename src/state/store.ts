@@ -3,7 +3,7 @@ import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
 import { parentsFor, setLiveFleet } from '../data/fleet'
 
-export type ScreenId = 'analyze' | 'analytics' | 'plan' | 'intel' | 'admin'
+export type ScreenId = 'analyze' | 'analytics' | 'data' | 'plan' | 'intel' | 'admin'
 export type PlanTab = 'under' | 'pool' | 'forecast'
 // legacy ids still accepted by setScreen and mapped to the new structure
 type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | PlanTab
