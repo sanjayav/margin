@@ -62,7 +62,7 @@ export default function Assistant() {
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand"><Icon name="spark" size={17} /></div>
               <div>
                 <div className="text-sm font-bold text-ink-100">Margin analyst</div>
-                <div className="text-[10px] text-ink-500">Powered by Claude · numbers from the live engine</div>
+                <div className="text-[10px] text-ink-500">Powered by Marklytics · numbers from the live engine</div>
               </div>
             </div>
             <button onClick={() => setOpen(false)} className="text-ink-500 hover:text-ink-100"><Icon name="close" size={18} /></button>
