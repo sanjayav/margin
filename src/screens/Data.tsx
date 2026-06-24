@@ -1,16 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../state/store'
 import { getFleet, getMeta } from '../data/fleet'
-import { PACK_LIST, getPack } from '../engine/rulepacks'
-import type { CountryId, Vehicle } from '../engine/types'
+import { getPack } from '../engine/rulepacks'
+import type { Vehicle } from '../engine/types'
 import { fmtInt } from '../engine/engine'
 import Icon from '../components/Icon'
 import { Stat } from '../components/ui'
 
-type Row = Vehicle & { market: CountryId }
-type SortKey = keyof Row
+type SortKey = keyof Vehicle
 const COLS: { k: SortKey; label: string; num?: boolean }[] = [
-  { k: 'market', label: 'Market' },
   { k: 'parent', label: 'Maker' },
   { k: 'model', label: 'Model' },
   { k: 'powertrain', label: 'Powertrain' },
@@ -23,23 +21,22 @@ const COLS: { k: SortKey; label: string; num?: boolean }[] = [
 ]
 
 export default function Data() {
+  // Scoped to the active module — only this market's database is visible here.
+  const country = useStore((s) => s.country)
   const dataVersion = useStore((s) => s.dataVersion)
-  const [market, setMarket] = useState<'ALL' | CountryId>('ALL')
+  const pack = getPack(country)
+  const meta = getMeta(country)
   const [q, setQ] = useState('')
   const [pt, setPt] = useState<string>('ALL')
   const [sortKey, setSortKey] = useState<SortKey>('sales')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
-  const all = useMemo<Row[]>(
-    () => PACK_LIST.flatMap((p) => getFleet(p.id).map((v) => ({ ...v, market: p.id }))),
-    [dataVersion],
-  )
-
+  const all = useMemo<Vehicle[]>(() => getFleet(country), [country, dataVersion])
   const powertrains = useMemo(() => ['ALL', ...[...new Set(all.map((r) => r.powertrain))].sort()], [all])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    let r = all.filter((x) => market === 'ALL' || x.market === market)
+    let r = all
     if (pt !== 'ALL') r = r.filter((x) => x.powertrain === pt)
     if (needle) r = r.filter((x) => `${x.parent} ${x.model} ${x.brand} ${x.make} ${x.fuel} ${x.powertrain}`.toLowerCase().includes(needle))
     const dir = sortDir === 'asc' ? 1 : -1
@@ -48,7 +45,7 @@ export default function Data() {
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
       return String(av ?? '').localeCompare(String(bv ?? '')) * dir
     })
-  }, [all, market, pt, q, sortKey, sortDir])
+  }, [all, pt, q, sortKey, sortDir])
 
   const totalUnits = rows.reduce((a, r) => a + r.sales, 0)
   const makers = new Set(rows.map((r) => r.parent)).size
@@ -63,43 +60,35 @@ export default function Data() {
     const blob = new Blob([`${header}\n${body}`], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `margin-data-${market.toLowerCase()}.csv`; a.click()
+    a.href = url; a.download = `margin-data-${country.toLowerCase()}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
-
-  const meta = market === 'ALL' ? null : getMeta(market)
 
   return (
     <div className="space-y-5">
       {/* KPI band */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat className="rise" label="Rows in view" value={fmtInt(rows.length)} sub={`of ${fmtInt(all.length)} total`} />
+        <Stat className="rise" label="Rows in view" value={fmtInt(rows.length)} sub={`of ${fmtInt(all.length)} in ${pack.flag}`} />
         <Stat className="rise [animation-delay:60ms]" label="Registrations" value={fmtInt(totalUnits)} sub="sum of units" />
         <Stat className="rise [animation-delay:120ms]" label="Makers" value={fmtInt(makers)} sub={`${powertrains.length - 1} powertrains`} />
-        <Stat className="rise [animation-delay:180ms]" label="Markets" value={market === 'ALL' ? String(PACK_LIST.length) : market} sub={meta ? (meta.live ? 'live dataset' : 'bundled extract') : 'all regimes'} />
+        <Stat className="rise [animation-delay:180ms]" label="Dataset" value={meta.live ? 'Live' : 'Extract'} sub={pack.name} accent={meta.live ? 'text-safe' : 'text-ink-400'} />
       </div>
 
       {/* Provenance */}
       <div className="rise card flex flex-wrap items-center justify-between gap-3 p-4 [animation-delay:220ms]">
         <div className="flex items-center gap-2 text-xs text-ink-500">
           <Icon name="database" size={15} className="text-brand" />
-          <span className="font-semibold text-ink-200">Source</span>
-          <span>{market === 'ALL' ? 'Combined regulatory datasets across EU · India · Australia · UK' : getPack(market).source}</span>
+          <span className="font-semibold text-ink-200">{pack.name} · source</span>
+          <span>{pack.source}</span>
         </div>
-        {meta?.lastRefreshed && <span className="chip"><Icon name="clock" size={12} /> refreshed {new Date(meta.lastRefreshed).toLocaleDateString()}</span>}
+        {meta.lastRefreshed && <span className="chip"><Icon name="clock" size={12} /> refreshed {new Date(meta.lastRefreshed).toLocaleDateString()}</span>}
       </div>
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-xl border border-black/[0.06] bg-white/60 p-1">
-          {(['ALL', ...PACK_LIST.map((p) => p.id)] as const).map((m) => (
-            <button key={m} onClick={() => setMarket(m)}
-              className={`num rounded-lg px-2.5 py-1 text-xs font-semibold transition ${market === m ? 'bg-brand text-white' : 'text-ink-500 hover:text-ink-100'}`}>{m}</button>
-          ))}
-        </div>
         <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-xl border border-black/[0.08] bg-white/60 px-3 py-2 focus-within:border-brand/40">
           <Icon name="search" size={15} className="text-ink-500" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search maker, model, fuel…"
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${pack.name} — maker, model, fuel…`}
             className="w-full bg-transparent text-sm text-ink-100 outline-none placeholder:text-ink-500" />
           {q && <button onClick={() => setQ('')}><Icon name="close" size={14} className="text-ink-500 hover:text-ink-100" /></button>}
         </div>
@@ -127,7 +116,6 @@ export default function Data() {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={i} className="border-b border-black/[0.04] transition-colors hover:bg-brand/[0.04]">
-                  <td className="px-3 py-2"><span className="num rounded bg-black/[0.05] px-1.5 py-0.5 text-[10px] font-bold text-ink-400">{r.market}</span></td>
                   <td className="whitespace-nowrap px-3 py-2 font-medium text-ink-100">{r.parent}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-ink-200">{r.model}</td>
                   <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-ink-200"><i className="h-2 w-2 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
