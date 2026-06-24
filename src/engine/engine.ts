@@ -220,6 +220,44 @@ export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides
   return root
 }
 
+export interface ThreeYear {
+  years: number[]
+  perYear: { year: number; metric: number; limit: number; units: number; fine: number }[]
+  avgMetric: number
+  avgLimit: number
+  gap: number
+  units: number
+  fine: number // premium on the 3-year averaged excess
+  singleYearFine: number // sum of the per-year premiums
+  saved: number
+  exempt: boolean
+}
+
+/**
+ * EU 2025–2027 three-year averaging flexibility (Reg (EU) 2025/1214). Instead of
+ * meeting the target every single year, a maker is assessed on its registration-
+ * weighted average specific emissions vs its average target over 2025–2027. By
+ * convexity this premium is always ≤ the sum of the per-year premiums.
+ */
+export function threeYearAverage(
+  raw: Vehicle[], pack: RulePack, s: Scenario, parent: string,
+  years: number[] = [2025, 2026, 2027], overrides: Record<string, Partial<Scenario>> = {},
+): ThreeYear {
+  const perYear = years.map((year) => {
+    const n = aggregateParent(raw, pack, { ...s, year }, parent, overrides)
+    return { year, metric: n.avgMetric, limit: n.limit, units: n.rawUnits, fine: n.fine }
+  })
+  const units = perYear.reduce((a, p) => a + p.units, 0)
+  const avgMetric = units ? perYear.reduce((a, p) => a + p.metric * p.units, 0) / units : 0
+  const avgLimit = units ? perYear.reduce((a, p) => a + p.limit * p.units, 0) / units : 0
+  const gap = avgMetric - avgLimit
+  const singleYearFine = perYear.reduce((a, p) => a + p.fine, 0)
+  // Small-volume exemption mirrors the per-year rule (average annual registrations).
+  const exempt = units / years.length < pack.smallVolumeThreshold
+  const fine = exempt || gap <= 0 ? 0 : gap * pack.fineRate * units
+  return { years, perYear, avgMetric, avgLimit, gap, units, fine, singleYearFine, saved: Math.max(0, singleYearFine - fine), exempt }
+}
+
 /** Aggregate for one parent (the selected maker), with its model breakdown. */
 export function aggregateParent(raw: Vehicle[], pack: RulePack, s: Scenario, parent: string, overrides: Record<string, Partial<Scenario>> = {}): Aggregate {
   const v = applyScenario(raw, s, pack, overrides).filter((x) => x.parent === parent)

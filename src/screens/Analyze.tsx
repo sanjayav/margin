@@ -3,7 +3,7 @@ import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { getMeta } from '../data/fleet'
 import type { Aggregate } from '../engine/types'
-import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
 import LimitChart, { type ChartPoint } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
 import { Section, Stat, StatusPill, Bar } from '../components/ui'
@@ -70,6 +70,11 @@ export default function Analyze() {
   // Fines are assessed per maker. At market level the exposure is the SUM of
   // maker fines (a clean maker can't cancel a dirty one); when drilled in, it's
   // the maker's own fine (models/variants aren't separate compliance entities).
+  // EU 2025-2027 three-year averaging flexibility (Reg 2025/1214), per maker.
+  const threeYr = useMemo(
+    () => (country === 'EU' && drill.length >= 1 ? threeYearAverage(raw, pack, scenario, drill[0]) : null),
+    [country, drill, raw, pack, scenario],
+  )
   const makerNode = useMemo(() => (drill.length >= 1 ? nodeAt(tree, [drill[0]]) : null), [tree, drill])
   const fineValue = makerNode ? makerNode.fine : (tree.children ?? []).reduce((a, c) => a + c.fine, 0)
   const fineSub = makerNode ? `${drill[0].split(' ')[0]} total` : `Σ across ${(tree.children ?? []).length} makers`
@@ -149,6 +154,51 @@ export default function Analyze() {
           </div>
         </Section>
       </div>
+
+      {threeYr && (
+        <Section className="rise" title="EU three-year averaging · 2025–2027"
+          right={<span className="chip"><Icon name="scale" size={12} /> Reg (EU) 2025/1214</span>}>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div>
+              <div className="label">Pay each year</div>
+              <div className="dnum mt-1.5 text-[22px] font-bold leading-none text-ink-100">{fmtMoney(threeYr.singleYearFine, pack.currency)}</div>
+              <div className="mt-1.5 text-[11px] text-ink-500">sum of 2025–27 premiums</div>
+            </div>
+            <div>
+              <div className="label">3-year averaged</div>
+              <div className={`dnum mt-1.5 text-[22px] font-bold leading-none ${threeYr.fine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(threeYr.fine, pack.currency)}</div>
+              <div className="mt-1.5 text-[11px] text-ink-500">on {fmtNum(threeYr.avgMetric, 1)} vs {fmtNum(threeYr.avgLimit, 1)} g/km avg</div>
+            </div>
+            <div>
+              <div className="label">Saved by averaging</div>
+              <div className="dnum mt-1.5 text-[22px] font-bold leading-none text-brand">{fmtMoney(threeYr.saved, pack.currency)}</div>
+              <div className="mt-1.5 text-[11px] text-ink-500">{threeYr.exempt ? 'small-volume · exempt' : threeYr.saved > 0 ? 'vs paying annually' : 'no benefit this profile'}</div>
+            </div>
+            <div>
+              <div className="label">3-year gap</div>
+              <div className={`dnum mt-1.5 text-[22px] font-bold leading-none ${threeYr.gap > 0 ? 'text-danger' : 'text-safe'}`}>{threeYr.gap > 0 ? '+' : ''}{fmtNum(threeYr.gap, 1)}<span className="ml-1 text-xs font-semibold text-ink-500">g/km</span></div>
+              <div className="mt-1.5 text-[11px] text-ink-500">{fmtInt(threeYr.units)} units over 3 yrs</div>
+            </div>
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            {threeYr.perYear.map((py) => {
+              const over = py.metric > py.limit
+              return (
+                <div key={py.year} className="rounded-lg border border-black/[0.05] bg-black/[0.015] p-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="num text-xs font-bold text-ink-300">{py.year}</span>
+                    <span className={`num text-xs font-bold ${over ? 'text-danger' : 'text-safe'}`}>{over ? '+' : ''}{fmtNum(py.metric - py.limit, 1)}</span>
+                  </div>
+                  <div className="num mt-1 text-[11px] text-ink-500">fleet {fmtNum(py.metric, 1)} vs limit {fmtNum(py.limit, 1)}</div>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-black/[0.06]">
+                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, (py.metric / Math.max(py.limit, 1)) * 100)}%`, background: over ? '#E0484D' : '#0E9F6E' }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Get me under the line</button>

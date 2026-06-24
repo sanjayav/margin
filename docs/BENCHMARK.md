@@ -10,26 +10,31 @@ claim is sourced; every accuracy gap is reproduced as a check in `src/engine/val
 
 ## 1. Accuracy gap register
 
-Validation baseline: **17 pass · 3 fail · 6 review**. The machinery (weighted averages,
-fine formula, pooling sub-additivity, mass-monotonic limits, small-volume exemption) is
-**correct**. The gaps are concentrated in the **EU 2025 calibration**.
+Validation baseline: **24 pass · 0 fail · 2 review** (was 17/3/6). The machinery (weighted
+averages, fine formula, pooling & 3-year sub-additivity, mass-monotonic limits, small-volume
+exemption) is **correct**, and the **EU 2025 calibration is now accurate** (Phases 1–2).
 
-### Hard failures (engine produces a provably wrong number)
+### Resolved in Phase 1 (EU calibration → green)
 
-| # | Gap | Engine now | Correct (2025) | Impact | Source |
-|---|-----|-----------|----------------|--------|--------|
-| F1 | **Eco-innovation cap** | 7 g/km | **6 g/km** (2025–2029); 4 g/km (2030–2034) | makers over-credited up to 1 g/km | Reg (EU) 2023/851 (amends Art 11) |
-| F2 | **Mass-adjustment slope** | a = 0.0333 (MIRO basis) | **a = 0.0144 on test-mass basis** | mis-targets heavy/light fleets by several g/km | Comm. Impl. Dec. (EU) 2023/1623; JRC133502 |
-| F3 | **ZLEV benchmark** | relaxes target above **15%** ZE | benchmark is **25%** cars / 17% vans | clean makers wrongly relaxed up to +5% → fines understated | Reg (EU) 2023/851; EC Cars & Vans |
+| # | Was | Now | Source |
+|---|-----|-----|--------|
+| F1 | eco cap 7 g/km | **6 g/km** (year-versioned 7→6→4) | Reg (EU) 2023/851 |
+| F2 | slope 0.0333 (MIRO) | **0.0144 test-mass**, TM0 1609.6 | Comm. Impl. Dec. (EU) 2023/1623 |
+| F3 | ZLEV relax above 15% | **25% car / 17% van**, 2025–29 only | Reg (EU) 2023/851 |
+| R1 | universal 95 g baseline | **93.6 g fleet target** + mass term | EC Cars & Vans; ICCT |
+| R2 | ZLEV = 0 g only | **0–50 g/km** (`isZLEV`) | Reg (EU) 2023/851 |
 
-### Structural reviews (sourced, need a model change not just a constant)
+### Resolved in Phase 2 (the correctness nuance → green)
+
+| # | Was | Now | Source |
+|---|-----|-----|--------|
+| R3 | PHEV CO₂ static | **utility-factor correction** (~2× at 2026, further step 2028), year-versioned | Comm. Reg (EU) 2023/443 |
+| R4 | annual compliance only | **2025–27 three-year averaging** (engine + Analyze card) | Reg (EU) 2025/1214 |
+
+### Remaining reviews (Phase 3)
 
 | # | Gap | Why it matters | Source |
 |---|-----|----------------|--------|
-| R1 | **Universal 95 g baseline** instead of manufacturer-specific 2021 WLTP | engine 2025 car target ≈ 80.75 g vs EU-wide reference **93.6 g WLTP**; per-maker error ±10–15 g | EC Cars & Vans; ICCT 2025 targets (Oct 2024) |
-| R2 | **ZLEV share counts only 0 g**, not 0–50 g/km | PHEVs/efficient hybrids excluded from the ZLEV share → benchmark relaxation undercounted | Reg (EU) 2023/851 |
-| R3 | **PHEV utility factor not modelled** (~2× CO₂) | Euro 6e-bis doubles official PHEV CO₂: new types 1 Jan 2025, all regs 1 Jan 2026; further step 2027/2028. PHEV-heavy makers look far cleaner than reality | Comm. Reg (EU) 2023/443 |
-| R4 | **2025–2027 three-year averaging not modelled** | Reg (EU) 2025/1214 lets makers average 2025–2027; changes who actually owes a premium this year | Reg (EU) 2025/1214 |
 | R5 | **UK modelled as a CO₂ proxy line** | UK is a **ZEV sales mandate** (28% cars / 16% vans in 2025; £15k/car shortfall; CRTS/VRTS trading), not a CO₂ average | DfT VETS Order 2023 |
 | R6 | **Illustrative fine/credit rates** | IN ₹1,000/L·car, UK £100/g·car, £50 credit are placeholders; AU A$100/g and EU €95/g are statutory | engine rule packs |
 
@@ -83,14 +88,14 @@ No incumbent is confirmed to productise these together:
 
 ## 4. Roadmap (prioritised)
 
-**Phase 1 — make EU provably accurate (turns 3 fails + R1/R2 green).**
+**✅ Phase 1 — EU provably accurate (DONE).**
 F2 slope 0.0144 (test-mass, year-versioned) · F1 eco cap 6 g (year-versioned) · F3 ZLEV benchmark 25%/17% ·
-R2 ZLEV = 0–50 g/km · R1 manufacturer-specific 2021 baseline (calibrate fleet target to 93.6 g).
+R2 ZLEV = 0–50 g/km · R1 fleet target calibrated to 93.6 g + mass term.
 
-**Phase 2 — the hard correctness nuance.**
-R3 PHEV utility-factor as a time-versioned parameter (2025/26 + 2027/28 steps) · R4 2025–27 three-year averaging.
+**✅ Phase 2 — the hard correctness nuance (DONE).**
+R3 PHEV utility-factor time-versioned (2025/26 + 2027/28 steps) · R4 2025–27 three-year averaging (engine + Analyze card).
 
-**Phase 3 — differentiate.**
+**Phase 3 — differentiate (next).**
 Probabilistic layer (Monte-Carlo on mix/price → €-at-risk distribution) · pooling optimiser with the gram-gap→€ bridge · UK as a proper ZEV unit-mandate (R5) · label illustrative rates (R6).
 
 **Phase 4 — data & scale.**

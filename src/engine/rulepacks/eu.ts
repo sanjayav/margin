@@ -40,8 +40,19 @@ const ZLEV_BENCH_VAN = 0.17
 const ZLEV_RELAX_CAP = 0.05
 
 const isCar = (vclass: string) => !/van|lcv|light commercial/i.test(vclass)
+const isPHEV = (pt: string) => /phev|plug/i.test(pt)
 // Eco-innovation cap: 7 g/km ≤2024, 6 g/km 2025–2029, 4 g/km 2030–2034 (Art 11, amended 2023/851).
 const ecoCap = (year: number) => (year <= 2024 ? 7 : year <= 2029 ? 6 : 4)
+
+// PHEV utility-factor correction (Comm. Reg (EU) 2023/443). The revised WLTP UF
+// (distance parameter 800→2200 km) roughly DOUBLES official PHEV CO₂ under Euro
+// 6e-bis (new types 2025, all registrations 2026), with a further step under
+// 6e-bis-FCM (new types 2027, all 2028). Multiplier vs the pre-2025 official
+// figure, registration-weighted across the new-type/all-registration phase-in.
+const PHEV_UF: Record<number, number> = {
+  2024: 1.0, 2025: 1.35, 2026: 2.0, 2027: 2.2, 2028: 2.5, 2029: 2.5, 2030: 2.5,
+}
+const phevUF = (year: number) => PHEV_UF[year] ?? (year < 2024 ? 1 : 2.5)
 
 function fleetTarget(vclass: string, year: number) {
   return isCar(vclass)
@@ -81,8 +92,10 @@ export const EU: RulePack = {
 
   vehicleMetric: (v: Vehicle, s) => {
     if (v.co2 === 0) return 0
+    // PHEV official CO₂ is corrected upward by the revised utility factor from 2025.
+    const co2 = isPHEV(v.powertrain) ? v.co2 * phevUF(s.year) : v.co2
     const eco = Math.min((v.ecoBenefit ?? 0) + s.ecoBoostG, ecoCap(s.year))
-    return Math.max(0, v.co2 - eco)
+    return Math.max(0, co2 - eco)
   },
   vehicleUnits: (v: Vehicle) => v.sales, // EU super-credits expired; 1 car = 1 unit
   isZeroEmission: (v) => v.co2 === 0,

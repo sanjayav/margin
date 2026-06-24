@@ -12,7 +12,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import type { CountryId, LimitContext, Scenario, Vehicle } from './types.js'
 import { getPack } from './rulepacks/index.js'
-import { aggregate, applyScenario } from './engine.js'
+import { aggregate, applyScenario, threeYearAverage } from './engine.js'
 import { standings, poolResult } from './pooling.js'
 import { FLEET } from '../data/fleet.js'
 
@@ -95,6 +95,13 @@ export function runValidation(): Check[] {
     const pool = poolResult(FLEET.EU, p, scenario(), makers)
     inv('eu-pool-subadditive', 'EU: pooled fine ≤ sum of standalone fines', pool.fine <= pool.standaloneFine + 1,
       `pool €${f(pool.fine, 0)} ≤ standalone €${f(pool.standaloneFine, 0)} (saves €${f(pool.saved, 0)})`)
+
+    // 2025-2027 three-year averaging is weakly cheaper than paying each single year
+    const tys = makers.map((m) => threeYearAverage(FLEET.EU, p, scenario(), m))
+    const sub = tys.every((ty) => ty.fine <= ty.singleYearFine + 1)
+    const best = tys.reduce((a, b) => (b.saved > a.saved ? b : a), tys[0])
+    inv('eu-3yr-subadditive', 'EU: 3-year (2025-27) averaging premium ≤ sum of single-year premiums', sub,
+      `holds for all ${tys.length} makers; best saving €${f(best?.saved ?? 0, 0)} (Reg 2025/1214)`)
   }
 
   // ── Regulatory anchors (golden numbers tied to the rules) ──────────────────
@@ -123,6 +130,12 @@ export function runValidation(): Check[] {
     const zlevOk = p.isZLEV != null && p.isZLEV(veh({ co2: 45 })) === true && p.isZeroEmission(veh({ co2: 45 })) === false
     anchor('eu-zlev-band', 'EU ZLEV share counts 0–50 g/km (not only 0 g)', zlevOk,
       `isZLEV(45g)=${p.isZLEV?.(veh({ co2: 45 }))}, isZeroEmission(45g)=${p.isZeroEmission(veh({ co2: 45 }))}`, 'Reg (EU) 2023/851 — ZLEV 0–50 g/km')
+    // PHEV official CO₂ roughly doubles under the 2025/26 utility-factor revision
+    const phev = veh({ co2: 45, powertrain: 'PHEV', fuel: 'petrol' })
+    const m24 = p.vehicleMetric(phev, scenario({ year: 2024 }))
+    const m26 = p.vehicleMetric(phev, scenario({ year: 2026 }))
+    anchor('eu-phev-uf', 'EU PHEV official CO₂ ~doubles under Euro 6e-bis (2026)', approx(m26, m24 * 2, 2),
+      `PHEV 45 g → ${f(m24)} (2024) → ${f(m26)} (2026), ×${f(m26 / m24, 2)}`, 'Comm. Reg (EU) 2023/443; ICCT real-world UF')
   }
   {
     const p = getPack('AU')
@@ -155,13 +168,6 @@ export function runValidation(): Check[] {
   // ── Known gaps (compute the delta so it's visible, not hidden) ─────────────
   {
     const p = getPack('EU')
-    review('eu-phev-uf', 'EU PHEV utility-factor revision is not modelled (CONFIRMED, ~2x)',
-      'Euro 6e-bis roughly DOUBLES official PHEV CO₂ — new types 1 Jan 2025, all registrations 1 Jan 2026; a further step (6e-bis-FCM) 2027/2028. Engine uses the static figure, so PHEV-heavy makers look far cleaner than 2025+ reality.',
-      'Commission Reg (EU) 2023/443 (WLTP utility factors)')
-
-    review('eu-3yr-flex', 'EU 2025-2027 three-year averaging flexibility is not modelled (CONFIRMED)',
-      'Reg (EU) 2025/1214 (17 Jun 2025) lets makers comply on a registration-weighted 2025-2027 average. A maker over in 2025 may still comply on the 3-year pool — materially changes who actually owes a premium.',
-      'Reg (EU) 2025/1214')
   }
   {
     const p = getPack('UK')
