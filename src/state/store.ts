@@ -5,6 +5,10 @@ import { parentsFor, setLiveFleet } from '../data/fleet'
 
 export type ScreenId = 'analyze' | 'analytics' | 'data' | 'plan' | 'intel' | 'admin'
 export type PlanTab = 'under' | 'pool' | 'forecast'
+// The two-level shell: 'platform' = global launcher (home/modules/subscription);
+// 'module' = a single country workspace (the analyze/analytics/… sidebar).
+export type AppView = 'platform' | 'module'
+export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // legacy ids still accepted by setScreen and mapped to the new structure
 type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | PlanTab
 
@@ -19,6 +23,20 @@ interface UIState {
   /** Per-maker scenario overrides (mix/mass/sales/EV) layered on the global scenario when drilled into a maker. */
   makerOverrides: Record<string, Partial<Scenario>>
 
+  // ── shell + entitlements ──
+  view: AppView
+  platformScreen: PlatformScreen
+  /** Country modules the org has subscribed to (mock until Stripe — see docs/PACKAGING.md). */
+  subscribedModules: CountryId[]
+  /** AI Analyst add-on — cross-cutting, usable inside every owned module. */
+  aiEnabled: boolean
+  enterModule: (c: CountryId) => void
+  exitToPlatform: (to?: PlatformScreen) => void
+  setPlatformScreen: (p: PlatformScreen) => void
+  subscribe: (c: CountryId) => void
+  unsubscribe: (c: CountryId) => void
+  setAi: (b: boolean) => void
+
   setCountry: (c: CountryId) => void
   setScreen: (s: AnyScreen) => void
   setParent: (p: string) => void
@@ -32,6 +50,18 @@ interface UIState {
   logout: () => void
 }
 
+// Entitlement persistence (mock; replaced by server-issued claims once billing lands).
+const ENT_KEY = 'ul_entitlement'
+function loadEnt(): { modules: CountryId[]; ai: boolean } {
+  try {
+    const r = JSON.parse(localStorage.getItem(ENT_KEY) || '')
+    if (r && Array.isArray(r.modules)) return { modules: r.modules, ai: !!r.ai }
+  } catch { /* fall through */ }
+  return { modules: ['EU', 'UK'], ai: true } // demo default: two modules + AI
+}
+function saveEnt(modules: CountryId[], ai: boolean) { try { localStorage.setItem(ENT_KEY, JSON.stringify({ modules, ai })) } catch { /* ignore */ } }
+const ENT0 = loadEnt()
+
 // Scope key for the current drill level: null (market), "Maker" (brand), or
 // "Maker/Model" (model). Variant level (3) still scopes to its model.
 export function scopeKey(screen: ScreenId, drillPath: string[]): string | null {
@@ -43,7 +73,7 @@ export function scopeKey(screen: ScreenId, drillPath: string[]): string | null {
 export const CRED = { user: 'vijay@margin.io', pass: 'marginio' }
 const isAuthed = () => { try { return localStorage.getItem('ul_auth') === '1' } catch { return false } }
 
-function defaultScenario(country: CountryId): Scenario {
+export function defaultScenario(country: CountryId): Scenario {
   const pack = getPack(country)
   return {
     year: pack.years[0],
@@ -67,6 +97,30 @@ export const useStore = create<UIState>((set, get) => ({
   dataVersion: 0,
   planTab: 'under',
   makerOverrides: {},
+
+  view: 'platform',
+  platformScreen: 'home',
+  subscribedModules: ENT0.modules,
+  aiEnabled: ENT0.ai,
+
+  enterModule: (c) => {
+    if (!get().subscribedModules.includes(c)) { set({ view: 'platform', platformScreen: 'subscription' }); return }
+    set({
+      country: c,
+      scenario: defaultScenario(c),
+      selectedParent: parentsFor(c)[0],
+      drillPath: [],
+      makerOverrides: {},
+      view: 'module',
+      screen: 'analyze',
+      planTab: 'under',
+    })
+  },
+  exitToPlatform: (to) => set({ view: 'platform', ...(to ? { platformScreen: to } : {}) }),
+  setPlatformScreen: (p) => set({ platformScreen: p }),
+  subscribe: (c) => { const m = [...new Set([...get().subscribedModules, c])]; saveEnt(m, get().aiEnabled); set({ subscribedModules: m }) },
+  unsubscribe: (c) => { const m = get().subscribedModules.filter((x) => x !== c); saveEnt(m, get().aiEnabled); set({ subscribedModules: m }) },
+  setAi: (b) => { saveEnt(get().subscribedModules, b); set({ aiEnabled: b }) },
 
   setCountry: (c) =>
     set({
@@ -113,7 +167,7 @@ export const useStore = create<UIState>((set, get) => ({
     if (ok) { try { localStorage.setItem('ul_auth', '1') } catch { /* ignore */ } ; set({ authed: true }) }
     return ok
   },
-  logout: () => { try { localStorage.removeItem('ul_auth') } catch { /* ignore */ } ; set({ authed: false }) },
+  logout: () => { try { localStorage.removeItem('ul_auth') } catch { /* ignore */ } ; set({ authed: false, view: 'platform', platformScreen: 'home' }) },
 
   loadFleet: async () => {
     let loaded = false

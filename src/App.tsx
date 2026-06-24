@@ -1,13 +1,14 @@
 import { useEffect } from 'react'
 import { useStore, type ScreenId } from './state/store'
-import { PACK_LIST } from './engine/rulepacks'
 import { useCompliance } from './lib/useCompliance'
 import { fmtMoney } from './engine/engine'
+import { MODULE_META } from './lib/modules'
 import { StatusPill } from './components/ui'
 import Icon, { type IconName } from './components/Icon'
 import { ScenarioRail } from './components/ScenarioRail'
 import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
+import PlatformShell from './components/PlatformShell'
 import Analyze from './screens/Analyze'
 import Analytics from './screens/Analytics'
 import Data from './screens/Data'
@@ -33,41 +34,37 @@ const PLAN_TABS: { id: 'under' | 'pool' | 'forecast'; label: string; icon: IconN
 
 const CHROME = '#17140F' // warm near-black chrome (sidebar + top bar)
 
-function CountryBadge({ code, active }: { code: string; active?: boolean }) {
-  return (
-    <span className={`grid h-6 min-w-[34px] place-items-center rounded-md border px-1 text-[10px] font-bold tracking-wide ${active ? 'border-brand/50 bg-brand/20 text-brand-400' : 'border-white/10 bg-white/[0.05] text-[#9A9082]'}`}>{code}</span>
-  )
-}
-
 function Sidebar() {
   const screen = useStore((s) => s.screen)
   const planTab = useStore((s) => s.planTab)
   const setScreen = useStore((s) => s.setScreen)
   const country = useStore((s) => s.country)
-  const setCountry = useStore((s) => s.setCountry)
-  const logout = useStore((s) => s.logout)
+  const exitToPlatform = useStore((s) => s.exitToPlatform)
+  const { pack } = useCompliance()
+  const m = MODULE_META[country]
 
   return (
     <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
-      <div className="mb-4 flex items-center gap-2.5 px-1.5 pt-1">
+      <button onClick={() => exitToPlatform('home')} className="mb-3 flex items-center gap-2.5 px-1.5 pt-1 text-left">
         <div className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}>
           <span className="text-[19px] font-black leading-none">M</span>
         </div>
         <div>
           <div className="font-display text-[16px] font-bold leading-none text-gradient">Margin</div>
-          <div className="mt-1 text-[10px] tracking-wide text-[#9A9082]">Emissions compliance</div>
+          <div className="mt-1 text-[10px] tracking-wide text-[#9A9082]">Compliance platform</div>
         </div>
-      </div>
+      </button>
 
-      <div className="label px-1.5 pb-1.5 text-[#8A8174]">Market</div>
-      <div className="mb-4 grid grid-cols-2 gap-1.5 px-0.5">
-        {PACK_LIST.map((p) => (
-          <button key={p.id} onClick={() => setCountry(p.id)}
-            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs font-semibold transition ${country === p.id ? 'border-brand/40 bg-brand/[0.14] text-white' : 'border-white/[0.08] text-[#9A9082] hover:text-white hover:border-white/20'}`}>
-            <CountryBadge code={p.flag} active={country === p.id} />
-          </button>
-        ))}
-      </div>
+      {/* current module + switch */}
+      <div className="label px-1.5 pb-1.5 text-[#8A8174]">Module</div>
+      <button onClick={() => exitToPlatform('modules')} className="mb-4 flex w-full items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 text-left transition hover:border-white/20">
+        <span className="grid h-8 w-9 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white" style={{ background: m.accent }}>{m.flag}</span>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-bold text-white">{pack.name}</div>
+          <div className="text-[10px] text-[#8A8174]">Switch module</div>
+        </div>
+        <Icon name="chevron" size={13} className="shrink-0 text-[#7E766A]" />
+      </button>
 
       <div className="label px-1.5 pb-1.5 text-[#8A8174]">Workspace</div>
       {NAV.map((n) => {
@@ -98,19 +95,7 @@ function Sidebar() {
         )
       })}
 
-      <div className="mt-auto space-y-2">
-        <div className="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-[11px] font-bold text-brand-400">VJ</div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold text-[#F5F0E6]">Vijay</div>
-            <div className="truncate text-[10px] text-[#8A8174]">vijay@margin.io</div>
-          </div>
-          <button onClick={logout} title="Sign out" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A8174] transition hover:bg-white/[0.06] hover:text-white">
-            <Icon name="reset" size={14} />
-          </button>
-        </div>
-        <div className="px-1 text-[9px] leading-relaxed text-[#6E665A]">Official sources · EEA · BEE · DCCEEW · DfT · illustrative until live data connected.</div>
-      </div>
+      <div className="mt-auto px-1 text-[9px] leading-relaxed text-[#6E665A]">Official sources · EEA · BEE · DCCEEW · DfT · illustrative until live data connected.</div>
     </nav>
   )
 }
@@ -153,15 +138,10 @@ function TopBar() {
 
 const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'analytics', 'plan'])
 
-export default function App() {
+function ModuleShell() {
   const screen = useStore((s) => s.screen)
-  const authed = useStore((s) => s.authed)
-  const loadFleet = useStore((s) => s.loadFleet)
-  useEffect(() => { if (authed) loadFleet() }, [loadFleet, authed])
+  const aiEnabled = useStore((s) => s.aiEnabled)
   const Screen = { analyze: Analyze, analytics: Analytics, data: Data, plan: Plan, intel: Intelligence, admin: Admin }[screen]
-
-  if (!authed) return <Login />
-
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -174,8 +154,18 @@ export default function App() {
           {RAIL_SCREENS.has(screen) && <ScenarioRail />}
         </div>
       </div>
-      <Assistant />
+      {aiEnabled && <Assistant />}
       <ProvenanceDrawer />
     </div>
   )
+}
+
+export default function App() {
+  const authed = useStore((s) => s.authed)
+  const view = useStore((s) => s.view)
+  const loadFleet = useStore((s) => s.loadFleet)
+  useEffect(() => { if (authed) loadFleet() }, [loadFleet, authed])
+
+  if (!authed) return <Login />
+  return view === 'platform' ? <PlatformShell /> : <ModuleShell />
 }
