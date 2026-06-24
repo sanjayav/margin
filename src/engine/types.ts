@@ -72,8 +72,11 @@ export interface RulePack {
   vehicleMetric: (v: Vehicle, s: Scenario) => number
   /** Effective registrations — super-credits can multiply EV units. */
   vehicleUnits: (v: Vehicle, s: Scenario) => number
-  /** Is this a zero-emission vehicle for ZLEV/share purposes. */
+  /** Is this a zero-emission vehicle (0 g) — drives the displayed ZE share. */
   isZeroEmission: (v: Vehicle) => boolean
+  /** Is this a zero- OR low-emission vehicle (EU: 0–50 g/km) — drives the ZLEV
+   *  benchmark target relaxation. Defaults to isZeroEmission when omitted. */
+  isZLEV?: (v: Vehicle) => boolean
   /** Plug-in hybrids are always handled as their own special case. */
   isPlugInHybrid: (v: Vehicle) => boolean
   /** The mass-based (or share-based) compliance limit for a fleet. */

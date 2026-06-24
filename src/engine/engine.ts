@@ -111,8 +111,12 @@ export function aggregate(
     wMetric = 0,
     wRawMetric = 0,
     wMass = 0,
+    zeUnits = 0,
     zlevUnits = 0
 
+  // ZE = zero-emission (0 g, shown as the headline ZE share); ZLEV = zero/low-
+  // emission (0–50 g for the EU), which drives the benchmark target relaxation.
+  const isZlev = pack.isZLEV ?? pack.isZeroEmission
   for (const v of vehicles) {
     const eu = pack.vehicleUnits(v, s) // effective (super-credit) units
     const ru = v.sales
@@ -121,13 +125,15 @@ export function aggregate(
     wMetric += pack.vehicleMetric(v, s) * eu
     wRawMetric += v.co2 * ru
     wMass += v.mass * ru
-    if (pack.isZeroEmission(v)) zlevUnits += ru
+    if (pack.isZeroEmission(v)) zeUnits += ru
+    if (isZlev(v)) zlevUnits += ru
   }
 
   const avgMetric = units > 0 ? wMetric / units : 0
   const rawAvgMetric = rawUnits > 0 ? wRawMetric / rawUnits : 0
   const avgMass = rawUnits > 0 ? wMass / rawUnits : 0
-  const zlevShare = rawUnits > 0 ? zlevUnits / rawUnits : 0
+  const zlevShare = rawUnits > 0 ? zeUnits / rawUnits : 0 // headline ZE share (display)
+  const zlevBenchShare = rawUnits > 0 ? zlevUnits / rawUnits : 0 // 0–50 g share (limit relaxation)
 
   // The limit is class-specific (EU car vs van, AU Type 1 vs Type 2). For a
   // mixed fleet we units-weight each class's limit — still one shared formula.
@@ -137,7 +143,7 @@ export function aggregate(
     const cu = cv.reduce((a, x) => a + x.sales, 0)
     if (cu === 0) continue
     const cMass = cv.reduce((a, x) => a + x.mass * x.sales, 0) / cu
-    const ctx: LimitContext = { year: s.year, avgMass: cMass, zlevShare, vclass, scenario: s }
+    const ctx: LimitContext = { year: s.year, avgMass: cMass, zlevShare: zlevBenchShare, vclass, scenario: s }
     wLimit += pack.limit(ctx) * cu
   }
   const limit = rawUnits > 0 ? wLimit / rawUnits : 0

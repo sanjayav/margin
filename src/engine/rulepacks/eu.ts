@@ -1,42 +1,64 @@
 // ───────────────────────────────────────────────────────────────────────────
-// RULE PACK · European Union (Regulation (EU) 2019/631, 2025/1214 flexibility)
-// Mirrors the EU_CO2_Three_Parent workbook's Assumptions + Calculator sheets.
+// RULE PACK · European Union — Reg (EU) 2019/631, amended by 2023/851 & 2025/1214
+//
+// Target model (post-2021, WLTP): a manufacturer's specific CO₂ target is the
+// EU fleet-wide reference target for the year PLUS a mass-adjustment term:
+//     target = fleetTarget(year) + a · (testMass − TM0)
+// The 2025 EU car fleet target is 93.6 g/km WLTP = 2021 reference × (1 − 15%).
+// Sources: EC "Cars and vans"; ICCT 2025 manufacturer targets (Oct 2024);
+// Commission Implementing Decision (EU) 2023/1623 (a, TM0); JRC133502.
 // ───────────────────────────────────────────────────────────────────────────
 import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
-// Annex-I style mass-based target proxy
-const BASE_CAR = 95 // g CO₂/km, 2021 fleet-wide reference
-const BASE_VAN = 147
-const SLOPE_CAR = 0.0333 // g per kg
-const SLOPE_VAN = 0.096
-const TM0_CAR = 1609 // kg
-const TM0_VAN = 1900
-const ECO_CAP = 7 // Article 11 eco-innovation cap, g
-const ZLEV_CAP = 1.05 // Annex I cap on target relaxation
-const FINE_RATE = 95 // €/g/km · per vehicle (Article 8)
+// EU fleet-wide 2021 WLTP reference. 2025 car target 93.6 = 110.118 × (1 − 0.15).
+const EU2021_CAR = 110.118
+const EU2021_VAN = 181.06 // × 0.85 ≈ 153.9 g (WLTP, approximate)
 
-// Reduction factor + ZLEV benchmark by year (Assumptions H:L)
-const reduction: Record<number, number> = {
+// Reduction vs the 2021 reference, by year. Cars and vans diverge from 2030
+// (cars −55%, vans −50%); both reach −100% in 2035.
+const REDUCTION_CAR: Record<number, number> = {
   2025: 0.15, 2026: 0.15, 2027: 0.15, 2028: 0.15, 2029: 0.15,
   2030: 0.55, 2031: 0.55, 2032: 0.55, 2033: 0.55, 2034: 0.55, 2035: 1,
 }
-const zlevBenchmark: Record<number, number> = {
+const REDUCTION_VAN: Record<number, number> = {
   2025: 0.15, 2026: 0.15, 2027: 0.15, 2028: 0.15, 2029: 0.15,
-  2030: 0.35, 2031: 0.35, 2032: 0.35, 2033: 0.35, 2034: 0.35, 2035: 0.35,
+  2030: 0.5, 2031: 0.5, 2032: 0.5, 2033: 0.5, 2034: 0.5, 2035: 1,
 }
+
+// Mass adjustment. 2025 switched to a TEST-MASS basis with a smaller slope than
+// the 2020–2024 MIRO-basis 0.0333; TM0 recalculated to 1609.6 kg for 2025–2027.
+const SLOPE_CAR = 0.0144
+const SLOPE_VAN = 0.0427 // approximate test-mass van slope
+const TM0_CAR = 1609.6
+const TM0_VAN = 1900
+
+const FINE_RATE = 95 // €/g/km over · per car (Article 8)
+// ZLEV target relaxation (2025–2029 only; removed from 2030). +1% per 1pp of
+// ZLEV share above the benchmark, capped at 5%. ZLEV = 0–50 g/km.
+const ZLEV_BENCH_CAR = 0.25
+const ZLEV_BENCH_VAN = 0.17
+const ZLEV_RELAX_CAP = 0.05
 
 const isCar = (vclass: string) => !/van|lcv|light commercial/i.test(vclass)
+// Eco-innovation cap: 7 g/km ≤2024, 6 g/km 2025–2029, 4 g/km 2030–2034 (Art 11, amended 2023/851).
+const ecoCap = (year: number) => (year <= 2024 ? 7 : year <= 2029 ? 6 : 4)
 
-function referenceTarget(vclass: string, year: number, avgMass: number) {
-  const r = reduction[year] ?? 0.55
+function fleetTarget(vclass: string, year: number) {
   return isCar(vclass)
-    ? BASE_CAR * (1 - r) + SLOPE_CAR * (avgMass - TM0_CAR)
-    : BASE_VAN * (1 - r) + SLOPE_VAN * (avgMass - TM0_VAN)
+    ? EU2021_CAR * (1 - (REDUCTION_CAR[year] ?? 0.55))
+    : EU2021_VAN * (1 - (REDUCTION_VAN[year] ?? 0.5))
 }
 
-function zlevFactor(year: number, zlevShare: number) {
-  const bench = zlevBenchmark[year] ?? 0.35
-  return Math.max(1, Math.min(ZLEV_CAP, 1 + zlevShare - bench))
+function referenceTarget(vclass: string, year: number, avgMass: number) {
+  const slope = isCar(vclass) ? SLOPE_CAR : SLOPE_VAN
+  const tm0 = isCar(vclass) ? TM0_CAR : TM0_VAN
+  return fleetTarget(vclass, year) + slope * (avgMass - tm0)
+}
+
+function zlevFactor(vclass: string, year: number, zlevShare: number) {
+  if (year < 2025 || year >= 2030) return 1 // mechanism applies 2025–2029 only
+  const bench = isCar(vclass) ? ZLEV_BENCH_CAR : ZLEV_BENCH_VAN
+  return 1 + Math.min(ZLEV_RELAX_CAP, Math.max(0, zlevShare - bench))
 }
 
 export const EU: RulePack = {
@@ -53,24 +75,22 @@ export const EU: RulePack = {
   classes: ['Passenger car', 'Light commercial vehicle'],
   smallVolumeThreshold: 1000,
   pooling: { enabled: true, note: 'Article 6 — makers may pool registrations and share one average.' },
-  credits: 'Eco-innovation credits up to 7 g/km, plus a ZLEV target relaxation when the zero/low-emission share beats the yearly benchmark.',
-  limitNote: 'Mass-based: 95 g baseline, reduced each year, ±0.0333 g per kg vs the 1609 kg reference, then relaxed by the ZLEV factor.',
-  source: 'European Environment Agency — CO₂ monitoring of new passenger cars & vans.',
+  credits: 'Eco-innovation credits up to 6 g/km (2025–2029), plus a ZLEV target relaxation (up to 5%) when the 0–50 g share beats the 25% car benchmark. Super-credits expired in 2022.',
+  limitNote: 'EU fleet target (93.6 g/km for 2025 cars = 2021 WLTP reference −15%) + 0.0144 g per kg of test mass vs the 1609.6 kg reference, then relaxed by the ZLEV factor (2025–2029).',
+  source: 'EC Cars & Vans; ICCT 2025 targets; Reg (EU) 2019/631, 2023/851, 2025/1214.',
 
   vehicleMetric: (v: Vehicle, s) => {
     if (v.co2 === 0) return 0
-    const eco = Math.min((v.ecoBenefit ?? 0) + s.ecoBoostG, ECO_CAP)
+    const eco = Math.min((v.ecoBenefit ?? 0) + s.ecoBoostG, ecoCap(s.year))
     return Math.max(0, v.co2 - eco)
   },
   vehicleUnits: (v: Vehicle) => v.sales, // EU super-credits expired; 1 car = 1 unit
   isZeroEmission: (v) => v.co2 === 0,
+  isZLEV: (v) => v.co2 <= 50, // zero/low-emission band for the benchmark relaxation
   isPlugInHybrid: (v) => /phev|plug/i.test(v.powertrain),
-  limit: (ctx: LimitContext) => {
-    const ref = referenceTarget(ctx.vclass, ctx.year, ctx.avgMass)
-    return ref * zlevFactor(ctx.year, ctx.zlevShare)
-  },
+  limit: (ctx: LimitContext) => referenceTarget(ctx.vclass, ctx.year, ctx.avgMass) * zlevFactor(ctx.vclass, ctx.year, ctx.zlevShare),
   forecast: (year) => ({
-    limit: referenceTarget('Passenger car', year, TM0_CAR),
-    note: year >= 2030 ? '55% reduction step in force' : '15% reduction phase',
+    limit: fleetTarget('Passenger car', year),
+    note: year >= 2030 ? '−55% step in force' : '−15% phase (vs 2021)',
   }),
 }

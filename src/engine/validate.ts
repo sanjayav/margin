@@ -114,7 +114,15 @@ export function runValidation(): Check[] {
     const at20 = p.limit(ctx({ year: 2025, avgMass: 1600, zlevShare: 0.20 }))
     const noZ = p.limit(ctx({ year: 2025, avgMass: 1600, zlevShare: 0 }))
     anchor('eu-zlev-benchmark', 'EU ZLEV benchmark is 25% (cars) for 2025-2029, not 15%', approx(at20, noZ, 0.01),
-      `a 20%-ZE maker (below the real 25% benchmark) is relaxed +${f((at20 / noZ - 1) * 100, 1)}% by the engine; correct = 0% until 25%`, 'Reg (EU) 2023/851; EC Cars & Vans')
+      `a 20%-ZE maker (below the 25% benchmark) relaxed +${f((at20 / noZ - 1) * 100, 1)}% (expected 0%)`, 'Reg (EU) 2023/851; EC Cars & Vans')
+    // EU 2025 fleet-wide car target ≈ 93.6 g/km WLTP at the reference test mass
+    const target25 = p.limit(ctx({ year: 2025, avgMass: 1609.6, zlevShare: 0, vclass: 'Passenger car' }))
+    anchor('eu-fleet-target-2025', 'EU 2025 car fleet target = 93.6 g/km at reference test mass', approx(target25, 93.6, 0.3),
+      `limit(2025, 1609.6kg, 0% ZLEV) = ${f(target25)} g (expected 93.6)`, 'EC Cars & Vans; ICCT 2025 targets (Oct 2024)')
+    // ZLEV band is 0–50 g/km, not just 0 g
+    const zlevOk = p.isZLEV != null && p.isZLEV(veh({ co2: 45 })) === true && p.isZeroEmission(veh({ co2: 45 })) === false
+    anchor('eu-zlev-band', 'EU ZLEV share counts 0–50 g/km (not only 0 g)', zlevOk,
+      `isZLEV(45g)=${p.isZLEV?.(veh({ co2: 45 }))}, isZeroEmission(45g)=${p.isZeroEmission(veh({ co2: 45 }))}`, 'Reg (EU) 2023/851 — ZLEV 0–50 g/km')
   }
   {
     const p = getPack('AU')
@@ -147,15 +155,6 @@ export function runValidation(): Check[] {
   // ── Known gaps (compute the delta so it's visible, not hidden) ─────────────
   {
     const p = getPack('EU')
-    const engineTarget = p.limit(ctx({ year: 2025, avgMass: 1609, zlevShare: 0 }))
-    review('eu-baseline', 'EU target uses a universal 95 g baseline, not manufacturer-specific 2021 WLTP',
-      `engine 2025 car target at 1609 kg = ${f(engineTarget)} g (95g NEDC-era curve). Real targets carry each maker's 2021 WLTP position; EU-wide reference = 93.6 g WLTP (CONFIRMED). Per-maker error ±10-15 g.`,
-      'EC Cars & Vans page; ICCT 2025 targets (Oct 2024) — 93.6 g/km')
-
-    review('eu-zlev-definition', 'EU ZLEV share counts vehicles 0-50 g/km, engine counts only 0 g',
-      'isZeroEmission = (co2 === 0), so PHEVs/efficient hybrids under 50 g/km are excluded from the ZLEV share that drives the benchmark relaxation. Undercounts ZLEV share.',
-      'Reg (EU) 2023/851 — ZLEV defined as 0-50 g CO₂/km')
-
     review('eu-phev-uf', 'EU PHEV utility-factor revision is not modelled (CONFIRMED, ~2x)',
       'Euro 6e-bis roughly DOUBLES official PHEV CO₂ — new types 1 Jan 2025, all registrations 1 Jan 2026; a further step (6e-bis-FCM) 2027/2028. Engine uses the static figure, so PHEV-heavy makers look far cleaner than 2025+ reality.',
       'Commission Reg (EU) 2023/443 (WLTP utility factors)')
