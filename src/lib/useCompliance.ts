@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useStore } from '../state/store'
 import { getPack } from '../engine/rulepacks'
 import { getFleet } from '../data/fleet'
-import { buildTree, aggregateParent } from '../engine/engine'
+import { buildTree, buildDrillTree, aggregateParent } from '../engine/engine'
 
 /** Everything live: rebuilds whenever country, year, any scenario control, or the
  *  loaded dataset changes. Uses live DB data if loaded, else the bundled extract. */
@@ -17,10 +17,13 @@ export function useCompliance() {
   const raw = useMemo(() => getFleet(country), [country, dataVersion])
 
   const tree = useMemo(() => buildTree(raw, pack, scenario, overrides), [raw, pack, scenario, overrides])
+  // 5-level drill tree (Market → Pool → Manufacturer → Model → Variant) for the
+  // bubble explorer and the assumptions scope.
+  const drillTree = useMemo(() => buildDrillTree(raw, pack, scenario, overrides), [raw, pack, scenario, overrides])
   const parent = useMemo(
     () => aggregateParent(raw, pack, scenario, selectedParent, overrides),
     [raw, pack, scenario, selectedParent, overrides],
   )
 
-  return { pack, raw, tree, parent, scenario, selectedParent, country }
+  return { pack, raw, tree, drillTree, parent, scenario, selectedParent, country }
 }

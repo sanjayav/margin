@@ -53,4 +53,5 @@ export const UK: RulePack = {
     return base * allow
   },
   forecast: (year) => ({ limit: BASE_CAR * (ALLOW_CAR[year] ?? 0.2), note: `${Math.round((1 - (ALLOW_CAR[year] ?? 0.2)) * 100)}% ZE mandate` }),
+  ecoCap: () => ECO_CAP, // illustrative 7 g/km eco-innovation allowance
 }

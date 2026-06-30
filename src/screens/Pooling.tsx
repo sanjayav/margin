@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
-import { standings, poolResult, bestForMaker, poolOptimise } from '../engine/pooling'
+import { standings, poolResult, bestForMaker, poolOptimise, poolGroups, parentPoolMap, type PoolGroup } from '../engine/pooling'
 import { fmtMoney, fmtNum, fmtInt } from '../engine/engine'
 import { Section, StatusPill, Stat, Bar } from '../components/ui'
 import Icon from '../components/Icon'
@@ -9,9 +9,12 @@ import Icon from '../components/Icon'
 export default function Pooling() {
   const { pack, raw, scenario } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
+  const overrides = useStore((s) => s.makerOverrides)
 
-  const rows = useMemo(() => standings(raw, pack, scenario), [raw, pack, scenario, dataVersion])
+  const rows = useMemo(() => standings(raw, pack, scenario, overrides), [raw, pack, scenario, overrides, dataVersion])
   const allParents = rows.map((r) => r.parent)
+  const pmap = useMemo(() => parentPoolMap(raw, scenario.year), [raw, scenario.year])
+  const groups = useMemo(() => poolGroups(raw, pack, scenario, overrides), [raw, pack, scenario, overrides, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [members, setMembers] = useState<string[]>([])
   // default selection: everyone who's short + everyone with surplus (the value-creating pool)
@@ -19,11 +22,11 @@ export default function Pooling() {
     setMembers(rows.filter((r) => r.gap > 0 || r.creditBalance > 0).map((r) => r.parent))
   }, [pack.id, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const grand = useMemo(() => poolResult(raw, pack, scenario, allParents), [raw, pack, scenario, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
-  const opt = useMemo(() => poolOptimise(raw, pack, scenario), [raw, pack, scenario, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  const grand = useMemo(() => poolResult(raw, pack, scenario, allParents, overrides), [raw, pack, scenario, overrides, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+  const opt = useMemo(() => poolOptimise(raw, pack, scenario, undefined, overrides), [raw, pack, scenario, overrides, dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
   const selected = useMemo(
-    () => (members.length >= 1 ? poolResult(raw, pack, scenario, members) : null),
-    [raw, pack, scenario, members, dataVersion], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (members.length >= 1 ? poolResult(raw, pack, scenario, members, overrides) : null),
+    [raw, pack, scenario, members, overrides, dataVersion], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   const standaloneTotal = rows.reduce((a, r) => a + r.fine, 0)
@@ -40,10 +43,11 @@ export default function Pooling() {
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-black/[0.03] text-warn"><Icon name="alert" size={18} /></div>
           <div>
             <h3 className="font-semibold text-ink-100">No pooling or trading in {pack.name}</h3>
-            <p className="mt-1 text-sm text-ink-400">{pack.pooling.note} Each maker is assessed standalone — see the standings below.</p>
+            <p className="mt-1 text-sm text-ink-400">{pack.pooling.note} Each maker is assessed standalone — see the registered groups and standings below.</p>
           </div>
         </div>
-        <Standings rows={rows} pack={pack} maxAbs={maxAbs} />
+        <PoolGroups groups={groups} pack={pack} />
+        <Standings rows={rows} pack={pack} maxAbs={maxAbs} pmap={pmap} />
       </div>
     )
   }
@@ -57,6 +61,9 @@ export default function Pooling() {
         <Stat label="Value poolable" value={fmtMoney(standaloneTotal - grand.fine, pack.currency)} sub="total fine removable" accent="text-brand" />
         <Stat label="Surplus available" value={`${fmtInt(surplusTotal)}`} sub={`g·units of headroom to share`} accent="text-accent" />
       </div>
+
+      {/* Registered pool groups — the legal hierarchy from the source data */}
+      <PoolGroups groups={groups} pack={pack} onOpen={setMembers} />
 
       {/* Optimiser — best pool + Shapley fair value-split */}
       {opt.savings > 0 && (
@@ -189,14 +196,62 @@ export default function Pooling() {
   )
 }
 
-function Standings({ rows, pack, maxAbs }: any) {
+function PoolGroups({ groups, pack, onOpen }: { groups: PoolGroup[]; pack: any; onOpen?: (members: string[]) => void }) {
   return (
-    <Section title="Where each maker stands">
+    <Section title="Registered pool groups" right={<span className="text-[11px] text-ink-500">Compliance Pool hierarchy</span>}>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        {groups.map((g) => {
+          const multi = g.members.length > 1
+          const res = g.result
+          return (
+            <div key={g.pool} className="card p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-ink-100">{g.pool}</div>
+                  <div className="text-[11px] text-ink-500">{g.members.length} member{g.members.length > 1 ? 's' : ''}</div>
+                </div>
+                <StatusPill status={res.status} />
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                <div><div className="label">Fleet</div><div className="num text-sm font-bold text-ink-100">{fmtNum(res.avgMetric, 1)}</div></div>
+                <div><div className="label">Limit</div><div className="num text-sm font-bold text-ink-400">{fmtNum(res.limit, 1)}</div></div>
+                <div><div className="label">Gap</div><div className={`num text-sm font-bold ${res.gap > 0 ? 'text-danger' : 'text-safe'}`}>{res.gap > 0 ? '+' : ''}{fmtNum(res.gap, 1)}</div></div>
+              </div>
+              <div className="mt-3 space-y-1 border-t border-black/[0.05] pt-2">
+                {g.members.map((m) => (
+                  <div key={m.parent} className="flex items-center gap-2 text-[11px]">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${m.gap > 0 ? 'bg-danger' : 'bg-safe'}`} />
+                    <span className="flex-1 truncate text-ink-200">{m.parent}</span>
+                    <span className={`num ${m.gap > 0 ? 'text-danger' : 'text-safe'}`}>{m.gap > 0 ? '+' : ''}{fmtNum(m.gap, 1)}</span>
+                    <span className="num w-14 text-right text-ink-500">{fmtInt(m.units)}u</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-ink-500">
+                  {multi
+                    ? <>pooled fine <span className="num font-semibold text-ink-200">{fmtMoney(res.fine, pack.currency)}</span>{g.saved > 0 && <> · saves {fmtMoney(g.saved, pack.currency)}</>}</>
+                    : <>standalone fine <span className="num font-semibold text-ink-200">{fmtMoney(g.standaloneFine, pack.currency)}</span></>}
+                </div>
+                {onOpen && multi && <button onClick={() => onOpen(g.members.map((m) => m.parent))} className="shrink-0 text-[10px] font-semibold text-brand hover:underline">Model this pool</button>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Section>
+  )
+}
+
+function Standings({ rows, pack, maxAbs, pmap }: any) {
+  return (
+    <Section title="Where each maker stands" right={<span className="text-[11px] text-ink-500">grouped by registered pool</span>}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wider text-ink-500">
-              <th className="px-4 py-2.5">Maker</th>
+              <th className="px-4 py-2.5">Manufacturer</th>
+              <th className="px-4 py-2.5">Registered pool</th>
               <th className="px-4 py-2.5">Role</th>
               <th className="px-4 py-2.5 text-right">Fleet</th>
               <th className="px-4 py-2.5 text-right">Limit</th>
@@ -211,6 +266,7 @@ function Standings({ rows, pack, maxAbs }: any) {
               return (
                 <tr key={r.parent} className="border-t border-black/[0.04]">
                   <td className="px-4 py-2.5 font-medium text-ink-100">{r.parent}</td>
+                  <td className="px-4 py-2.5 text-ink-500">{pmap?.[r.parent] ?? '—'}</td>
                   <td className="px-4 py-2.5">
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${surplus ? 'border-safe/30 bg-safe/10 text-safe' : r.gap > 0 ? 'border-danger/30 bg-danger/10 text-danger' : 'border-black/10 text-ink-500'}`}>
                       {surplus ? 'Surplus seller' : r.gap > 0 ? 'Short buyer' : 'Balanced'}
@@ -242,7 +298,8 @@ function Standings({ rows, pack, maxAbs }: any) {
 function MakerOptions({ parent, fine }: { parent: string; fine: number }) {
   const { pack, raw, scenario } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
-  const opts = useMemo(() => bestForMaker(raw, pack, scenario, parent), [raw, pack, scenario, parent, dataVersion])
+  const overrides = useStore((s) => s.makerOverrides)
+  const opts = useMemo(() => bestForMaker(raw, pack, scenario, parent, overrides), [raw, pack, scenario, parent, overrides, dataVersion])
   const ICON: Record<string, any> = { pool: 'handshake', credits: 'card', fine: 'alert' }
   const maxCost = Math.max(...opts.map((o) => o.cost), 1)
   return (

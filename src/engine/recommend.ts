@@ -36,16 +36,17 @@ const LIGHT_COST_PER_KG = 14 // per car per kg removed
 const TRIM_MARGIN: Record<string, number> = { EU: 2600, IN: 60000, AU: 3000, UK: 2400 }
 
 type State = { scenario: Scenario; vehicles: Vehicle[] }
+type Ov = Record<string, Partial<Scenario>>
 
-function evalParent(state: State, pack: RulePack, parent: string): Aggregate {
-  const v = applyScenario(state.vehicles, state.scenario, pack).filter((x) => x.parent === parent)
+function evalParent(state: State, pack: RulePack, parent: string, overrides: Ov = {}): Aggregate {
+  const v = applyScenario(state.vehicles, state.scenario, pack, overrides).filter((x) => x.parent === parent)
   return aggregate(v, pack, state.scenario, parent, 'parent', parent)
 }
 
 const diff = (lvl: string): Action['difficulty'] => (lvl === 'eco' || lvl === 'credits' ? 'Easy' : lvl === 'pool' || lvl === 'ev' ? 'Medium' : 'Hard')
 
-export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, parent: string): Plan {
-  const before = evalParent({ scenario, vehicles: raw }, pack, parent)
+export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, parent: string, overrides: Ov = {}): Plan {
+  const before = evalParent({ scenario, vehicles: raw }, pack, parent, overrides)
   const fineBefore = before.fine
 
   const actions: Action[] = []
@@ -60,10 +61,12 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
     const fineNow = cur.fine
     const rawUnits = cur.rawUnits
 
-    // 1. Eco-innovation / efficiency (cheap, capped)
-    if (state.scenario.ecoBoostG < 7) {
-      const next: State = { ...state, scenario: { ...state.scenario, ecoBoostG: Math.min(7, state.scenario.ecoBoostG + 3) } }
-      const a = evalParent(next, pack, parent)
+    // 1. Eco-innovation / efficiency (cheap, capped at the pack's LEGAL cap for
+    //    the year — only proposed where the regime has an eco mechanism).
+    const ecoCap = pack.ecoCap?.(state.scenario.year)
+    if (ecoCap != null && state.scenario.ecoBoostG < ecoCap) {
+      const next: State = { ...state, scenario: { ...state.scenario, ecoBoostG: Math.min(ecoCap, state.scenario.ecoBoostG + 3) } }
+      const a = evalParent(next, pack, parent, overrides)
       const grams = cur.gap - a.gap
       if (grams > 0.0001)
         candidates.push({
@@ -83,7 +86,7 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
       const targetShare = Math.min(92, baseShare + 5)
       if (targetShare > baseShare + 0.1) {
         const next: State = { ...state, scenario: { ...state.scenario, evSharePct: targetShare } }
-        const a = evalParent(next, pack, parent)
+        const a = evalParent(next, pack, parent, overrides)
         const grams = cur.gap - a.gap
         const evNow = (a.rawUnits * targetShare) / 100
         const evBefore = (cur.rawUnits * baseShare) / 100
@@ -104,7 +107,7 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
     // 3. Lightweight the fleet (−25 kg)
     if (state.scenario.massShiftKg > -100) {
       const next: State = { ...state, scenario: { ...state.scenario, massShiftKg: state.scenario.massShiftKg - 25 } }
-      const a = evalParent(next, pack, parent)
+      const a = evalParent(next, pack, parent, overrides)
       const grams = cur.gap - a.gap
       if (grams > 0.0001)
         candidates.push({
@@ -120,7 +123,7 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
 
     // 4. Pool with a compliant maker (if the country allows it)
     if (pack.pooling.enabled && !state.scenario.poolingEnabled) {
-      const all = applyScenario(state.vehicles, state.scenario, pack)
+      const all = applyScenario(state.vehicles, state.scenario, pack, overrides)
       const others = [...new Set(all.map((x) => x.parent))].filter((p) => p !== parent)
       const partner = others
         .map((p) => aggregate(all.filter((x) => x.parent === p), pack, state.scenario, p, 'parent', p))
@@ -148,7 +151,7 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
 
     // 5. Trim the dirtiest model by 25%
     {
-      const all = applyScenario(state.vehicles, state.scenario, pack).filter((x) => x.parent === parent)
+      const all = applyScenario(state.vehicles, state.scenario, pack, overrides).filter((x) => x.parent === parent)
       const worst = [...all].filter((x) => pack.vehicleMetric(x, state.scenario) > cur.limit).sort((a, b) => b.co2 - a.co2)[0]
       if (worst) {
         const next: State = { ...state, vehicles: trimModel(state.vehicles, parent, worst.model, 0.25) }
@@ -172,7 +175,7 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
     candidates.sort((a, b) => a.action.cost / a.action.gramsCleared - b.action.cost / b.action.gramsCleared)
     const pick = candidates[0]
     state = pick.next
-    const after = evalParent(state, pack, parent)
+    const after = evalParent(state, pack, parent, overrides)
     const fineAvoided = Math.max(0, fineNow - after.fine)
     actions.push({ ...pick.action, fineAvoided })
     cur = after

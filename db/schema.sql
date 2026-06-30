@@ -44,8 +44,30 @@ create table if not exists vehicles (
   eco_benefit     double precision,
   cnf             double precision,
   zev             integer,
-  engine_cc       double precision
+  engine_cc       double precision,
+  -- richer per-variant spec (optional; present for the bundled EU extract)
+  variant         text,
+  variant_id      text,
+  battery         double precision,
+  range_km        double precision,
+  energy          double precision,
+  kerb_mass       double precision,
+  test_mass       double precision,
+  footprint       double precision,
+  gearbox         text,
+  driveline       text,
+  market_label    text          -- variant's sub-market label (distinct from `market` country code)
 );
 
 create index if not exists vehicles_market_version_idx on vehicles (market, dataset_version);
 create index if not exists vehicles_market_year_idx on vehicles (market, year);
+
+-- Durable store for the analyst's saved scenarios and the active per-country
+-- assumption set, so edits survive reloads and follow the user across devices.
+-- One row per workspace (single demo login today; keyed for multi-tenant later).
+create table if not exists scenario_store (
+  workspace   text primary key,
+  scenarios   jsonb not null default '[]'::jsonb,   -- named, durable scenarios
+  assumptions jsonb not null default '{}'::jsonb,   -- live working set, keyed by market
+  updated_at  timestamptz not null default now()
+);

@@ -30,7 +30,7 @@ export function buildMakerReport(agg: Aggregate, pack: RulePack, s: Scenario, me
     .map((a, i) => `<tr><td>${i + 1}</td><td>${a.title}</td><td>${a.difficulty}</td><td style="text-align:right">${fmtMoney(a.cost, pack.currency)}</td><td style="text-align:right">${fmtMoney(a.fineAvoided, pack.currency)}</td></tr>`)
     .join('')
   return `
-  <div class="head"><span class="brand">M</span><div><h1>Margin — Compliance Report</h1>
+  <div class="head"><span class="brand">A</span><div><h1>Autocred AI — Compliance Report</h1>
     <div class="sub">${pack.name} · ${agg.label} · compliance year ${s.year} · generated ${dateISO}</div></div></div>
 
   <h2>Position</h2>
@@ -55,7 +55,7 @@ export function buildMakerReport(agg: Aggregate, pack: RulePack, s: Scenario, me
   <div class="row"><span class="k">Rule pack</span><span class="v">${pack.limitNote}</span></div>
   <div class="row"><span class="k">Fine rate</span><span class="v">${pack.fineRateLabel}</span></div>
 
-  <div class="foot">Margin · figures computed by the shared compliance engine from official-source data. Pinned to dataset version ${meta.datasetVersion}. Illustrative where noted in the rule pack.</div>`
+  <div class="foot">Autocred AI · figures computed by the shared compliance engine from official-source data. Pinned to dataset version ${meta.datasetVersion}. Illustrative where noted in the rule pack.</div>`
 }
 
 export function openPrintReport(title: string, bodyHtml: string) {

@@ -53,10 +53,16 @@ function ensureSeed(): LocalDb {
 }
 
 function mapRow(r: any): Vehicle {
+  const num = (x: any) => (x == null ? undefined : Number(x))
   return {
     parent: r.parent, pool: r.pool, brand: r.brand, make: r.make, model: r.model, year: r.year,
     powertrain: r.powertrain, fuel: r.fuel, co2: Number(r.co2), mass: Number(r.mass), sales: Number(r.sales),
     vclass: r.vclass, ecoBenefit: r.eco_benefit ?? undefined, cnf: r.cnf ?? undefined, zev: r.zev ?? undefined, engineCC: r.engine_cc ?? undefined,
+    // richer per-variant spec (round-trips the bundled EU extract)
+    variant: r.variant ?? undefined, variantId: r.variant_id ?? undefined,
+    battery: num(r.battery), range: num(r.range_km), energy: num(r.energy),
+    kerbMass: num(r.kerb_mass), testMass: num(r.test_mass), footprint: num(r.footprint),
+    gearbox: r.gearbox ?? undefined, driveline: r.driveline ?? undefined, market: r.market_label ?? undefined,
   }
 }
 
@@ -87,15 +93,22 @@ export async function putDataset(market: CountryId, name: string, url: string, r
       parent: r.parent, pool: r.pool ?? null, brand: r.brand ?? null, make: r.make ?? null, model: r.model, year: r.year,
       powertrain: r.powertrain ?? null, fuel: r.fuel ?? null, co2: r.co2 ?? null, mass: r.mass ?? null, sales: r.sales ?? 0,
       vclass: r.vclass ?? null, eco_benefit: r.ecoBenefit ?? null, cnf: r.cnf ?? null, zev: r.zev ?? null, engine_cc: r.engineCC ?? null,
+      variant: r.variant ?? null, variant_id: r.variantId ?? null, battery: r.battery ?? null, range_km: r.range ?? null,
+      energy: r.energy ?? null, kerb_mass: r.kerbMass ?? null, test_mass: r.testMass ?? null, footprint: r.footprint ?? null,
+      gearbox: r.gearbox ?? null, driveline: r.driveline ?? null, market: r.market ?? null,
     }))
     await sql`insert into refresh_runs (market, dataset_version, status) values (${market}, ${version}, 'running')`
     await sql`
-      insert into vehicles (market, dataset_version, parent, pool, brand, make, model, year, powertrain, fuel, co2, mass, sales, vclass, eco_benefit, cnf, zev, engine_cc)
-      select ${market}, ${version}, x.parent, x.pool, x.brand, x.make, x.model, x.year, x.powertrain, x.fuel, x.co2, x.mass, x.sales, x.vclass, x.eco_benefit, x.cnf, x.zev, x.engine_cc
+      insert into vehicles (market, dataset_version, parent, pool, brand, make, model, year, powertrain, fuel, co2, mass, sales, vclass, eco_benefit, cnf, zev, engine_cc,
+        variant, variant_id, battery, range_km, energy, kerb_mass, test_mass, footprint, gearbox, driveline, market_label)
+      select ${market}, ${version}, x.parent, x.pool, x.brand, x.make, x.model, x.year, x.powertrain, x.fuel, x.co2, x.mass, x.sales, x.vclass, x.eco_benefit, x.cnf, x.zev, x.engine_cc,
+        x.variant, x.variant_id, x.battery, x.range_km, x.energy, x.kerb_mass, x.test_mass, x.footprint, x.gearbox, x.driveline, x.market
       from jsonb_to_recordset(${JSON.stringify(payload)}::jsonb) as x(
         parent text, pool text, brand text, make text, model text, year int, powertrain text, fuel text,
         co2 double precision, mass double precision, sales int, vclass text,
-        eco_benefit double precision, cnf double precision, zev int, engine_cc double precision)`
+        eco_benefit double precision, cnf double precision, zev int, engine_cc double precision,
+        variant text, variant_id text, battery double precision, range_km double precision, energy double precision,
+        kerb_mass double precision, test_mass double precision, footprint double precision, gearbox text, driveline text, market text)`
     await sql`
       insert into data_sources (market, name, url, current_version, last_refreshed, status)
       values (${market}, ${name}, ${url}, ${version}, now(), 'ok')
@@ -110,4 +123,53 @@ export async function putDataset(market: CountryId, name: string, url: string, r
   db[market] = { version: String(version), name, url, refreshed: new Date().toISOString(), rows }
   writeLocal(db)
   return String(version)
+}
+
+// ── Scenario / assumptions store ──────────────────────────────────────────────
+// Durable home for the analyst's saved scenarios and the active per-country
+// assumption set, so nothing is lost on reload or across devices. Single
+// workspace for now (one demo login); keyed for an easy multi-tenant upgrade.
+export interface ScenarioBlob { scenarios?: unknown[]; assumptions?: Record<string, unknown> }
+const WORKSPACE = 'default'
+const SCEN_FILE = join(DATA_DIR, 'scenarios.json')
+
+function readScenLocal(): ScenarioBlob {
+  try { return JSON.parse(readFileSync(SCEN_FILE, 'utf8')) } catch { return {} }
+}
+function writeScenLocal(blob: ScenarioBlob) {
+  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
+  writeFileSync(SCEN_FILE, JSON.stringify(blob))
+}
+
+export async function getScenarioBlob(): Promise<ScenarioBlob> {
+  if (sql) {
+    try {
+      const rows = await sql`select scenarios, assumptions from scenario_store where workspace = ${WORKSPACE}`
+      const r = rows[0]
+      if (!r) return {}
+      return { scenarios: r.scenarios ?? [], assumptions: r.assumptions ?? {} }
+    } catch { return {} }
+  }
+  if (onVercel) return {} // read-only FS without Neon → client localStorage is source of truth
+  return readScenLocal()
+}
+
+/** Merge-patch the workspace blob (only the provided keys are replaced). */
+export async function putScenarioBlob(patch: ScenarioBlob): Promise<ScenarioBlob> {
+  const cur = await getScenarioBlob()
+  const next: ScenarioBlob = {
+    scenarios: patch.scenarios ?? cur.scenarios ?? [],
+    assumptions: patch.assumptions ?? cur.assumptions ?? {},
+  }
+  if (sql) {
+    await sql`
+      insert into scenario_store (workspace, scenarios, assumptions, updated_at)
+      values (${WORKSPACE}, ${JSON.stringify(next.scenarios)}::jsonb, ${JSON.stringify(next.assumptions)}::jsonb, now())
+      on conflict (workspace) do update set scenarios = excluded.scenarios,
+        assumptions = excluded.assumptions, updated_at = now()`
+    return next
+  }
+  if (onVercel) return next // can't persist on read-only FS; client keeps localStorage
+  writeScenLocal(next)
+  return next
 }

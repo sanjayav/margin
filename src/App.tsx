@@ -24,7 +24,7 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
   { id: 'analyze', label: 'Analyze', icon: 'scatter', tier: 'Core' },
   { id: 'analytics', label: 'Analytics', icon: 'layers', tier: 'Core' },
   { id: 'data', label: 'Data', icon: 'database', tier: 'Core' },
-  { id: 'plan', label: 'Plan', icon: 'target', tier: 'Core' },
+  { id: 'plan', label: 'Scenario', icon: 'target', tier: 'Core' },
   { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
   { id: 'intel', label: 'Intelligence', icon: 'activity', tier: 'Plus' },
   { id: 'admin', label: 'Admin', icon: 'settings', tier: 'Plus' },
@@ -52,10 +52,10 @@ function Sidebar() {
     <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
       <button onClick={() => exitToPlatform('home')} className="mb-3 flex items-center gap-2.5 px-1.5 pt-1 text-left">
         <div className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}>
-          <span className="text-[19px] font-black leading-none">M</span>
+          <span className="text-[19px] font-black leading-none">A</span>
         </div>
         <div>
-          <div className="font-display text-[16px] font-bold leading-none text-gradient">Margin</div>
+          <div className="font-display text-[16px] font-bold leading-none text-gradient">Autocred AI</div>
           <div className="mt-1 text-[10px] tracking-wide text-[#9A9082]">Compliance platform</div>
         </div>
       </button>

@@ -15,15 +15,16 @@ import { buildMakerReport, openPrintReport } from '../lib/report'
 export default function MakerDetail() {
   const { pack, raw, parent, scenario, country } = useCompliance()
   const setParent = useStore((s) => s.setParent)
+  const overrides = useStore((s) => s.makerOverrides)
   const parents = parentsFor(country)
   const showProv = useProvenance((s) => s.show)
   const meta = getMeta(country)
 
   const openWorking = () => showProv({ agg: parent, pack, scenario, meta })
   const exportReport = () => {
-    const plan = recommend(raw, pack, scenario, parent.label)
+    const plan = recommend(raw, pack, scenario, parent.label, overrides)
     const today = new Date().toISOString().slice(0, 10)
-    openPrintReport(`Margin · ${parent.label}`, buildMakerReport(parent, pack, scenario, meta, plan, today))
+    openPrintReport(`Autocred AI · ${parent.label}`, buildMakerReport(parent, pack, scenario, meta, plan, today))
   }
 
   const limitAt = useMemo(() => makeLimitAt(pack, scenario, parent), [pack, scenario, parent])

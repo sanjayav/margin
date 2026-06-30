@@ -30,10 +30,10 @@ export default function PlatformShell() {
       <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
         <div className="mb-5 flex items-center gap-2.5 px-1.5 pt-1">
           <div className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}>
-            <span className="text-[19px] font-black leading-none">M</span>
+            <span className="text-[19px] font-black leading-none">A</span>
           </div>
           <div>
-            <div className="font-display text-[16px] font-bold leading-none text-gradient">Margin</div>
+            <div className="font-display text-[16px] font-bold leading-none text-gradient">Autocred AI</div>
             <div className="mt-1 text-[10px] tracking-wide text-[#9A9082]">Compliance platform</div>
           </div>
         </div>
@@ -73,7 +73,7 @@ export default function PlatformShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-white/[0.08] px-8 py-4" style={{ background: CHROME }}>
           <div>
-            <div className="label text-[#8A8174]">Margin platform</div>
+            <div className="label text-[#8A8174]">Autocred AI platform</div>
             <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-white">{t.title}</h1>
           </div>
           <div className="hidden text-right sm:block">

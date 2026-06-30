@@ -62,7 +62,7 @@ export default function Subscription() {
               <span className="grid h-9 w-10 place-items-center rounded-lg text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={16} /></span>
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-semibold text-ink-100">AI Analyst</div>
-                <div className="truncate text-[11px] text-ink-500">Ask Margin in plain English — numbers from the live engine.</div>
+                <div className="truncate text-[11px] text-ink-500">Ask Autocred AI in plain English — numbers from the live engine.</div>
               </div>
               <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{AI_PRICE_GBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
               <Switch on={ai} onClick={() => setAi(!ai)} />

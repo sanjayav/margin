@@ -19,7 +19,7 @@ export interface IntelEvent {
 export const INTEL: IntelEvent[] = [
   { id: 'e1', date: '2026-06-12', country: 'EU', kind: 'rule', impact: 'high',
     title: '2025–2027 averaging flexibility confirmed in Official Journal',
-    body: 'Regulation (EU) 2025/1214 lets makers be judged on a three-year average for 2025–2027, easing single-year exceedances. Margin now lets you toggle this in Admin.',
+    body: 'Regulation (EU) 2025/1214 lets makers be judged on a three-year average for 2025–2027, easing single-year exceedances. Autocred AI now lets you toggle this in Admin.',
     source: 'EUR-Lex · Official Journal L-series', parents: [] },
   { id: 'e2', date: '2026-06-03', country: 'EU', kind: 'alliance', impact: 'medium',
     title: 'MG Motor Europe signals openness to an open pool for 2026',
@@ -51,10 +51,10 @@ export const INTEL: IntelEvent[] = [
     source: 'Trading simulator · illustrative', parents: ['MG Australia'] },
   { id: 'e9', date: '2026-04-10', country: 'EU', kind: 'rule', impact: 'medium',
     title: 'Eco-innovation cap reaffirmed at 7 g/km',
-    body: 'Article 11 cap unchanged. Models can still claim certified off-cycle savings up to the cap; Margin applies MIN(model benefit, 7).',
+    body: 'Article 11 cap unchanged. Models can still claim certified off-cycle savings up to the cap; Autocred AI applies MIN(model benefit, 7).',
     source: 'EUR-Lex', parents: [] },
   { id: 'e10', date: '2026-03-30', country: 'GLOBAL', kind: 'data', impact: 'low',
     title: 'US and China rule packs scoped for the next release',
     body: 'Architecture validated across four packs; adding a country is a config change, not a rebuild.',
-    source: 'Margin roadmap', parents: [] },
+    source: 'Autocred AI roadmap', parents: [] },
 ]

@@ -67,7 +67,7 @@ export default function Modules() {
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={20} /></span>
             <div>
               <div className="font-display text-[14px] font-bold text-ink-100">AI Analyst</div>
-              <div className="text-[11px] text-ink-500">Ask Margin — works in every owned module. £{AI_PRICE_GBP}/mo</div>
+              <div className="text-[11px] text-ink-500">Ask Autocred AI — works in every owned module. £{AI_PRICE_GBP}/mo</div>
             </div>
           </div>
           {ai

@@ -50,7 +50,7 @@ export default function Assistant() {
         <button onClick={() => setOpen(true)}
           className="btn-primary fixed bottom-6 right-6 z-40 shadow-glow"
           style={{ boxShadow: '0 1px 0 0 rgba(255,255,255,.35) inset, 0 14px 40px -10px rgba(61,220,151,.55)' }}>
-          <Icon name="spark" size={17} /> Ask Margin
+          <Icon name="spark" size={17} /> Ask Autocred AI
         </button>
       )}
 
@@ -61,7 +61,7 @@ export default function Assistant() {
             <div className="flex items-center gap-2.5">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-brand/15 text-brand"><Icon name="spark" size={17} /></div>
               <div>
-                <div className="text-sm font-bold text-ink-100">Margin analyst</div>
+                <div className="text-sm font-bold text-ink-100">Autocred AI analyst</div>
                 <div className="text-[10px] text-ink-500">Powered by Marklytics · numbers from the live engine</div>
               </div>
             </div>

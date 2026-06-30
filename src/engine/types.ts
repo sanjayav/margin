@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Margin · shared types
+// Autocred AI · shared types
 // The calculation engine is country-agnostic. Everything that differs between
 // countries lives in a RulePack (the "four things that change per country":
 // limit formula, credit system, pooling rules, fine rate).
@@ -25,6 +25,22 @@ export interface Vehicle {
   engineCC?: number
   zev?: number
   scenario?: string
+  // ── richer per-variant spec (populated from the official workbooks where
+  //    available; all optional so the engine never depends on them) ──
+  variant?: string         // human variant/spec descriptor (e.g. "Auto · FWD · 61 kWh")
+  variantId?: string       // stable spec/brand id from the source (e.g. "SZK-01")
+  battery?: number         // usable battery capacity, kWh (BEV/PHEV)
+  range?: number           // electric/WLTP range, km
+  energy?: number          // energy consumption (Wh/km or L/100km per market)
+  kerbMass?: number        // kerb mass, kg
+  testMass?: number        // test mass, kg (EU limit basis)
+  footprint?: number       // footprint, m² (where the limit is footprint-based)
+  gearbox?: string
+  driveline?: string
+  market?: string          // country / sub-market label
+  // ── added-variant volume control (only used on Scenario.extraVariants) ──
+  share?: number           // 0–1: this variant's target share of its scope (proportional)
+  shareScope?: 'market' | 'manufacturer' | 'model'
 }
 
 /** Live, user-controlled assumptions. Moving any of these recomputes everything. */
@@ -41,6 +57,11 @@ export interface Scenario {
   phevUF?: boolean            // EU: apply the 2025+ PHEV utility-factor correction (default true)
   creditPrice?: number | null // override the pack's credit price for trading value
 }
+
+/** How an added variant's volume is expressed. `absolute` adds units on top of
+ *  the fleet; `share` makes the variant a % of its scope, shrinking the existing
+ *  volume in that scope proportionately so the scope total stays constant. */
+export type ShareScope = 'market' | 'manufacturer' | 'model'
 
 export interface LimitContext {
   year: number
@@ -85,6 +106,10 @@ export interface RulePack {
   limit: (ctx: LimitContext) => number
   /** Year-specific reduction headline for the forecast view. */
   forecast: (year: number) => { limit: number; note: string }
+  /** Legal eco-innovation credit cap (g/km) for a year, where the regime has one.
+   *  Undefined ⇒ no eco-innovation mechanism (the eco lever has no effect and the
+   *  optimiser won't propose it). Drives the ScenarioRail cap and recommend.ts. */
+  ecoCap?: (year: number) => number
 }
 
 export interface FineMath {
@@ -97,7 +122,9 @@ export interface FineMath {
 
 export interface Aggregate {
   label: string
-  level: 'fleet' | 'parent' | 'model' | 'powertrain'
+  // 'fleet' = market · 'pool' = compliance pool · 'parent' = manufacturer ·
+  // 'model' · 'variant' (leaf). 'powertrain' kept for the legacy buildTree.
+  level: 'fleet' | 'pool' | 'parent' | 'model' | 'variant' | 'powertrain'
   key: string
   units: number           // effective units (after super-credits)
   rawUnits: number        // actual registrations

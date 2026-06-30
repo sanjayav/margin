@@ -105,6 +105,9 @@ export const EU: RulePack = {
   limit: (ctx: LimitContext) => referenceTarget(ctx.vclass, ctx.year, ctx.avgMass) * zlevFactor(ctx.vclass, ctx.year, ctx.zlevShare),
   forecast: (year) => ({
     limit: fleetTarget('Passenger car', year),
-    note: year >= 2030 ? '−55% step in force' : '−15% phase (vs 2021)',
+    // derive the headline from the actual reduction table so it stays correct at
+    // every year (−15% phase, −55% step, −100% in 2035) instead of a fixed string.
+    note: `−${Math.round((REDUCTION_CAR[year] ?? 0.55) * 100)}% vs 2021`,
   }),
+  ecoCap, // Art 11 cap: 7 g/km ≤2024, 6 g/km 2025–2029, 4 g/km 2030+
 }

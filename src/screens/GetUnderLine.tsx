@@ -12,9 +12,10 @@ const LEVER_ICON: Record<string, IconName> = { eco: 'leaf', ev: 'bolt', light: '
 export default function GetUnderLine() {
   const { pack, raw, scenario, selectedParent, country } = useCompliance()
   const setParent = useStore((s) => s.setParent)
+  const overrides = useStore((s) => s.makerOverrides)
   const parents = parentsFor(country)
 
-  const plan = useMemo(() => recommend(raw, pack, scenario, selectedParent), [raw, pack, scenario, selectedParent])
+  const plan = useMemo(() => recommend(raw, pack, scenario, selectedParent, overrides), [raw, pack, scenario, selectedParent, overrides])
 
   return (
     <div className="space-y-5 animate-slidein">

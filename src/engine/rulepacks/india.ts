@@ -36,15 +36,20 @@ export const IN: RulePack = {
   limitNote: 'Fuel-use target: 0.002 × (kerb mass − 1170 kg) + a yearly constant that tightens from 3.73 to 3.01 L/100km.',
   source: 'Bureau of Energy Efficiency — Draft CAFE 2027 norms (25 Sep 2025).',
 
-  vehicleMetric: (v: Vehicle, s) => {
+  vehicleMetric: (v: Vehicle) => {
     if (/electric|bev/i.test(v.fuel) || v.co2 === 0) return 0
     const petrolEq = v.co2 / PETROL_DIV
-    const cnf = (v.cnf ?? 0) + (s.ecoBoostG > 0 ? 0.05 : 0)
+    // CAFE III has no eco-innovation lever; the only discount is the data-driven
+    // carbon-neutral-fuel fraction (E20/CNG). (Previously the g/km `ecoBoostG`
+    // lever was mis-applied here as a flat 5% fuel discount — a unit error.)
+    const cnf = v.cnf ?? 0
     return Math.max(0, petrolEq * (1 - cnf))
   },
   vehicleUnits: (v: Vehicle, s) => {
     if (!s.superCreditsEnabled) return v.sales
-    const f = SUPER[v.powertrain] ?? 1
+    // Super-credits boost clean-tech volume; key off the same zero-emission test
+    // the share/limit use, so a BEV labelled e.g. "Battery Electric" still gets ×3.
+    const f = SUPER[v.powertrain] ?? (v.co2 === 0 || /electric|bev/i.test(v.fuel) ? 3 : 1)
     return v.sales * f
   },
   isZeroEmission: (v) => v.co2 === 0 || /electric|bev/i.test(v.fuel),

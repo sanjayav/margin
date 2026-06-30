@@ -31,9 +31,9 @@ export default function Login() {
         {/* brand */}
         <div className="mb-7 flex flex-col items-center text-center">
           <div className="mb-4 grid h-16 w-16 place-items-center rounded-2xl text-white shadow-glow" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}>
-            <span className="text-4xl font-black leading-none">M</span>
+            <span className="text-4xl font-black leading-none">A</span>
           </div>
-          <h1 className="font-display text-[34px] font-bold leading-none tracking-tight text-gradient">Margin</h1>
+          <h1 className="font-display text-[34px] font-bold leading-none tracking-tight text-gradient">Autocred AI</h1>
           <p className="mt-2.5 text-sm text-[#A89E8C]">The emissions-compliance control room</p>
         </div>
 

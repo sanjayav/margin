@@ -69,6 +69,31 @@ Adding the US or China = writing a new file in `rulepacks/`. No screen changes.
 
 ## Data
 
-321 real model-level rows extracted from the supplied workbooks
-(`src/data/fleet_data.json`). Figures are illustrative until the live EEA / BEE /
-DCCEEW / DfT datasets are connected, exactly as the brief notes.
+Two layers, in priority order at runtime:
+
+1. **Live open-source scrape (EU).** `npm run ingest:open` pulls **real registration
+   data** from the **European Environment Agency** CO₂-monitoring database via its
+   public **DiscoData SQL API** (`scripts/ingest-open.mjs`). Each source row is one
+   registered car, so the script aggregates server-side to the engine's level —
+   `manufacturer (harmonised compliance parent) · model · fuel → registration-weighted
+   WLTP CO₂ + test mass + registrations` — for the top manufacturers and their top
+   models (~6.6 M registrations, 2025 provisional). No multi-GB download. It writes to
+   the same store the app reads: the local file store by default, or Neon when
+   `DATABASE_URL` is set. The real current-year fleet is held across the 2025–2030
+   horizon as the baseline (the limit tightens per the rule pack); those forward years
+   are the 2025 baseline projected, not measured. HEV/MHEV fold into ICE because the
+   EEA fuel field doesn't separate them.
+
+2. **Bundled official extract (fallback + IN/AU/UK).** Real model-level rows extracted
+   from the supplied workbooks (`src/data/fleet_data.json`; EU rows additionally
+   enriched with the workbook's per-variant spec). India, Australia and the UK stay on
+   this extract — none publishes a comparable open *registration* API (the UK VCA and
+   AU Green Vehicle Guide are spec catalogues with no volumes). Add a market by writing
+   another adapter in `ADAPTERS` in `scripts/ingest-open.mjs`.
+
+```bash
+npm run ingest:open      # scrape EEA → local file store (zero config)
+DATABASE_URL=... npm run db:setup && DATABASE_URL=... npm run ingest:open   # also load Neon
+```
+
+`Admin → Data freshness` shows **Live · DB** for any market loaded into the store.

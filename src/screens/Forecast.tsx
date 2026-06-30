@@ -2,36 +2,63 @@ import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { parentsFor } from '../data/fleet'
-import { aggregateParent, fmtMoney, fmtNum } from '../engine/engine'
+import { aggregateParent, buildTree, fmtMoney, fmtNum } from '../engine/engine'
 import { simulateForecastMaker } from '../engine/montecarlo'
-import type { Scenario } from '../engine/types'
+import type { Scenario, Aggregate } from '../engine/types'
 import { Section, StatusPill } from '../components/ui'
 import Icon from '../components/Icon'
+
+const MARKET = '__market__'
 
 export default function Forecast() {
   const { pack, raw, scenario, selectedParent, country } = useCompliance()
   const setParent = useStore((s) => s.setParent)
+  const overrides = useStore((s) => s.makerOverrides)
   const parents = parentsFor(country)
   const [showPlan, setShowPlan] = useState(true)
+  // Forecast either a single OEM or the whole market. 'market' sums per-maker fines
+  // (a clean maker can't offset a dirty one), exactly like the board verdict.
+  const [target, setTarget] = useState<string>(selectedParent)
+  const isMarket = target === MARKET
+  const parent = isMarket ? '' : (parents.includes(target) ? target : selectedParent)
 
   const base: Scenario = useMemo(
-    () => ({ year: pack.years[0], evSharePct: null, salesMultiplier: 1, massShiftKg: 0, ecoBoostG: 0, poolingEnabled: false, superCreditsEnabled: country === 'IN' }),
+    () => ({ year: pack.years[0], evSharePct: null, salesMultiplier: 1, massShiftKg: 0, ecoBoostG: 0, poolingEnabled: false, superCreditsEnabled: country === 'IN', mix: null, phevUF: true, creditPrice: null }),
     [pack, country],
   )
 
-  const planDiffers = useMemo(
-    () => scenario.evSharePct != null || scenario.massShiftKg !== 0 || scenario.salesMultiplier !== 1 || scenario.ecoBoostG !== 0 || scenario.poolingEnabled,
-    [scenario],
-  )
+  // The live plan differs from the as-sold baseline if ANY lever moved — including
+  // a custom powertrain mix, policy/credit toggles, added variants, or any drilled-in
+  // per-maker/model override (the old check missed these, hiding the overlay).
+  const planDiffers = useMemo(() => {
+    const s = scenario
+    const leverMoved = s.evSharePct != null || s.massShiftKg !== 0 || s.salesMultiplier !== 1 || s.ecoBoostG !== 0
+      || s.poolingEnabled || !!s.mix || (s.extraVariants?.length ?? 0) > 0 || s.phevUF === false
+      || s.creditPrice != null || (country === 'IN' ? s.superCreditsEnabled !== true : s.superCreditsEnabled)
+    const overrideMoved = Object.values(overrides).some((o) => o && Object.keys(o).length > 0)
+    return leverMoved || overrideMoved
+  }, [scenario, overrides, country])
+
+  // One node for the active target (a maker, or the whole market) under a scenario.
+  // The plan path carries the drilled-in overrides; the baseline never does.
+  const marketFine = (t: Aggregate) => (t.children ?? []).reduce((a, c) => a + c.fine, 0)
+  const nodeFor = (sc: Scenario, withOverrides: boolean): Aggregate => {
+    const ov = withOverrides ? overrides : {}
+    if (isMarket) {
+      const t = buildTree(raw, pack, sc, ov)
+      return { ...t, fine: marketFine(t), status: t.rawUnits === 0 ? 'no-sales' : t.gap > 0 ? 'fine' : 'compliant' }
+    }
+    return aggregateParent(raw, pack, sc, parent, ov)
+  }
 
   const series = useMemo(() => {
     return pack.years.map((y) => {
-      const b = aggregateParent(raw, pack, { ...base, year: y }, selectedParent)
-      const l = aggregateParent(raw, pack, { ...scenario, year: y }, selectedParent)
+      const b = nodeFor({ ...base, year: y }, false)
+      const l = nodeFor({ ...scenario, year: y }, true)
       // required zero-emission share to just clear the limit (EV lever only)
       let req: number | null = null
       for (let s = 0; s <= 95; s += 1) {
-        const a = aggregateParent(raw, pack, { ...base, year: y, evSharePct: s }, selectedParent)
+        const a = nodeFor({ ...base, year: y, evSharePct: s }, false)
         if (a.gap <= 0.0001) { req = s; break }
       }
       return {
@@ -41,10 +68,10 @@ export default function Forecast() {
         req,
       }
     })
-  }, [raw, pack, scenario, base, selectedParent])
+  }, [raw, pack, scenario, base, parent, isMarket, overrides]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Monte-Carlo confidence ribbon (per maker) — P10/P50/P90 + P(over the line)
-  const bands = useMemo(() => simulateForecastMaker(raw, pack, base, selectedParent, pack.years), [raw, pack, base, selectedParent])
+  // Monte-Carlo confidence ribbon — per maker only (market is a deterministic Σ).
+  const bands = useMemo(() => (isMarket ? [] : simulateForecastMaker(raw, pack, base, parent, pack.years)), [raw, pack, base, parent, isMarket])
   const overlay = showPlan && planDiffers
   const cumBase = series.reduce((a, s) => a + s.bFine, 0)
   const cumPlan = series.reduce((a, s) => a + s.lFine, 0)
@@ -61,8 +88,9 @@ export default function Forecast() {
   return (
     <div className="space-y-5 animate-slidein">
       <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => setTarget(MARKET)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${isMarket ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>Whole market</button>
         {parents.map((p) => (
-          <button key={p} onClick={() => setParent(p)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${selectedParent === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{p}</button>
+          <button key={p} onClick={() => { setTarget(p); setParent(p) }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!isMarket && parent === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{p}</button>
         ))}
         {planDiffers && (
           <button onClick={() => setShowPlan((v) => !v)}
@@ -143,7 +171,7 @@ export default function Forecast() {
                   <td className="px-4 py-2.5 text-right num">{fmtNum(s.bMetric, 1)}</td>
                   {overlay && <td className="px-4 py-2.5 text-right num text-accent">{fmtNum(s.lMetric, 1)}</td>}
                   <td className={`px-4 py-2.5 text-right num font-semibold ${s.bGap > 0 ? 'text-danger' : 'text-safe'}`}>{s.bGap > 0 ? '+' : ''}{fmtNum(s.bGap, 1)}</td>
-                  <td className={`px-4 py-2.5 text-right num ${(bands[i]?.probOver ?? 0) > 0.5 ? 'text-danger' : (bands[i]?.probOver ?? 0) > 0.1 ? 'text-warn' : 'text-safe'}`}>{Math.round((bands[i]?.probOver ?? 0) * 100)}%</td>
+                  <td className={`px-4 py-2.5 text-right num ${(bands[i]?.probOver ?? 0) > 0.5 ? 'text-danger' : (bands[i]?.probOver ?? 0) > 0.1 ? 'text-warn' : 'text-safe'}`}>{bands.length ? `${Math.round((bands[i]?.probOver ?? 0) * 100)}%` : '—'}</td>
                   <td className={`px-4 py-2.5 text-right num ${s.bFine > 0 ? 'text-danger' : 'text-ink-500'}`}>{fmtMoney(s.bFine, pack.currency)}</td>
                   <td className="px-4 py-2.5 text-right"><StatusPill status={s.bStatus} /></td>
                 </tr>

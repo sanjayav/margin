@@ -16,7 +16,9 @@ const PARAMS: Record<number, { t1: P; t2: P }> = {
   2030: { t1: { head: 50, maf: 0.0663, ref: 1723, lower: 1500, upper: 2200 }, t2: { head: 100, maf: 0.0324, ref: 2155, lower: 1500, upper: 2400 } },
 }
 const FINE_RATE = 100 // A$ per g/km over · per unit
-const isType2 = (vclass: string) => /type 2|2/.test(vclass) && !/type 1/.test(vclass)
+// Match "Type 2" (case-insensitive, optional space/dash) — NOT any string that
+// merely contains a "2" (e.g. "Type 1 (2WD)" must stay Type 1).
+const isType2 = (vclass: string) => /type[\s-]?2\b/i.test(vclass)
 
 export const AU: RulePack = {
   id: 'AU',
