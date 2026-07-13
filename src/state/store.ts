@@ -59,6 +59,9 @@ interface UIState {
   setScreen: (s: AnyScreen) => void
   setParent: (p: string) => void
   patchScenario: (p: Partial<Scenario>) => void
+  /** Merge levers into a NAMED override scope (maker / pool:NAME) — the
+   *  drag-to-model path. null deletes the scope's overrides. */
+  patchOverride: (scope: string, patch: Partial<Scenario> | null) => void
   resetScenario: () => void
   setDrill: (path: string[]) => void
   loadFleet: () => Promise<void>
@@ -299,6 +302,14 @@ export const useStore = create<UIState>((set, get) => ({
     else set({ screen: s })
   },
   setParent: (p) => set({ selectedParent: p }),
+  patchOverride: (scope, patch) => {
+    const { makerOverrides, scenario, country } = get()
+    const next = { ...makerOverrides }
+    if (patch === null) delete next[scope]
+    else next[scope] = { ...(next[scope] ?? {}), ...patch }
+    set({ makerOverrides: next })
+    persistAssumptions(country, scenario, next)
+  },
   patchScenario: (p) => {
     const { drillPath, screen, scenarioTab, scenario, makerOverrides, country } = get()
     const scope = scopeKey(screen, drillPath, scenarioTab)

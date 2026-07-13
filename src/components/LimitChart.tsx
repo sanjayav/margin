@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { RulePack } from '../engine/types'
 import { fmtInt, fmtNum } from '../engine/engine'
 
@@ -17,6 +17,17 @@ const PT_COLORS: Record<string, string> = {
   BEV: '#3ddc97', PHEV: '#5b8def', HEV: '#8b7ff0', MHEV: '#ffb454', ICE: '#ff5d6c', 'Strong Hybrid': '#8b7ff0',
 }
 
+/** Direct manipulation: drag a bubble to a target position and the caller
+ *  SOLVES the levers that get it there (the chart never invents physics —
+ *  preview/commit run the engine). lockX pins mass where it isn't a lever. */
+export interface DragConfig {
+  enabled: (p: ChartPoint) => boolean
+  /** live solver preview at a candidate position — lines for the ghost tooltip */
+  preview: (key: string, mass: number, metric: number) => string[]
+  commit: (key: string, mass: number, metric: number) => void
+  lockX?: boolean
+}
+
 interface Props {
   pack: RulePack
   /** limit as a function of mass (uses the fleet's year, class and ZLEV share). */
@@ -27,6 +38,7 @@ interface Props {
   colorBy?: 'status' | 'powertrain'
   /** stable denominator for bubble size (e.g. maker total) so a lone bubble still scales with volume */
   unitRef?: number
+  drag?: DragConfig
 }
 
 /**
@@ -34,8 +46,11 @@ interface Props {
  * marker. Below the line is safe (green), above means a fine (red). Everything
  * re-renders instantly when the scenario changes — no animation gate.
  */
-export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef }: Props) {
+export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag }: Props) {
   const [hover, setHover] = useState<string | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [ghost, setGhost] = useState<{ key: string; mass: number; metric: number; lines: string[] } | null>(null)
+  const dragRef = useRef<{ key: string; startMass: number; startMetric: number; moved: boolean; lastPreview: number } | null>(null)
   const W = 760
   const H = height
   const m = { l: 56, r: 24, t: 20, b: 44 }
@@ -58,6 +73,40 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
 
   const sx = (mass: number) => m.l + ((mass - xMin) / (xMax - xMin)) * iw
   const sy = (v: number) => m.t + ih - (v / yMax) * ih
+  // client → domain (for direct manipulation)
+  const domainFromEvent = (e: { clientX: number; clientY: number }) => {
+    const el = svgRef.current!
+    const r = el.getBoundingClientRect()
+    const px = ((e.clientX - r.left) / r.width) * W
+    const py = ((e.clientY - r.top) / r.height) * H
+    const mass = xMin + (Math.min(Math.max(px, m.l), W - m.r) - m.l) / iw * (xMax - xMin)
+    const metric = ((m.t + ih - Math.min(Math.max(py, m.t), m.t + ih)) / ih) * yMax
+    return { mass, metric }
+  }
+  const startDrag = (p: ChartPoint) => (e: React.PointerEvent) => {
+    if (!drag || !drag.enabled(p)) return
+    e.preventDefault(); e.stopPropagation()
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    dragRef.current = { key: p.key, startMass: p.mass, startMetric: p.metric, moved: false, lastPreview: 0 }
+  }
+  const moveDrag = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d || !drag) return
+    const { mass, metric } = domainFromEvent(e)
+    const gMass = drag.lockX ? d.startMass : mass
+    d.moved = d.moved || Math.abs(sx(gMass) - sx(d.startMass)) + Math.abs(sy(metric) - sy(d.startMetric)) > 4
+    // throttle the engine-solve preview to ~20/s; positions update every frame
+    const now = performance.now()
+    const lines = now - d.lastPreview > 50 ? drag.preview(d.key, gMass, metric) : (ghost?.lines ?? [])
+    if (now - d.lastPreview > 50) d.lastPreview = now
+    setGhost({ key: d.key, mass: gMass, metric, lines })
+  }
+  const endDrag = () => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d && ghost && d.moved) drag?.commit(ghost.key, ghost.mass, ghost.metric)
+    setGhost(null)
+  }
 
   const linePath = line.map((p, i) => `${i ? 'L' : 'M'}${sx(p.mass).toFixed(1)},${sy(p.limit).toFixed(1)}`).join(' ')
   // shaded "fine" zone = area above the limit line up to the top
@@ -74,7 +123,8 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
 
   return (
     <div className="w-full overflow-hidden">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto', touchAction: drag ? 'none' : undefined }}
+        onPointerMove={moveDrag} onPointerUp={endDrag} onPointerLeave={() => { if (dragRef.current) endDrag() }}>
         <defs>
           <linearGradient id="fineZone" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#ff5d6c" stopOpacity="0.18" />
@@ -139,8 +189,10 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const r = p.isFleet ? 9 : 5 + Math.sqrt(Math.min(1, Math.max(0, p.units) / sizeRef)) * 18
           const active = hover === p.key
           return (
-            <g key={p.key} style={{ cursor: onPick ? 'pointer' : 'default', transition: 'all .25s' }}
-              onMouseEnter={() => setHover(p.key)} onMouseLeave={() => setHover(null)} onClick={() => onPick?.(p.key)}>
+            <g key={p.key} style={{ cursor: drag?.enabled(p) ? 'grab' : onPick ? 'pointer' : 'default', transition: 'all .25s', opacity: ghost && ghost.key === p.key ? 0.35 : 1 }}
+              onMouseEnter={() => setHover(p.key)} onMouseLeave={() => setHover(null)}
+              onPointerDown={startDrag(p)}
+              onClick={() => { if (!dragRef.current?.moved) onPick?.(p.key) }}>
               {p.isFleet && <line x1={cx} y1={cy} x2={cx} y2={sy(limitAt(p.mass))} stroke={color} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.55" />}
               <circle cx={cx} cy={cy} r={r + (active ? 3 : 0)} fill={color} fillOpacity={p.isFleet ? 0.95 : 0.5} stroke={p.isFleet ? '#FBF7EF' : color} strokeWidth={p.isFleet ? 2.5 : 1.5} className={p.isFleet ? 'animate-flip' : 'lc-bubble'} style={p.isFleet ? { filter: 'url(#glow)' } : { transition: 'r .25s ease, cx .25s ease, cy .25s ease, fill .25s ease' }} />
               {p.isFleet && <circle cx={cx} cy={cy} r={r + 6} fill="none" stroke={color} strokeWidth="1" opacity="0.35" />}
@@ -161,6 +213,30 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
             </g>
           )
         })}
+        {/* drag ghost: the target the solver is chasing */}
+        {ghost && (() => {
+          const src = points.find((p) => p.key === ghost.key)
+          if (!src) return null
+          const gx = sx(ghost.mass), gy = sy(ghost.metric)
+          const ox = sx(src.mass), oy = sy(src.metric)
+          const over = ghost.metric > limitAt(ghost.mass)
+          const tw = Math.max(150, ...ghost.lines.map((l) => l.length * 5.6))
+          const flip = gx + 14 + tw > W - m.r
+          const tx = flip ? gx - 14 - tw : gx + 14
+          const ty = Math.max(m.t + 2, Math.min(gy - 10, H - m.b - ghost.lines.length * 13 - 14))
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              <line x1={ox} y1={oy} x2={gx} y2={gy} stroke="#F2510E" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+              <line x1={gx} y1={gy} x2={gx} y2={sy(limitAt(ghost.mass))} stroke={over ? '#ff5d6c' : '#3ddc97'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7" />
+              <circle cx={gx} cy={gy} r={11} fill="#F2510E" fillOpacity="0.22" stroke="#F2510E" strokeWidth="2" strokeDasharray="5 3" />
+              <circle cx={gx} cy={gy} r={2.5} fill="#F2510E" />
+              <rect x={tx} y={ty} width={tw} height={ghost.lines.length * 13 + 12} rx="7" fill="#17140F" opacity="0.94" />
+              {ghost.lines.map((l, i) => (
+                <text key={i} x={tx + 9} y={ty + 15 + i * 13} fontSize="10" fill={i === 0 ? '#FFD9A8' : '#EDE6D8'} fontWeight={i === 0 ? 700 : 500} className="num">{l}</text>
+              ))}
+            </g>
+          )
+        })()}
       </svg>
     </div>
   )

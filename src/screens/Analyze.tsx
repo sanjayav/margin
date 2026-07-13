@@ -3,7 +3,7 @@ import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import type { Aggregate, Scenario, Vehicle } from '../engine/types'
 import { aggregate, applyScenario, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
-import LimitChart, { type ChartPoint } from '../components/LimitChart'
+import LimitChart, { type ChartPoint, type DragConfig } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
 import { GapHeatmap, Mekko } from '../components/Charts'
 import { makerYearGap, makerMekko } from '../lib/analytics'
@@ -119,6 +119,64 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   }
   const aggFor = (sc: Scenario) => aggregate(applyScenario(raw, sc, pack, overrides).filter(matchPath), pack, sc, node.label, node.level, 'probe')
 
+  // ── DIRECT MANIPULATION (Model workbench only): drag a bubble, the engine
+  // solves the levers that reach the target. Vertical = electrification solve
+  // (bisection on the scoped ZE share); horizontal = the mass lever (which
+  // moves that scope's limit too). Analyse never gets this — actuals are law.
+  const patchOverride = useStore((s) => s.patchOverride)
+  const [lastDrag, setLastDrag] = useState<{ scope: string; label: string; desc: string; prev: Partial<Scenario> | null } | null>(null)
+  const scopeOf = (key: string) => (level === 0 ? `pool:${key}` : key)
+  const aggScope = (key: string, ovPatch: Partial<Scenario>) => {
+    const scope = scopeOf(key)
+    const ovAll = { ...overrides, [scope]: { ...(overrides[scope] ?? {}), ...ovPatch } }
+    const rows = applyScenario(raw, scenario, pack, ovAll).filter((v) => (level === 0 ? (v.pool || v.parent) === key : v.parent === key))
+    return aggregate(rows, pack, scenario, key, level === 0 ? 'pool' : 'parent', 'drag-probe')
+  }
+  const solveDrag = (key: string, targetMass: number, targetMetric: number) => {
+    const cur = items.find((i) => i.key === key)
+    if (!cur) return null
+    const scope = scopeOf(key)
+    const existing = overrides[scope] ?? {}
+    const effShift = existing.massShiftKg ?? scenario.massShiftKg
+    const massShiftKg = pack.massBasedLimit === false ? (existing.massShiftKg ?? 0)
+      : Math.max(-250, Math.min(250, Math.round(effShift + (targetMass - cur.mass))))
+    // bisection: forced ZE share that lands the scope on the target metric
+    const metricAt = (share: number) => aggScope(key, { massShiftKg, evSharePct: share }).avgMetric
+    let lo = 0, hi = 95
+    if (metricAt(95) > targetMetric) { lo = hi = 95 }        // even full ZE can't get there
+    else if (metricAt(0) < targetMetric) { lo = hi = 0 }     // target is above the 0%-forced fleet
+    else for (let it = 0; it < 16; it++) { const mid = (lo + hi) / 2; if (metricAt(mid) > targetMetric) lo = mid; else hi = mid }
+    const share = Math.round(hi * 10) / 10
+    const after = aggScope(key, { massShiftKg, evSharePct: share })
+    return { scope, share, massShiftKg, after, cur }
+  }
+  const dragCfg: DragConfig | undefined = mode === 'model' && level <= 1 ? {
+    lockX: pack.massBasedLimit === false,
+    enabled: (p) => !p.isFleet && p.units > 0 && p.status !== 'exempt',
+    preview: (key, mass, metric) => {
+      const sol = solveDrag(key, mass, metric)
+      if (!sol) return []
+      const massTxt = pack.massBasedLimit === false ? '' : ` · mass ${sol.massShiftKg >= 0 ? '+' : ''}${sol.massShiftKg} kg`
+      return [
+        `${key.split(/\s+/).slice(0, 2).join(' ')} → ${fmtNum(metric, 1)} ${pack.metricUnit}`,
+        `solve: force ${sol.share}% ZE${massTxt}`,
+        `fine ${fmtMoney(sol.cur.fine, pack.currency)} → ${fmtMoney(sol.after.fine, pack.currency)}`,
+        sol.after.gap > 0 ? `still ${fmtNum(sol.after.gap, 1)} over` : 'clears the line',
+      ]
+    },
+    commit: (key, mass, metric) => {
+      const sol = solveDrag(key, mass, metric)
+      if (!sol) return
+      setLastDrag({
+        scope: sol.scope, label: key,
+        desc: `${sol.share}% ZE${pack.massBasedLimit === false ? '' : ` · mass ${sol.massShiftKg >= 0 ? '+' : ''}${sol.massShiftKg} kg`}`,
+        prev: overrides[sol.scope] ? { ...overrides[sol.scope] } : null,
+      })
+      patchOverride(sol.scope, { evSharePct: sol.share, massShiftKg: sol.massShiftKg })
+    },
+  } : undefined
+  const undoDrag = () => { if (lastDrag) { patchOverride(lastDrag.scope, null); if (lastDrag.prev) patchOverride(lastDrag.scope, lastDrag.prev); setLastDrag(null) } }
+
   // Trajectory: this node's gap across every compliance year (the ICCT framing —
   // "are we on track", not just "where are we this year").
   const glide = useMemo(
@@ -177,7 +235,9 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   const copyLink = async () => { const url = buildShareUrl(); try { await navigator.clipboard.writeText(url) } catch { /* ignore */ } setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
   const sectionLabel = LEVEL_NAME[Math.min(level, 3)]
-  const hint = level < 2 ? 'click a bubble to drill in' : level === 2 ? 'click a model to open it' : level === 3 ? 'click a variant to inspect' : 'size = sales · colour = powertrain'
+  const hint = mode === 'model' && level <= 1
+    ? 'drag a bubble to set a target — the engine solves the levers · click to drill'
+    : level < 2 ? 'click a bubble to drill in' : level === 2 ? 'click a model to open it' : level === 3 ? 'click a variant to inspect' : 'size = sales · colour = powertrain'
 
   return (
     <div className="space-y-5">
@@ -298,7 +358,14 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <span className="hidden items-center gap-2 text-[11px] text-ink-500 md:flex"><Icon name="scatter" size={12} /> {hint}</span>
         </span>
       }>
-        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} />
+        {lastDrag && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-brand/25 bg-brand/[0.06] px-3 py-1.5 text-[11.5px]">
+            <Icon name="sliders" size={13} className="text-brand" />
+            <span className="text-ink-200">Applied to <b>{lastDrag.label.split(' ')[0]}</b>: <span className="num font-semibold">{lastDrag.desc}</span> — scoped levers, visible in the rail.</span>
+            <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
+          </div>
+        )}
+        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} />
       </Section>
 
       {/* Breakdown + children list */}
