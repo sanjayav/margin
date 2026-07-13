@@ -70,5 +70,23 @@ for (const y of pack.years) {
   check(`market tree ${y} has volume`, t.rawUnits > 0, `${t.rawUnits}`)
 }
 
+// ── the master structure's computed columns (AO–AT): engine identities ──────
+{
+  const PETROL_DIV = 23.7135
+  const t = buildTree(IN, pack, base(2026), {})
+  for (const c of (t.children ?? []).filter((x) => x.rawUnits > 0)) {
+    const P = c.avgMetric * PETROL_DIV
+    const T = c.limit * PETROL_DIV
+    const credit = c.limit - c.avgMetric
+    const ok = Math.abs(P / PETROL_DIV - c.avgMetric) < 1e-9 && Math.abs(T / PETROL_DIV - c.limit) < 1e-9
+    check(`ledger identity: CAFCS=P/23.7135 & ACAFC=T/23.7135 · ${c.label.split(' ')[0]}`, ok)
+    check(`ledger sign convention matches gap · ${c.label.split(' ')[0]}`, (credit >= 0) === (c.gap <= 0), `credit ${credit.toFixed(3)} gap ${c.gap.toFixed(3)}`)
+  }
+  // MG 2025 known truth: P ≈ 23 g/km (EVs included at 0 — not the file's illustrative 150)
+  const mg = aggregateParent(IN, pack, base(2025), 'MG Motor')
+  const P = mg.avgMetric * PETROL_DIV
+  check('MG 2025 ledger P ≈ 23 g/km (EVs included, engine truth)', P > 15 && P < 30, P.toFixed(1))
+}
+
 console.log(`\n${pass} passed · ${fail} failed`)
 if (fail) process.exit(1)

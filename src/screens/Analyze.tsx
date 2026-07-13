@@ -9,6 +9,7 @@ import { GapHeatmap, Mekko } from '../components/Charts'
 import { makerYearGap, makerMekko } from '../lib/analytics'
 import { parentPoolMap } from '../engine/pooling'
 import { Section, Stat, Bar } from '../components/ui'
+import CafeLedger from '../components/CafeLedger'
 import Icon from '../components/Icon'
 import { makeLimitAt } from '../lib/chart'
 import { useCountUp } from '../lib/useCountUp'
@@ -411,6 +412,9 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <Mekko cols={mekko} onPick={openExplore} />
         </Section>
       </div>
+
+      {/* the master structure's computed columns (AO–AT) — India CAFE ledger */}
+      {country === 'IN' && <CafeLedger basis={actuals ? 'actuals' : 'live'} />}
 
       {threeYr && (
         <Section className="rise" title="EU three-year averaging · 2025–2027"
