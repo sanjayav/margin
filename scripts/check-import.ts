@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   parseFile, parseDelimited, autoMap, detectVendor, looksLikeHeader,
-  validateGrid, toVehicles, mergeFleet, REQUIRED, type FieldKey,
+  validateGrid, toVehicles, mergeFleet, templateCsv, REQUIRED, type FieldKey,
 } from '../src/lib/importer.js'
 import type { Vehicle } from '../src/engine/types.js'
 
@@ -96,6 +96,31 @@ function run(grid: string[][], country: 'IN') {
   check('paste: bad year flagged', errs.some(([k]) => k === '1:year'))
   check('paste: missing CO₂ flagged', errs.some(([k]) => k === '2:co2'))
   check('paste: HEV → Strong Hybrid for India', r.vehicles[0].powertrain === 'Strong Hybrid', r.vehicles[0].powertrain)
+}
+
+// ── 3b · the India MASTER structure round-trips (Sanjay's headings, verbatim) ─
+{
+  const tpl = templateCsv('IN')
+  const grid = parseDelimited(tpl)
+  check('IN template: header row is the master structure', grid[0][0] === 'Year' && grid[0].includes('Regultory Name') && grid[0].includes('Vehicle Calssification') && grid[0].includes('FT Code'))
+  const r = run(grid, 'IN')
+  check('master headings: all required fields auto-map', REQUIRED.every((f) => r.mapped.includes(f)),
+    'missing: ' + REQUIRED.filter((f) => !r.mapped.includes(f)).join(','))
+  for (const f of ['variantId', 'ftCode', 'fuelKmpl', 'fuelMpg', 'fuelL100', 'range', 'otrPrice', 'refMass', 'testMass', 'tax', 'driveCycle', 'lengthMm', 'widthMm', 'heightMm', 'segment', 'bodyStyle', 'scenario'] as const)
+    check(`master heading maps: ${f}`, r.mapped.includes(f))
+  check("'Regultory Name' (source spelling) → parent", r.vehicles[0].parent === 'MG Motor')
+  check("'Vehicle Calssification' (source spelling) → class", r.vehicles[0].vclass === 'M1')
+  check('Engine Capacity in litres coerced to cc', r.vehicles[0].engineCC === 1498, String(r.vehicles[0].engineCC))
+  check('structure fields land on the Vehicle', (r.vehicles[0] as any).ftCode === 'G' && (r.vehicles[0] as any).fuelKmpl === 15.43 && (r.vehicles[0] as any).lengthMm === 4323)
+  check('BEV row carries E-Range + battery', (r.vehicles[1] as any).range === 332 && r.vehicles[1].battery === 38)
+  check('zero validation errors on the master template', [...r.issues.values()].filter((i) => i.severity === 'error').length === 0)
+}
+
+// ── 3c · a test-mass-only file still auto-maps the required mass (fallback) ──
+{
+  const clip = 'Manufacturer\tModel\tYear\tPowertrain\tFuel\tCO2\tTest Mass\tUnits\nX AG\tM1\t2026\tICE\tPetrol\t120\t1500\t1000\n'
+  const r = run(parseDelimited(clip), 'EU' as any)
+  check('test-mass-only file: required mass auto-maps via fallback', r.mapped.includes('mass') && r.vehicles[0].mass === 1500)
 }
 
 // ── 4 · real-world file: the Ram scenario workbook DATA sheet parses ─────────

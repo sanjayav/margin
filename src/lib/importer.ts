@@ -16,9 +16,11 @@ import type { CountryId, Vehicle } from '../engine/types.js'
 
 // ── target schema ────────────────────────────────────────────────────────────
 export type FieldKey =
-  | 'parent' | 'brand' | 'model' | 'variant' | 'year' | 'powertrain' | 'fuel'
+  | 'parent' | 'brand' | 'model' | 'variant' | 'variantId' | 'year' | 'powertrain' | 'fuel'
   | 'co2' | 'mass' | 'sales' | 'vclass' | 'engineCC' | 'battery' | 'footprint'
   | 'segment' | 'bodyStyle' | 'gearbox' | 'driveline' | 'powerKW' | 'pool' | 'cnf' | 'zev'
+  | 'ftCode' | 'fuelKmpl' | 'fuelMpg' | 'fuelL100' | 'energy' | 'range' | 'otrPrice' | 'tax'
+  | 'refMass' | 'testMass' | 'driveCycle' | 'lengthMm' | 'widthMm' | 'heightMm' | 'scenario'
 
 export interface FieldDef {
   key: FieldKey
@@ -51,6 +53,23 @@ export const FIELDS: FieldDef[] = [
   { key: 'pool', label: 'Pool', kind: 'text', hint: 'compliance pool (defaults to manufacturer)' },
   { key: 'cnf', label: 'CNF %', kind: 'float', hint: 'carbon-neutral-fuel discount (India)' },
   { key: 'zev', label: 'ZEV flag', kind: 'int', hint: '1 = zero-emission (UK)' },
+  // ── the India master-file structure (Sanjay's headings — full round-trip) ──
+  { key: 'variantId', label: 'Variant code', kind: 'text', hint: 'stable spec id (ICE_G_82_MT_FWD_0)' },
+  { key: 'ftCode', label: 'FT code', kind: 'text', hint: 'fuel-type code (G/D/C/E/H/L)' },
+  { key: 'fuelKmpl', label: 'Fuel economy km/l', kind: 'float', hint: 'as homologated' },
+  { key: 'fuelMpg', label: 'Fuel economy mpg', kind: 'float', hint: 'as homologated' },
+  { key: 'fuelL100', label: 'Fuel cons. L/100km', kind: 'float', hint: 'petrol-equivalent' },
+  { key: 'energy', label: 'Energy consumption', kind: 'float', hint: 'kWh/100km (EVs)' },
+  { key: 'range', label: 'E-Range km', kind: 'float', hint: 'electric range' },
+  { key: 'otrPrice', label: 'OTR price', kind: 'float', hint: 'on-the-road price' },
+  { key: 'tax', label: 'Tax', kind: 'float', hint: 'rate/amount as recorded' },
+  { key: 'refMass', label: 'Reference mass kg', kind: 'float', hint: 'homologation reference' },
+  { key: 'testMass', label: 'Test mass kg', kind: 'float', hint: 'EU limit basis' },
+  { key: 'driveCycle', label: 'Drive cycle', kind: 'text', hint: 'MIDC / WLTC / NEDC' },
+  { key: 'lengthMm', label: 'Length mm', kind: 'float', hint: '' },
+  { key: 'widthMm', label: 'Width mm', kind: 'float', hint: '' },
+  { key: 'heightMm', label: 'Height mm', kind: 'float', hint: '' },
+  { key: 'scenario', label: 'Scenario name', kind: 'text', hint: 'Base / what-if tag' },
 ]
 export const REQUIRED: FieldKey[] = FIELDS.filter((f) => f.required).map((f) => f.key)
 const FIELD_BY_KEY = new Map(FIELDS.map((f) => [f.key, f]))
@@ -68,7 +87,7 @@ syn('year', 'year', 'my', 'model year', 'calendar year', 'fiscal year', 'sales y
 syn('powertrain', 'powertrain', 'powertrain type', 'propulsion', 'propulsion system', 'propulsion design', 'fuel type group', 'technology', 'electrification', 'engine type', 'xev type')
 syn('fuel', 'fuel', 'fuel type', 'energy source', 'primary fuel')
 syn('co2', 'co2', 'co2 g/km', 'co2 gkm', 'co2 emissions', 'co2 combined', 'co2 wltp', 'co2 nedc', 'co2 midc', 'emissions value', 'co2 gpkm', 'wltp co2', 'specific co2', 'fuel consumption co2', 'co₂', 'co₂ g/km')
-syn('mass', 'mass', 'mass kg', 'kerb weight', 'kerb weight kg', 'curb weight', 'curb weight kg', 'unladen mass', 'kerb mass', 'weight kg', 'mass in running order', 'running order mass', 'miro', 'test mass', 'reference mass', 'average mass')
+syn('mass', 'mass', 'mass kg', 'kerb weight', 'kerb weight kg', 'curb weight', 'curb weight kg', 'unladen mass', 'kerb mass', 'weight kg', 'mass in running order', 'running order mass', 'miro', 'average mass')
 syn('sales', 'sales', 'units', 'volume', 'registrations', 'sales volume', 'vehicle volume', 'regs', 'units sold', 'sales units', 'new registrations', 'volumes', 'qty', 'quantity')
 syn('vclass', 'class', 'vehicle class', 'vehicle classification', 'category', 'reg class', 'regulatory class', 'vehicle category')
 syn('engineCC', 'engine cc', 'cc', 'displacement', 'engine capacity', 'engine size', 'capacity cc', 'engine displacement', 'litres', 'engine capacity l')
@@ -82,6 +101,28 @@ syn('powerKW', 'power kw', 'engine power', 'power', 'kw', 'max power', 'engine p
 syn('pool', 'pool', 'pool name', 'compliance pool')
 syn('cnf', 'cnf', 'cnf %', 'cnf discount', 'carbon neutral fuel')
 syn('zev', 'zev', 'zev flag', 'ze flag')
+// the India master-file headings (verbatim, incl. source spellings)
+syn('parent', 'regultory name')
+syn('variant', 'variant name')
+syn('variantId', 'variant code')
+syn('sales', 'vehicle volume')
+syn('co2', 'fuel consumption', 'fuel consumption co2')
+syn('ftCode', 'ft code')
+syn('fuelKmpl', 'fuel economy kmpl', 'kmpl', 'km/l', 'fuel economy km l')
+syn('fuelMpg', 'fuel economy mpg', 'mpg')
+syn('fuelL100', 'fuel consumption l 100', 'fuel consumption l/100', 'l/100', 'l 100km', 'fuel consumption l 100km')
+syn('energy', 'energy consumption')
+syn('range', 'e-range', 'e range', 'electric range', 'range km')
+syn('otrPrice', 'otr price', 'price', 'on the road price', 'showroom price')
+syn('tax', 'tax', 'tax %')
+syn('refMass', 'reference mass')
+syn('testMass', 'test mass')
+syn('driveCycle', 'drive cycle', 'cycle')
+syn('vclass', 'vehicle calssification')
+syn('lengthMm', 'length', 'length mm')
+syn('widthMm', 'width', 'width mm')
+syn('heightMm', 'height', 'height mm')
+syn('scenario', 'scenario name')
 
 // ── vendor presets (detection only — mapping always goes through SYNONYMS) ───
 export interface Vendor { id: 'oem' | 'sp' | 'jato'; name: string; blurb: string; tokens: string[] }
@@ -107,7 +148,7 @@ export function detectVendor(headers: string[]): Vendor | null {
 // synonym matched and the field is still free. Order = match priority.
 const FUZZY: [FieldKey, RegExp][] = [
   ['co2', /co2/],
-  ['mass', /kerbweight|curbweight|kerbmass|unladenmass|massinrunningorder/],
+  ['mass', /kerbweight|curbweight|kerbmass|unladenmass|massinrunningorder|testmass|referencemass/],
   ['sales', /registrations|salesvolume|volume|unitssold/],
   ['year', /(model|calendar|fiscal|production|sales|registration)year/],
   ['powertrain', /powertrain|propulsion/],
@@ -137,6 +178,12 @@ export function autoMap(headers: string[]): Mapping[] {
       if (!taken.has(field) && re.test(c)) { m.field = field; taken.add(field); break }
     }
   })
+  // repair pass: a file whose ONLY mass column is Test/Reference Mass (EU
+  // extracts) must still satisfy the required 'mass' — that column donates.
+  if (!taken.has('mass')) {
+    const donor = out.find((m) => m.field === 'testMass') ?? out.find((m) => m.field === 'refMass')
+    if (donor) { donor.field = 'mass'; taken.add('mass') }
+  }
   return out
 }
 
@@ -359,6 +406,15 @@ const NUM_RULES: Partial<Record<FieldKey, { min: number; max: number; label: str
   powerKW: { min: 0, max: 1500, label: 'power' },
   cnf: { min: 0, max: 1, label: 'CNF' },
   zev: { min: 0, max: 1, label: 'ZEV flag' },
+  fuelKmpl: { min: 0, max: 60, label: 'km/l' },
+  fuelMpg: { min: 0, max: 150, label: 'mpg' },
+  fuelL100: { min: 0, max: 30, label: 'L/100km' },
+  range: { min: 0, max: 1500, label: 'E-Range' },
+  refMass: { min: 300, max: 4500, label: 'reference mass' },
+  testMass: { min: 300, max: 4500, label: 'test mass' },
+  lengthMm: { min: 2000, max: 7000, label: 'length' },
+  widthMm: { min: 1200, max: 2400, label: 'width' },
+  heightMm: { min: 1100, max: 2500, label: 'height' },
 }
 
 export const parseNum = (s: string): number | null => {
@@ -431,7 +487,10 @@ export function toVehicles(rows: string[][], fields: FieldKey[], country: Countr
     }
     const opt = (k: keyof Vehicle, val: string | number | undefined) => { if (val !== undefined && val !== '') (v as any)[k] = val }
     opt('variant', get(row, 'variant') || undefined)
-    opt('engineCC', num(row, 'engineCC'))
+    opt('variantId', get(row, 'variantId') || undefined)
+    // the master file records Engine Capacity in LITRES (1.498) — coerce to cc
+    const cc = num(row, 'engineCC')
+    opt('engineCC', cc != null && cc > 0 && cc < 20 ? Math.round(cc * 1000) : cc)
     opt('battery', num(row, 'battery'))
     opt('footprint', num(row, 'footprint'))
     opt('segment', get(row, 'segment') || undefined)
@@ -441,6 +500,21 @@ export function toVehicles(rows: string[][], fields: FieldKey[], country: Countr
     opt('powerKW', num(row, 'powerKW'))
     opt('cnf', num(row, 'cnf'))
     opt('zev', num(row, 'zev'))
+    opt('ftCode', get(row, 'ftCode') || undefined)
+    opt('fuelKmpl', num(row, 'fuelKmpl'))
+    opt('fuelMpg', num(row, 'fuelMpg'))
+    opt('fuelL100', num(row, 'fuelL100'))
+    opt('energy', num(row, 'energy'))
+    opt('range', num(row, 'range'))
+    opt('otrPrice', num(row, 'otrPrice'))
+    opt('tax', num(row, 'tax'))
+    opt('refMass', num(row, 'refMass'))
+    opt('testMass', num(row, 'testMass'))
+    opt('driveCycle', get(row, 'driveCycle') || undefined)
+    opt('lengthMm', num(row, 'lengthMm'))
+    opt('widthMm', num(row, 'widthMm'))
+    opt('heightMm', num(row, 'heightMm'))
+    if (get(row, 'scenario')) v.scenario = get(row, 'scenario')
     out.push(v)
   }
   return out
@@ -456,15 +530,20 @@ export function mergeFleet(existing: Vehicle[], imported: Vehicle[]): Vehicle[] 
 
 // ── template (the OEM-actuals starting point) ────────────────────────────────
 export function templateCsv(country: CountryId): string {
+  if (country === 'IN') {
+    // Sanjay's master-file structure, verbatim (duplicated headings carry their
+    // unit so the auto-mapper lands each column deterministically).
+    const headers = ['Year', 'Sales Market', 'Data Mode', 'Scenario Name', 'Regultory Name', 'Brand', 'Model', 'Variant Name', 'Variant Code', 'Body Style', 'Segment', 'Powertrain Type', 'Engine Capacity', 'Fuel Type', 'Engine Power', 'FT Code', 'Gear Box', 'Driveline', 'Battery Capacity', 'Kerb Weight', 'Vehicle Volume', 'Fuel Consumption CO2', 'Fuel economy kmpl', 'Fuel economy mpg', 'Fuel Consumption l/100', 'Foot Print', 'Energy consumption', 'E-Range', 'OTR Price', 'Reference Mass', 'Test Mass', 'Tax', 'Vehicle Calssification', 'Drive Cycle', 'Length', 'Width', 'Height']
+    const rows = [
+      ['2025', 'IN', 'Variant', 'Base', 'MG Motor', 'MG', 'Astor', '1.5 VTi-TECH MT', 'ICE_G_82_MT_FWD_0', 'SUV', 'C', 'ICE', '1.498', 'Gasoline', '82', 'G', 'MT', 'FWD', '0', '1245', '1611', '150.4', '15.43', '43.6', '6.48', '7.82', '', '', '', '1345', '', '', 'M1', 'MIDC', '4323', '1809', '1650'],
+      ['2025', 'IN', 'Variant', 'Base', 'MG Motor', 'MG', 'Windsor EV', '38 kWh', 'BEV_E_100_EVT_FWD_38', 'MPV', 'C', 'BEV', '', 'Electricity', '100', 'E', 'EVT', 'FWD', '38', '1495', '42713', '0', '', '', '0', '7.95', '', '332', '', '1595', '', '', 'M1', 'MIDC', '4295', '1850', '1677'],
+    ]
+    return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+  }
   const headers = ['Manufacturer', 'Brand', 'Model', 'Variant', 'Year', 'Powertrain', 'Fuel', 'CO2 g/km', 'Mass kg', 'Units', 'Class', 'Engine cc', 'Battery kWh']
-  const rows = country === 'IN'
-    ? [
-      ['Maruti Suzuki India Limited', 'Maruti Suzuki', 'Baleno', '1.2 Petrol MT', '2026', 'ICE', 'Petrol', '96.4', '920', '145000', 'Passenger car', '1197', ''],
-      ['Tata Motors Passenger Vehicles Limited', 'Tata', 'Nexon.ev', '45 kWh', '2026', 'BEV', 'Electric', '0', '1450', '52000', 'Passenger car', '', '45'],
-    ]
-    : [
-      ['Example Motor Corp', 'Example', 'Model A', '1.5 Auto', '2026', 'ICE', 'Petrol', '124', '1350', '42000', 'Passenger car', '1498', ''],
-      ['Example Motor Corp', 'Example', 'Model E', 'Long Range', '2026', 'BEV', 'Electric', '0', '1750', '18000', 'Passenger car', '', '77'],
-    ]
+  const rows = [
+    ['Example Motor Corp', 'Example', 'Model A', '1.5 Auto', '2026', 'ICE', 'Petrol', '124', '1350', '42000', 'Passenger car', '1498', ''],
+    ['Example Motor Corp', 'Example', 'Model E', 'Long Range', '2026', 'BEV', 'Electric', '0', '1750', '18000', 'Passenger car', '', '77'],
+  ]
   return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
 }

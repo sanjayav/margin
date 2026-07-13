@@ -43,6 +43,19 @@ export interface Vehicle {
   driveCycle?: string      // homologation cycle (MIDC / WLTC / NEDC …)
   powerKW?: number         // rated power, kW
   co2Estimated?: boolean   // co2 was back-filled from siblings/mass fit, not measured
+  // ── the India master-file structure (every heading has a home; empty
+  //    columns are captured so they light up the moment the file fills them) ──
+  ftCode?: string          // fuel-type code (G/D/C/E/H/L)
+  fuelKmpl?: number        // fuel economy, km/l
+  fuelMpg?: number         // fuel economy, mpg
+  fuelL100?: number        // fuel consumption, L/100km (petrol-equivalent)
+  rangeAlt?: number        // second E-Range column (alt cycle)
+  otrPrice?: number        // on-the-road price
+  tax?: number             // tax rate/amount as recorded in the source
+  refMass?: number         // reference mass, kg
+  lengthMm?: number
+  widthMm?: number
+  heightMm?: number
   // ── added-variant volume control (only used on Scenario.extraVariants) ──
   share?: number           // 0–1: this variant's target share of its scope (proportional)
   shareScope?: 'market' | 'manufacturer' | 'model'

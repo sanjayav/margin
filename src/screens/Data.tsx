@@ -165,7 +165,23 @@ export default function Data() {
     { k: 'vclass', label: 'Class' },
   ], [pack])
 
-  const cols = useMemo(() => COLS.filter((c) => !c.scenarioOnly || scenarioMode), [COLS, scenarioMode])
+  // The master-file structure: these headings appear as columns the moment the
+  // market's data carries them (hidden when empty, never dropped from the schema).
+  const OPT_COLS: Col[] = useMemo(() => [
+    { k: 'segment' as ColKey, label: 'Segment' },
+    { k: 'bodyStyle' as ColKey, label: 'Body style' },
+    { k: 'fuelKmpl' as ColKey, label: 'km/l', num: true },
+    { k: 'range' as ColKey, label: 'E-Range km', num: true },
+    { k: 'otrPrice' as ColKey, label: 'OTR price', num: true },
+    { k: 'tax' as ColKey, label: 'Tax', num: true },
+  ], [])
+  const cols = useMemo(() => {
+    const present = OPT_COLS.filter((c) => base.some((r) => (r as any)[c.k] != null && (r as any)[c.k] !== ''))
+    const out = COLS.filter((c) => !c.scenarioOnly || scenarioMode)
+    // slot the structure columns before Class so the table reads like the master
+    const at = out.findIndex((c) => c.k === 'vclass')
+    return [...out.slice(0, at), ...present, ...out.slice(at)]
+  }, [COLS, OPT_COLS, scenarioMode, base])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
