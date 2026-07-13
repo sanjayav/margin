@@ -161,3 +161,17 @@ input[type="range"]::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* ── Credit book: the market-map flow animation ─────────────────────────────
+   Surplus visibly streams seller → buyer. Stilled under reduced motion. */
+.cb-flow {
+  stroke-dasharray: 10 7;
+  animation: cb-stream 1.1s linear infinite;
+}
+@keyframes cb-stream {
+  to { stroke-dashoffset: -17; }
+}
+.cb-node { transition: opacity 0.2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .cb-flow { animation: none; stroke-dasharray: none; }
+}
