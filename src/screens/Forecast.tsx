@@ -12,6 +12,7 @@ import { streamForecast, colorHex, BASELINE_HEX, LIMIT_HEX, SCEN_COLORS, type Ai
 import { CASES, caseDrivers, outlookRun, bridgeYear, breakEvenAdoption, mandateFloor, DRIVER_META, type CaseId, type OutlookConfig } from '../engine/outlook'
 import { useDrivers, driverSetFor, weightsFor } from '../lib/drivers'
 import OutlookPanel from '../components/OutlookPanel'
+import MotionTheatre from '../components/MotionTheatre'
 import { buildForecastPack, openPrintReport } from '../lib/report'
 import { svgFanChart, svgWaterfall, svgSCurve } from '../lib/packcharts'
 import { Section, StatusPill } from '../components/ui'
@@ -367,6 +368,13 @@ export default function Forecast() {
 
       {/* impact header — the board-grade verdict for the focused scenario */}
       <ImpactHeader scen={focusScen} fc={focusFc} baseFc={baseFc} overlay={overlay} pack={pack} />
+
+      {/* THE DECADE, ANIMATED — engine keyframes, interpolated */}
+      <Section
+        title={<span className="flex items-center gap-2"><Icon name="activity" size={16} className="text-brand" /> The decade, animated</span>}
+        right={<span className="hidden text-[11px] text-ink-500 md:inline">a motion chart of the scenario engine — every keyframe computed, nothing invented</span>}>
+        <MotionTheatre raw={raw} pack={pack} country={country} drivers={driverSet} vintageYear={vintageYear} />
+      </Section>
 
       {/* hero: all pinned scenarios vs the tightening limit */}
       <Section title="Every scenario against the line" right={<StudioLegend shown={shown} focusId={focusId} />}>
