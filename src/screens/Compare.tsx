@@ -65,7 +65,7 @@ export default function Compare() {
           Save a scenario from the Assumptions rail (Snapshots &amp; saved → &ldquo;+ Save current&rdquo;) and it appears here as a
           column — every number re-run through the engine, with deltas against your live assumptions.
         </p>
-        <button onClick={() => setScreen('analyze')} className="btn-primary mx-auto mt-5"><Icon name="sliders" size={15} /> Build a scenario in Analyze</button>
+        <button onClick={() => setScreen('plan')} className="btn-primary mx-auto mt-5"><Icon name="sliders" size={15} /> Build a scenario in Plan</button>
       </div>
     )
   }

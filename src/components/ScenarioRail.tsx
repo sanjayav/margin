@@ -156,7 +156,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const myScenarios = savedScenarios.filter((s) => s.country === country)
 
   // Drill path: [pool, manufacturer, model, variantKey]
-  const level = screen === 'analyze' ? drillPath.length : 0
+  const level = screen === 'plan' ? drillPath.length : 0
   const pool = drillPath[0] ?? ''
   const maker = drillPath[1] ?? ''
   const model = drillPath[2] ?? ''

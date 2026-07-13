@@ -77,12 +77,14 @@ export default function CommandK() {
 
     if (inModule) {
       const screens: { label: string; icon: IconName; go: () => void; sub?: string }[] = [
-        { label: 'Analyze', icon: 'scatter', go: () => setScreen('analyze'), sub: 'drill from market to variant' },
-        { label: 'Data', icon: 'database', go: () => setScreen('data'), sub: 'expert table · facets · pivot' },
+        { label: 'Plan', icon: 'scatter', go: () => setScreen('plan'), sub: 'compliance workspace · drill market → variant' },
+        { label: 'Forecast', icon: 'trending', go: () => setScreen('forecast'), sub: 'multi-year scenario studio' },
         { label: 'Scenario · Get under the line', icon: 'target', go: () => setScreen('under'), sub: 'cheapest path to compliance' },
-        { label: 'Scenario · Forecast', icon: 'trending', go: () => setScreen('forecast'), sub: 'multi-year outlook' },
         { label: 'Scenario · Compare', icon: 'layers', go: () => setScreen('compare'), sub: 'saved scenarios side-by-side' },
+        { label: 'Credit book', icon: 'scale' as IconName, go: () => setScreen('creditbook'), sub: 'positions, banking & trades' },
+        { label: 'Pricing', icon: 'card' as IconName, go: () => setScreen('pricing'), sub: 'compliance cost per car · price & tax' },
         ...(poolingAddon ? [{ label: 'Pooling', icon: 'handshake' as IconName, go: () => setScreen('pooling'), sub: 'pools, value-split & trading' }] : []),
+        { label: 'Data & imports', icon: 'database', go: () => setScreen('data'), sub: 'expert table · facets · import studio' },
         { label: 'Intelligence', icon: 'activity', go: () => setScreen('intel'), sub: 'regulatory event feed' },
         { label: 'Admin', icon: 'settings', go: () => setScreen('admin'), sub: 'rule packs · data freshness' },
       ]
@@ -90,10 +92,10 @@ export default function CommandK() {
 
       parentsFor(country).forEach((m) =>
         list.push({
-          id: `mk-${m}`, group: 'Manufacturers', label: m, sub: 'open in Analyze', icon: 'building',
+          id: `mk-${m}`, group: 'Manufacturers', label: m, sub: 'open in Plan', icon: 'building',
           run: done(() => {
             const pmap = parentPoolMap(getFleet(country), scenario.year)
-            setParent(m); setDrill([pmap[m] ?? m, m]); setScreen('analyze')
+            setParent(m); setDrill([pmap[m] ?? m, m]); setScreen('plan')
           }),
         }))
     }

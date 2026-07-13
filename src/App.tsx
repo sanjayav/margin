@@ -9,29 +9,41 @@ import { ScenarioRail } from './components/ScenarioRail'
 import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import PlatformShell from './components/PlatformShell'
+import ErrorBoundary from './components/ErrorBoundary'
 import CommandK, { useCmdK, CMDK_HINT } from './components/CommandK'
 import { applySharedFromHash } from './lib/share'
 import Analyze from './screens/Analyze'
 import Data from './screens/Data'
 import Pooling from './screens/Pooling'
-import Plan from './screens/Plan'
+import ScenarioScreen from './screens/Scenario'
+import Forecast from './screens/Forecast'
+import CreditBook from './screens/CreditBook'
+import Pricing from './screens/Pricing'
 import Intelligence from './screens/Intelligence'
 import Admin from './screens/Admin'
 import Login from './screens/Login'
 
-// `addon` items only appear in the workspace nav when the org owns that add-on.
+// The five workspace modules — Plan is the compliance workspace (né Analyze);
+// Pooling is the add-on (only some regimes allow pooled averages). `addon`
+// items appear only when the org owns that add-on.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling' }[] = [
-  { id: 'analyze', label: 'Analyze', icon: 'scatter', tier: 'Core' },
-  { id: 'data', label: 'Data', icon: 'database', tier: 'Core' },
-  { id: 'plan', label: 'Scenario', icon: 'target', tier: 'Core' },
+  { id: 'plan', label: 'Plan', icon: 'scatter', tier: 'Core' },
+  { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
+  { id: 'scenario', label: 'Scenario', icon: 'target', tier: 'Core' },
+  { id: 'creditbook', label: 'Credit book', icon: 'scale', tier: 'Core' },
+  { id: 'pricing', label: 'Pricing', icon: 'card', tier: 'Core' },
   { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
-  { id: 'intel', label: 'Intelligence', icon: 'activity', tier: 'Plus' },
-  { id: 'admin', label: 'Admin', icon: 'settings', tier: 'Plus' },
 ]
 
-const PLAN_TABS: { id: 'under' | 'forecast' | 'compare'; label: string; icon: IconName }[] = [
+// Workspace utilities — always reachable, but not "modules".
+const UTIL: { id: ScreenId; label: string; icon: IconName }[] = [
+  { id: 'data', label: 'Data & imports', icon: 'database' },
+  { id: 'intel', label: 'Intelligence', icon: 'activity' },
+  { id: 'admin', label: 'Admin', icon: 'settings' },
+]
+
+const SCENARIO_TABS: { id: 'under' | 'compare'; label: string; icon: IconName }[] = [
   { id: 'under', label: 'Get under the line', icon: 'target' },
-  { id: 'forecast', label: 'Forecast', icon: 'trending' },
   { id: 'compare', label: 'Compare scenarios', icon: 'layers' },
 ]
 
@@ -39,7 +51,7 @@ const CHROME = '#17140F' // warm near-black chrome (sidebar + top bar)
 
 function Sidebar() {
   const screen = useStore((s) => s.screen)
-  const planTab = useStore((s) => s.planTab)
+  const scenarioTab = useStore((s) => s.scenarioTab)
   const setScreen = useStore((s) => s.setScreen)
   const country = useStore((s) => s.country)
   const poolingAddon = useStore((s) => s.poolingAddon)
@@ -83,10 +95,10 @@ function Sidebar() {
               <span className="flex-1 font-medium">{n.label}</span>
               <span className={`text-[9px] font-semibold uppercase tracking-wider ${n.tier === 'Core' ? 'text-brand-400/70' : n.tier === 'Add-on' ? 'text-accent' : 'text-[#6E665A]'}`}>{n.tier}</span>
             </button>
-            {n.id === 'plan' && (
+            {n.id === 'scenario' && (
               <div className="mb-1 ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
-                {PLAN_TABS.map((t) => {
-                  const on = screen === 'plan' && planTab === t.id
+                {SCENARIO_TABS.map((t) => {
+                  const on = screen === 'scenario' && scenarioTab === t.id
                   return (
                     <button key={t.id} onClick={() => setScreen(t.id)}
                       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${on ? 'text-white' : 'text-[#8A8174] hover:text-white'}`}>
@@ -100,6 +112,19 @@ function Sidebar() {
         )
       })}
 
+      <div className="label mt-5 px-1.5 pb-1.5 text-[#8A8174]">Utilities</div>
+      {UTIL.map((n) => {
+        const active = screen === n.id
+        return (
+          <button key={n.id} onClick={() => setScreen(n.id)}
+            className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[12.5px] transition ${active ? 'bg-white/[0.08] text-white' : 'text-[#8A8174] hover:bg-white/[0.04] hover:text-white'}`}>
+            {active && <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
+            <Icon name={n.icon} size={15} className={active ? 'text-brand-400' : 'text-[#6E665A] group-hover:text-[#B8AE9C]'} />
+            <span className="flex-1">{n.label}</span>
+          </button>
+        )
+      })}
+
       <div className="mt-auto px-1 text-[9px] leading-relaxed text-[#6E665A]">Official sources · EEA · BEE · DCCEEW · DfT · illustrative until live data connected.</div>
     </nav>
   )
@@ -110,7 +135,7 @@ function TopBar() {
   const screen = useStore((s) => s.screen)
   const year = useStore((s) => s.scenario.year)
   const openCmdK = useCmdK((s) => s.setOpen)
-  const item = NAV.find((n) => n.id === screen)
+  const item = NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
   // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
   const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
   const marketFine = makers.reduce((a, c) => a + c.fine, 0)
@@ -160,7 +185,10 @@ function TopBar() {
   )
 }
 
-const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'pooling', 'plan'])
+// Screens whose numbers move with the global assumptions rail. Forecast owns
+// its own scenario studio; Credit book is a multi-year ledger with its own
+// year axis — both hide the rail to avoid a second, conflicting control surface.
+const RAIL_SCREENS = new Set<ScreenId>(['plan', 'scenario', 'pooling', 'pricing'])
 
 function PoolingLocked() {
   const goto = useStore((s) => s.exitToPlatform)
@@ -176,14 +204,13 @@ function PoolingLocked() {
 
 function ModuleShell() {
   const screen = useStore((s) => s.screen)
-  const planTab = useStore((s) => s.planTab)
   const aiEnabled = useStore((s) => s.aiEnabled)
   const poolingAddon = useStore((s) => s.poolingAddon)
-  const Screen = { analyze: Analyze, data: Data, pooling: Pooling, plan: Plan, intel: Intelligence, admin: Admin }[screen]
+  const Screen = {
+    plan: Analyze, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
+    pricing: Pricing, pooling: Pooling, data: Data, intel: Intelligence, admin: Admin,
+  }[screen]
   const gated = screen === 'pooling' && !poolingAddon
-  // The Forecast Studio owns its own scenarios + lever editor, so the global
-  // Assumptions rail would be a redundant, conflicting second control surface there.
-  const railHidden = screen === 'plan' && planTab === 'forecast'
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -192,10 +219,12 @@ function ModuleShell() {
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
             <div key={gated ? 'locked' : screen} className="screen-in">
-              {gated ? <PoolingLocked /> : <Screen />}
+              <ErrorBoundary screenKey={screen}>
+                {gated ? <PoolingLocked /> : <Screen />}
+              </ErrorBoundary>
             </div>
           </main>
-          {RAIL_SCREENS.has(screen) && !gated && !railHidden && <ScenarioRail />}
+          {RAIL_SCREENS.has(screen) && !gated && <ScenarioRail />}
         </div>
       </div>
       {aiEnabled && <Assistant />}

@@ -27,6 +27,21 @@ cp .env.example .env
 
 With `DATABASE_URL` set: `npm run db:setup` once, then `npm run ingest:eu` for the full EEA dataset. Deploy to Vercel (`vercel`) for the scheduled cron refresh. Everything degrades gracefully — the app always works, the AI chat is the only piece that strictly needs a key.
 
+## The workspace — five modules + one add-on
+
+Inside a country module the sidebar is exactly five modules, plus utilities:
+
+| Module | What it does |
+| --- | --- |
+| **Plan** | The compliance workspace — drill market → pool → maker → model → variant, move levers, watch the gap and the fine live. |
+| **Forecast** | Multi-year scenario studio: materialised scenario specs, ramp levers, Monte-Carlo P10–P90 bands, breach-year detection. |
+| **Scenario** | *Get under the line* (ranked, costed path to compliance) and *Compare scenarios* side-by-side. |
+| **Credit book** | The position ledger: surplus/deficit by maker and year, banked cumulative positions, buyer↔seller trade planner priced at the market credit price (shadow-priced at the fine rate where the regime only pools, e.g. EU). |
+| **Pricing** | Compliance cost per car, model-level price ladder (which nameplates carry the burden, which earn credit value), pass-through and point-of-sale tax levers (GST/cess, VAT, VED, LCT). |
+| *Pooling* (add-on) | Cheapest legal partition + Shapley fair settlement — an add-on because only some regimes allow pooled averages. |
+
+Utilities below the modules: **Data & imports** (expert table, pivots, and the Import Studio — drop an .xlsx/.csv or paste from Excel; S&P Global Mobility and JATO extracts auto-map), **Intelligence**, **Admin**.
+
 ## The AI analyst (accurate by design)
 
 `api/ask.ts` runs **Claude (`claude-opus-4-8`)** with **tool use over the real engine**. The model understands the question and narrates the answer, but it never does arithmetic — every emissions figure, limit, gap, fine and cost comes from `query_compliance` / `get_recommendations`, which call the same `src/engine` code the charts use. It can also drive the live screen via `update_dashboard`. That keeps a spoken answer exactly as trustworthy as the chart, and quotes the fine's plain maths.
@@ -47,9 +62,11 @@ src/engine/
   intelligence.ts      dated, sourced early-warning event feed
   rulepacks/
     eu.ts              Reg (EU) 2019/631 — mass target, ZLEV factor, €95/g, pooling
-    india.ts           Draft CAFE III — L/100km target, super-credits, CNF discounts
+    india.ts           CAFE II (2025–26 actuals) → draft CAFE III — L/100km target,
+                       super-credits, CNF discounts, EC Act 2022 stepped penalty
     australia.ts       NVES — break-pointed Type 1/Type 2 lines, A$100/g, credit trading
-    uk.ts              VETS/ZEV mandate — illustrative CO₂ line from the non-ZE allowance
+    uk.ts              VETS ZEV mandate modelled as the unit mandate it is —
+                       % non-ZE metric, £12,000 per missing ZEV, CRTS credit trading
 ```
 
 Adding the US or China = writing a new file in `rulepacks/`. No screen changes.

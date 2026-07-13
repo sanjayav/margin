@@ -3,15 +3,21 @@ import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
 import { parentsFor, setLiveFleet } from '../data/fleet'
 
-export type ScreenId = 'analyze' | 'data' | 'pooling' | 'plan' | 'intel' | 'admin'
-export type PlanTab = 'under' | 'forecast' | 'compare'
+// Workspace modules: Plan (the compliance workspace, formerly "Analyze"),
+// Forecast (multi-year studio), Scenario (get-under-the-line + compare),
+// Credit book (positions & trading ledger), Pricing (price/tax economics).
+// Pooling is the add-on; data/intel/admin are workspace utilities, not modules.
+export type ScreenId = 'plan' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'data' | 'intel' | 'admin'
+export type ScenarioTab = 'under' | 'compare'
+/** @deprecated legacy alias kept for old deep-links */
+export type PlanTab = ScenarioTab | 'forecast'
 // The two-level shell: 'platform' = global launcher (home/modules/subscription);
-// 'module' = a single country workspace (the analyze/data/… sidebar).
+// 'module' = a single country workspace (the plan/forecast/… sidebar).
 export type AppView = 'platform' | 'module'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // legacy ids still accepted by setScreen and mapped to the new structure
-// ('analytics' folded into Analyze's Explore section)
-type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | PlanTab
+// ('analyze' became Plan; the old Scenario-group tabs became modules/tabs)
+type AnyScreen = ScreenId | 'analyze' | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | 'under' | 'compare'
 
 interface UIState {
   country: CountryId
@@ -20,7 +26,7 @@ interface UIState {
   selectedParent: string
   drillPath: string[] // chart explorer drill (parent/model/powertrain keys)
   dataVersion: number // bumps when live data loads, to recompute views
-  planTab: PlanTab
+  scenarioTab: ScenarioTab
   /** Per-maker scenario overrides (mix/mass/sales/EV) layered on the global scenario when drilled into a maker. */
   makerOverrides: Record<string, Partial<Scenario>>
 
@@ -79,7 +85,7 @@ const ENT0 = loadEnt()
 
 // Named, durable scenarios (persisted) — promotes the ephemeral A/B snapshot.
 export interface SavedScenario { id: string; label: string; country: CountryId; scenario: Scenario; overrides: Record<string, Partial<Scenario>>; createdAt: number }
-export interface SharedState { country?: CountryId; screen?: ScreenId; planTab?: PlanTab; drillPath?: string[]; scenario?: Scenario; overrides?: Record<string, Partial<Scenario>> }
+export interface SharedState { country?: CountryId; screen?: string; planTab?: string; drillPath?: string[]; scenario?: Scenario; overrides?: Record<string, Partial<Scenario>> }
 const SCEN_KEY = 'ul_scenarios'
 function loadScenarios(): SavedScenario[] { try { const r = JSON.parse(localStorage.getItem(SCEN_KEY) || '[]'); return Array.isArray(r) ? r : [] } catch { return [] } }
 function saveScenarios(list: SavedScenario[]) {
@@ -129,7 +135,7 @@ function assumptionsFor(country: CountryId): Assumptions {
 //   market → null · pool → "pool:NAME" · manufacturer → "MAKER" ·
 //   model → "MAKER/MODEL" · variant → "MAKER/MODEL/VARIANTKEY"
 export function scopeKey(screen: ScreenId, drillPath: string[]): string | null {
-  if (screen !== 'analyze' || drillPath.length === 0) return null
+  if (screen !== 'plan' || drillPath.length === 0) return null
   const [pool, parent, model, variant] = drillPath
   switch (drillPath.length) {
     case 1: return `pool:${pool}`
@@ -167,12 +173,12 @@ const BOOT = assumptionsFor('EU')
 
 export const useStore = create<UIState>((set, get) => ({
   country: 'EU',
-  screen: 'analyze',
+  screen: 'plan',
   scenario: BOOT.scenario,
   selectedParent: parentsFor('EU')[0],
   drillPath: [],
   dataVersion: 0,
-  planTab: 'under',
+  scenarioTab: 'under',
   makerOverrides: BOOT.makerOverrides,
 
   view: 'platform',
@@ -191,8 +197,8 @@ export const useStore = create<UIState>((set, get) => ({
       drillPath: [],
       makerOverrides: a.makerOverrides,
       view: 'module',
-      screen: 'analyze',
-      planTab: 'under',
+      screen: 'plan',
+      scenarioTab: 'under',
     })
   },
   exitToPlatform: (to) => set({ view: 'platform', ...(to ? { platformScreen: to } : {}) }),
@@ -238,16 +244,29 @@ export const useStore = create<UIState>((set, get) => ({
     const makers = parentsFor(country)
     const dp = Array.isArray(sh.drillPath) ? sh.drillPath : []
     const sharedParent = dp[1]
-    // Old deep-links may carry retired screen ids — sanitise before applying.
-    const shScreen = (sh.screen as string) === 'analytics' ? 'analyze' : sh.screen
+    // Old deep-links carry retired screen ids — normalise to the new modules.
+    // Legacy 'plan' was the Scenario GROUP (tabs under/forecast/compare); route
+    // it by its tab. 'analyze' (and its ancestors) became Plan.
+    const raw = sh.screen as string | undefined
+    let screen: ScreenId = 'plan'
+    let scenarioTab: ScenarioTab = 'under'
+    if (raw === 'plan' || raw === 'under' || raw === 'compare' || raw === 'forecast') {
+      const tab = raw === 'plan' ? (sh.planTab ?? 'under') : raw
+      if (tab === 'forecast') screen = 'forecast'
+      else { screen = 'scenario'; scenarioTab = tab === 'compare' ? 'compare' : 'under' }
+    } else if (raw === 'scenario') {
+      screen = 'scenario'; scenarioTab = sh.planTab === 'compare' ? 'compare' : 'under'
+    } else if (raw && ['creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'].includes(raw)) {
+      screen = raw as ScreenId
+    } // 'analyze' / 'analytics' / unknown → 'plan'
     set({
       country,
       scenario,
       makerOverrides,
       drillPath: dp,
       selectedParent: sharedParent && makers.includes(sharedParent) ? sharedParent : makers[0],
-      screen: shScreen ?? 'analyze',
-      planTab: sh.planTab ?? 'under',
+      screen,
+      scenarioTab,
       view: 'module',
     })
     persistAssumptions(country, scenario, makerOverrides)
@@ -265,8 +284,8 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setScreen: (s) => {
     if (s === 'pool') set({ screen: 'pooling' })
-    else if (s === 'under' || s === 'forecast' || s === 'compare') set({ screen: 'plan', planTab: s })
-    else if (s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'analyze' })
+    else if (s === 'under' || s === 'compare') set({ screen: 'scenario', scenarioTab: s })
+    else if (s === 'analyze' || s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'plan' })
     else set({ screen: s })
   },
   setParent: (p) => set({ selectedParent: p }),

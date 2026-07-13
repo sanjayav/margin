@@ -155,9 +155,9 @@ const TOOLS: Anthropic.Tool[] = [
       type: 'object',
       properties: {
         country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] },
-        screen: { type: 'string', enum: ['analyze', 'analytics', 'data', 'pooling', 'plan', 'under', 'pool', 'forecast', 'intel', 'admin'] },
+        screen: { type: 'string', enum: ['plan', 'forecast', 'scenario', 'under', 'compare', 'creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'], description: 'plan = compliance drill workspace; forecast = multi-year studio; scenario/under/compare = get-under-the-line & compare; creditbook = positions & trades; pricing = cost per car & tax.' },
         parent: { type: 'string' },
-        drillPath: { type: 'array', items: { type: 'string' }, description: 'Analyze drill scope: [maker] or [maker, model].' },
+        drillPath: { type: 'array', items: { type: 'string' }, description: 'Plan drill scope: [maker] or [maker, model].' },
         year: { type: 'integer' },
         evSharePct: { type: 'number' },
         massShiftKg: { type: 'number' },

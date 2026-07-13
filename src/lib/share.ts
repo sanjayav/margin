@@ -5,7 +5,7 @@ import { useStore } from '../state/store'
 
 export function buildShareUrl(): string {
   const s = useStore.getState()
-  const payload = { country: s.country, screen: s.screen, planTab: s.planTab, drillPath: s.drillPath, scenario: s.scenario, overrides: s.makerOverrides }
+  const payload = { country: s.country, screen: s.screen, planTab: s.scenarioTab, drillPath: s.drillPath, scenario: s.scenario, overrides: s.makerOverrides }
   const enc = btoa(encodeURIComponent(JSON.stringify(payload)))
   const url = `${location.origin}${location.pathname}#s=${enc}`
   try { history.replaceState(null, '', url) } catch { /* ignore */ }
