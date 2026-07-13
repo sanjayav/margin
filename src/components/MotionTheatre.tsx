@@ -17,6 +17,7 @@ import type { CountryId, RulePack, Scenario, Vehicle } from '../engine/types'
 import { buildTree, fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import { baselineScenario } from '../engine/forecast'
 import { CASES, caseDrivers, outlookRun, type DriverSet, type OutlookConfig } from '../engine/outlook'
+import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
 import Icon from './Icon'
 
 interface MakerFrame { mass: number; metric: number; units: number; limit: number; fine: number }
@@ -46,6 +47,8 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const trailsRef = useRef<Map<string, { x: number; y: number }[]>>(new Map())
+  // company logos, cached per maker: HTMLImageElement once loaded, 'failed' → monogram
+  const logosRef = useRef<Map<string, HTMLImageElement | 'failed'>>(new Map())
   const reduced = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, [])
 
   // ── keyframes: one ENGINE aggregate per case-year ──────────────────────────
@@ -74,6 +77,21 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
       return { year: y, makers, marketFine, zeShare: t.zlevShare * 100, avgMetric: t.avgMetric, avgLimit: t.limit }
     })
   }, [raw, pack, drivers, vintageYear, caseSel, years])
+
+  // preload each maker's logo once (async; frames draw monograms until ready)
+  useEffect(() => {
+    const names = new Set<string>()
+    for (const f of frames) for (const n of f.makers.keys()) names.add(n)
+    for (const n of names) {
+      if (logosRef.current.has(n)) continue
+      const url = brandLogoUrl(n)
+      if (!url) { logosRef.current.set(n, 'failed'); continue }
+      const img = new Image()
+      img.onload = () => logosRef.current.set(n, img)
+      img.onerror = () => logosRef.current.set(n, 'failed')
+      img.src = url
+    }
+  }, [frames])
 
   // stable scales across the WHOLE run so motion is comparable year to year
   const scales = useMemo(() => {
@@ -198,12 +216,28 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
           }
         }
 
-        const grad = ctx.createRadialGradient(cx - r / 3, cy - r / 3, r / 6, cx, cy, r)
-        grad.addColorStop(0, over ? 'rgba(240,110,112,0.95)' : 'rgba(52,190,138,0.95)')
-        grad.addColorStop(1, over ? 'rgba(206,44,52,0.85)' : 'rgba(11,128,88,0.85)')
+        // identity inside, compliance on the ring
+        const ringColor = over ? 'rgba(214,58,64,0.95)' : 'rgba(13,142,98,0.95)'
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
-        ctx.fillStyle = grad; ctx.fill()
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.5; ctx.stroke()
+        ctx.fillStyle = over ? 'rgba(224,72,77,0.14)' : 'rgba(14,159,110,0.14)'
+        ctx.fill()
+        ctx.strokeStyle = ringColor; ctx.lineWidth = 2.25; ctx.stroke()
+        const ir = Math.max(3, r - 2.5)
+        const logo = logosRef.current.get(n)
+        ctx.save()
+        ctx.beginPath(); ctx.arc(cx, cy, ir, 0, Math.PI * 2); ctx.clip()
+        if (logo && logo !== 'failed') {
+          ctx.fillStyle = '#FFFDF9'; ctx.fillRect(cx - ir, cy - ir, ir * 2, ir * 2)
+          const li = ir * 1.44
+          ctx.drawImage(logo, cx - li / 2, cy - li / 2, li, li)
+        } else {
+          ctx.fillStyle = brandColor(n); ctx.fillRect(cx - ir, cy - ir, ir * 2, ir * 2)
+          ctx.fillStyle = '#fff'; ctx.font = `800 ${Math.max(7, ir * 0.85)}px ui-sans-serif`
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+          ctx.fillText(brandInitials(n), cx, cy + 0.5)
+          ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic'
+        }
+        ctx.restore()
       }
       // labels for the top 6 (drawn after all bubbles so they stay legible)
       ctx.font = '600 10px ui-sans-serif'

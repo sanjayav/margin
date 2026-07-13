@@ -365,7 +365,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
           </div>
         )}
-        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} />
+        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1} />
       </Section>
 
       {/* Breakdown + children list */}

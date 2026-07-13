@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { RulePack } from '../engine/types'
 import { fmtInt, fmtNum } from '../engine/engine'
+import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
 
 export interface ChartPoint {
   key: string
@@ -39,6 +40,10 @@ interface Props {
   /** stable denominator for bubble size (e.g. maker total) so a lone bubble still scales with volume */
   unitRef?: number
   drag?: DragConfig
+  /** Render each bubble with its company logo (pool/manufacturer levels);
+   *  status/powertrain colour moves to the ring. Unresolved or unloadable
+   *  logos fall back to a deterministic monogram chip — never a broken image. */
+  logos?: boolean
 }
 
 /**
@@ -46,8 +51,10 @@ interface Props {
  * marker. Below the line is safe (green), above means a fine (red). Everything
  * re-renders instantly when the scenario changes — no animation gate.
  */
-export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag }: Props) {
+export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos }: Props) {
   const [hover, setHover] = useState<string | null>(null)
+  const [logoFailed, setLogoFailed] = useState<Set<string>>(new Set())
+  const failLogo = (key: string) => setLogoFailed((prev) => { const n = new Set(prev); n.add(key); return n })
   const svgRef = useRef<SVGSVGElement>(null)
   const [ghost, setGhost] = useState<{ key: string; mass: number; metric: number; lines: string[] } | null>(null)
   const dragRef = useRef<{ key: string; startMass: number; startMetric: number; moved: boolean; lastPreview: number } | null>(null)
@@ -194,7 +201,33 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
               onPointerDown={startDrag(p)}
               onClick={() => { if (!dragRef.current?.moved) onPick?.(p.key) }}>
               {p.isFleet && <line x1={cx} y1={cy} x2={cx} y2={sy(limitAt(p.mass))} stroke={color} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.55" />}
-              <circle cx={cx} cy={cy} r={r + (active ? 3 : 0)} fill={color} fillOpacity={p.isFleet ? 0.95 : 0.5} stroke={p.isFleet ? '#FBF7EF' : color} strokeWidth={p.isFleet ? 2.5 : 1.5} className={p.isFleet ? 'animate-flip' : 'lc-bubble'} style={p.isFleet ? { filter: 'url(#glow)' } : { transition: 'r .25s ease, cx .25s ease, cy .25s ease, fill .25s ease' }} />
+              {(() => {
+                const url = logos && !p.isFleet ? brandLogoUrl(p.label) : null
+                const showLogo = logos && !p.isFleet
+                if (!showLogo) return (
+                  <circle cx={cx} cy={cy} r={r + (active ? 3 : 0)} fill={color} fillOpacity={p.isFleet ? 0.95 : 0.5} stroke={p.isFleet ? '#FBF7EF' : color} strokeWidth={p.isFleet ? 2.5 : 1.5} className={p.isFleet ? 'animate-flip' : 'lc-bubble'} style={p.isFleet ? { filter: 'url(#glow)' } : { transition: 'r .25s ease, cx .25s ease, cy .25s ease, fill .25s ease' }} />
+                )
+                const rr = r + (active ? 3 : 0)
+                const ir = Math.max(3, rr - 2.5) // inner disc/logo radius
+                const failed = !url || logoFailed.has(p.key)
+                const mono = brandColor(p.label)
+                return (
+                  <g>
+                    {/* compliance stays legible: the STATUS ring around the identity */}
+                    <circle cx={cx} cy={cy} r={rr} fill={color} fillOpacity={0.16} stroke={color} strokeWidth={2.25} className="lc-bubble" style={{ transition: 'r .25s ease, fill .25s ease, stroke .25s ease' }} />
+                    <clipPath id={`lc-clip-${p.key.replace(/[^a-zA-Z0-9]/g, '')}`}><circle cx={cx} cy={cy} r={ir} /></clipPath>
+                    <circle cx={cx} cy={cy} r={ir} fill={failed ? mono : '#FFFDF9'} opacity={failed ? 0.92 : 0.96} />
+                    {!failed && (
+                      <image href={url!} x={cx - ir * 0.72} y={cy - ir * 0.72} width={ir * 1.44} height={ir * 1.44}
+                        clipPath={`url(#lc-clip-${p.key.replace(/[^a-zA-Z0-9]/g, '')})`} preserveAspectRatio="xMidYMid meet"
+                        style={{ pointerEvents: 'none' }} onError={() => failLogo(p.key)} />
+                    )}
+                    {failed && (
+                      <text x={cx} y={cy + ir * 0.34} textAnchor="middle" fontSize={Math.max(7, ir * 0.9)} fontWeight={800} fill="#fff" style={{ pointerEvents: 'none' }} className="num">{brandInitials(p.label)}</text>
+                    )}
+                  </g>
+                )
+              })()}
               {p.isFleet && <circle cx={cx} cy={cy} r={r + 6} fill="none" stroke={color} strokeWidth="1" opacity="0.35" />}
               {(active || p.isFleet) && (() => {
                 // flip the tooltip to the left near the right edge so it never clips
