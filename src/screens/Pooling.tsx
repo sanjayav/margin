@@ -9,6 +9,7 @@ import Icon from '../components/Icon'
 export default function Pooling() {
   const { pack, raw, scenario } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
+  const setScreen = useStore((s) => s.setScreen)
   const overrides = useStore((s) => s.makerOverrides)
 
   const rows = useMemo(() => standings(raw, pack, scenario, overrides), [raw, pack, scenario, overrides, dataVersion])
@@ -36,14 +37,22 @@ export default function Pooling() {
 
   const toggle = (p: string) => setMembers((m) => (m.includes(p) ? m.filter((x) => x !== p) : [...m, p]))
 
-  if (!pack.pooling.enabled && pack.creditPrice == null) {
+  if (!pack.pooling.enabled) {
+    // No pooled averages in this regime. Where credit TRADING exists instead
+    // (India's draft CAFE III), the Credit book is the statutory surface — a
+    // pool optimiser here would model something the law doesn't allow.
     return (
       <div className="space-y-5 animate-slidein">
         <div className="card flex items-start gap-3 p-5">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-black/[0.03] text-warn"><Icon name="alert" size={18} /></div>
-          <div>
-            <h3 className="font-semibold text-ink-100">No pooling or trading in {pack.name}</h3>
-            <p className="mt-1 text-sm text-ink-400">{pack.pooling.note} Each maker is assessed standalone — see the registered groups and standings below.</p>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-ink-100">No pooled averages in {pack.name}</h3>
+            <p className="mt-1 text-sm text-ink-400">{pack.pooling.note} Each maker is assessed standalone — the registered groups and standings are below.</p>
+            {pack.creditPrice != null && (
+              <button onClick={() => setScreen('creditbook')} className="btn-primary mt-3 px-3 py-1.5 text-xs">
+                <Icon name="scale" size={14} /> This regime trades credits — open the Credit book
+              </button>
+            )}
           </div>
         </div>
         <PoolGroups groups={groups} pack={pack} />
@@ -320,6 +329,7 @@ function Standings({ rows, pack, maxAbs, pmap }: any) {
 function MakerOptions({ parent, fine }: { parent: string; fine: number }) {
   const { pack, raw, scenario } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
+  const setScreen = useStore((s) => s.setScreen)
   const overrides = useStore((s) => s.makerOverrides)
   const opts = useMemo(() => bestForMaker(raw, pack, scenario, parent, overrides), [raw, pack, scenario, parent, overrides, dataVersion])
   const ICON: Record<string, any> = { pool: 'handshake', credits: 'card', fine: 'alert' }

@@ -520,6 +520,37 @@ export function toVehicles(rows: string[][], fields: FieldKey[], country: Countr
   return out
 }
 
+/** The India master file mixes roll-up levels in one sheet (col "Data Mode":
+ *  Variant / Model / Brand / Group / Regulatory). Importing it raw would mix
+ *  zero-volume spec rows with sales rows and totals. This transform keeps ONE
+ *  level: 'Model' keeps the sales rows and substitutes their roll-up figures
+ *  (Avg CO2 → CO₂, Avg weighted Mass → kerb) into the mapped columns;
+ *  'Variant' keeps the spec rows and zero-fills the empty volume. */
+export function applyMasterDataMode(grid: string[][], hasHeader: boolean, mode: 'Model' | 'Variant'): string[][] {
+  if (!grid.length) return grid
+  const headers = hasHeader ? grid[0] : []
+  const idx = (name: string) => headers.findIndex((h) => canon(h) === canon(name))
+  const dm = idx('Data Mode')
+  if (dm < 0) return grid
+  const co2Col = idx('Fuel Consumption')          // the variant-level CO₂ column
+  const massCol = idx('Kerb Weight')
+  const avgCo2 = idx('Avg CO2')
+  const avgMass = idx('Avg weighted Mass')
+  const volCol = idx('Vehicle Volume')
+  const body = (hasHeader ? grid.slice(1) : grid).filter((r) => (r[dm] ?? '').trim() === mode)
+  const out = body.map((r) => {
+    const row = r.slice()
+    if (mode === 'Model') {
+      if (co2Col >= 0 && avgCo2 >= 0 && row[avgCo2] !== '') row[co2Col] = row[avgCo2]
+      if (massCol >= 0 && avgMass >= 0 && row[avgMass] !== '') row[massCol] = row[avgMass]
+    } else if (volCol >= 0 && (row[volCol] ?? '') === '') {
+      row[volCol] = '0' // specs only — no volume at variant level in the master
+    }
+    return row
+  })
+  return hasHeader ? [grid[0], ...out] : out
+}
+
 /** Merge imported rows into the current dataset: any (manufacturer, year) that
  *  appears in the import replaces that maker-year wholesale; everything else is
  *  kept. This is the natural OEM flow — "here are my actuals for 2026". */

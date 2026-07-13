@@ -231,6 +231,14 @@ export default function CreditBook() {
         <span className="ml-auto flex items-center gap-2 text-[11px] text-ink-500"><span className="chip">{pack.metricUnit}·units</span><span>1 unit of surplus offsets 1 of deficit</span></span>
       </div>
 
+      {/* pre-trading regime honesty: India's trading is a CAFE III (draft) mechanism */}
+      {pack.regimeFor?.(focus.year)?.name === 'CAFE II' && (
+        <div className="flex items-center gap-2 rounded-xl border border-warn/35 bg-warn/[0.07] px-3.5 py-2 text-[11.5px] text-ink-300">
+          <Icon name="alert" size={14} className="shrink-0 text-warn" />
+          <span><b>FY {focus.year}: CAFE II.</b> Credit trading is a CAFE III (draft) mechanism — positions for this year are shown for context and valued at the draft price; no statutory trades exist before FY 2027-28.</span>
+        </div>
+      )}
+
       {/* THE CREDIT MARKET MAP */}
       <Section className="rise [animation-delay:240ms]"
         title={<span className="flex items-center gap-2"><Icon name="activity" size={15} className="text-brand" /> Credit market map · {focus.year}</span>}

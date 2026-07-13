@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   parseFile, parseDelimited, autoMap, detectVendor, looksLikeHeader,
-  validateGrid, toVehicles, mergeFleet, templateCsv, REQUIRED, type FieldKey,
+  validateGrid, toVehicles, mergeFleet, templateCsv, applyMasterDataMode, REQUIRED, type FieldKey,
 } from '../src/lib/importer.js'
 import type { Vehicle } from '../src/engine/types.js'
 
@@ -121,6 +121,24 @@ function run(grid: string[][], country: 'IN') {
   const clip = 'Manufacturer\tModel\tYear\tPowertrain\tFuel\tCO2\tTest Mass\tUnits\nX AG\tM1\t2026\tICE\tPetrol\t120\t1500\t1000\n'
   const r = run(parseDelimited(clip), 'EU' as any)
   check('test-mass-only file: required mass auto-maps via fallback', r.mapped.includes('mass') && r.vehicles[0].mass === 1500)
+}
+
+// ── 3d · master Data-Mode transform: one roll-up level at a time ─────────────
+{
+  const g = parseDelimited([
+    'Data Mode\tRegultory Name\tModel\tYear\tPowertrain Type\tFuel Type\tFuel Consumption\tKerb Weight\tVehicle Volume\tAvg CO2\tAvg weighted Mass',
+    'Variant\tMG Motor\tAstor\t2025\tICE\tGasoline\t150.4\t1245\t\t\t',
+    'Variant\tMG Motor\tAstor\t2025\tICE\tGasoline\t156.5\t1270\t\t\t',
+    'Model\tMG Motor\tAstor\t2025\tICE\tGasoline\t\t\t1611\t153.45\t1257.5',
+    'Brand\tMG Motor\t\t2025\t\t\t\t\t66624\t\t',
+  ].join('\n'))
+  const model = applyMasterDataMode(g, true, 'Model')
+  check('master Model mode: keeps only Model rows (Brand/Variant dropped)', model.length === 2)
+  check('master Model mode: Avg CO2 → CO₂ column, Avg mass → kerb', model[1][6] === '153.45' && model[1][7] === '1257.5')
+  const variant = applyMasterDataMode(g, true, 'Variant')
+  check('master Variant mode: keeps spec rows with volume zero-filled', variant.length === 3 && variant[1][8] === '0' && variant[2][8] === '0')
+  const rM = run(model, 'IN')
+  check('master Model rows import clean (roll-up figures land)', rM.vehicles.length === 1 && rM.vehicles[0].co2 === 153.45 && rM.vehicles[0].mass === 1257.5 && rM.vehicles[0].sales === 1611)
 }
 
 // ── 4 · real-world file: the Ram scenario workbook DATA sheet parses ─────────

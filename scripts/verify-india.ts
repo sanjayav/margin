@@ -42,6 +42,20 @@ for (const y of [2026, 2027, 2031]) {
   })
   check('horizon rows carry identical sales/CO₂/mass (only the year moves)', same)
   check('horizon rows re-labelled to their fiscal year', y29.every((v: any) => v.fyLabel === 'FY 2029-30'))
+  check("horizon rows tagged 'Baseline projection' (tellable in Data/exports)", y29.every((v: any) => v.scenario === 'Baseline projection'))
+  check('actual-year rows stay tagged Base', y26.every((v: any) => v.scenario === 'Base'))
+}
+
+// ── CNF discounts: auto-derived from fuel, CAFE III only, lever-controlled ──
+{
+  const on = aggregateParent(IN, pack, { ...base(2027), cnfEnabled: true }, 'Skoda Auto Volkswagen India Private Limited')
+  const off = aggregateParent(IN, pack, { ...base(2027), cnfEnabled: false }, 'Skoda Auto Volkswagen India Private Limited')
+  check('CAFE III: E20 CNF lowers a petrol maker\'s metric', on.avgMetric < off.avgMetric - 0.05, `${on.avgMetric.toFixed(3)} vs ${off.avgMetric.toFixed(3)}`)
+  const ratio = on.avgMetric / off.avgMetric
+  check('CNF magnitude ≈ 8% on an all-petrol fleet', ratio > 0.90 && ratio < 0.94, `ratio ${ratio.toFixed(3)}`)
+  const on2 = aggregateParent(IN, pack, { ...base(2026), cnfEnabled: true }, 'Skoda Auto Volkswagen India Private Limited')
+  const off2 = aggregateParent(IN, pack, { ...base(2026), cnfEnabled: false }, 'Skoda Auto Volkswagen India Private Limited')
+  check('CAFE II: CNF inert (mechanism starts FY2027-28)', Math.abs(on2.avgMetric - off2.avgMetric) < 1e-9)
 }
 
 // ── compliance computes sensibly across both regimes ─────────────────────────

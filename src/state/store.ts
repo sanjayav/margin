@@ -172,6 +172,7 @@ export function defaultScenario(country: CountryId): Scenario {
     phevUF: true,
     creditPrice: null,
     targetShiftPct: null,
+    cnfEnabled: true,
   }
 }
 

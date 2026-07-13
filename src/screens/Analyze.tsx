@@ -10,6 +10,7 @@ import { makerYearGap, makerMekko } from '../lib/analytics'
 import { parentPoolMap } from '../engine/pooling'
 import { Section, Stat, Bar } from '../components/ui'
 import CafeLedger from '../components/CafeLedger'
+import { INDIA_CATALOG } from '../data/india_catalog'
 import Icon from '../components/Icon'
 import { makeLimitAt } from '../lib/chart'
 import { useCountUp } from '../lib/useCountUp'
@@ -256,6 +257,11 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         ))}
         {drill.length > 0 && <button onClick={() => setDrill(drill.slice(0, -1))} className="ml-1 flex items-center gap-1 rounded-lg border border-black/[0.08] px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100"><Icon name="reset" size={12} /> Up</button>}
         <div className="ml-auto flex items-center gap-2">
+          {pack.coverageNote && (
+            <span className="flex items-center gap-1.5 rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-[11px] font-semibold text-warn" title={pack.coverageNote}>
+              <Icon name="alert" size={12} /> Covered market · {(tree.children ?? []).filter((c) => c.rawUnits > 0).length} makers
+            </span>
+          )}
           {pack.regimeFor && (() => {
             const r = pack.regimeFor(scenario.year)
             return (
@@ -318,6 +324,15 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
               )
             })}
           </div>
+          {level === 0 && (() => {
+            const counts = pack.years.map((y) => new Set(raw.filter((v) => v.year === y && v.sales > 0).map((v) => v.parent)).size)
+            const lo = Math.min(...counts), hi = Math.max(...counts)
+            return lo !== hi ? (
+              <p className="mt-1.5 max-w-[340px] text-[10px] leading-snug text-warn">
+                <Icon name="alert" size={10} className="mr-0.5 inline" /> Maker coverage varies by year ({lo}→{hi}) — year-over-year market moves include composition, not just fleet change.
+              </p>
+            ) : null
+          })()}
         </div>
       </div>
 
@@ -412,6 +427,37 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <Mekko cols={mekko} onPick={openExplore} />
         </Section>
       </div>
+
+      {/* catalog variants for the drilled model — specs from the master file
+          (volumes live at model level until the master fills variant volume) */}
+      {country === 'IN' && level >= 3 && (() => {
+        const specs = INDIA_CATALOG.filter((c) => c.parent === drill[1] && c.model === drill[2])
+        if (!specs.length) return null
+        return (
+          <Section className="rise" title={`Catalog variants · ${drill[2]}`} right={<span className="text-[11px] text-ink-500">master-file specs — sales are recorded at model level</span>}>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left text-xs" data-testid="catalog-variants">
+                <thead><tr className="border-b border-black/[0.08] text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+                  <th className="py-2 pr-3">Variant</th><th className="py-2 pr-3">Powertrain</th><th className="py-2 pr-3 text-right">CO₂ g/km</th><th className="py-2 pr-3 text-right">km/l</th><th className="py-2 pr-3 text-right">Kerb kg</th><th className="py-2 pr-3 text-right">kWh / km</th><th className="py-2 text-right">Year</th>
+                </tr></thead>
+                <tbody>
+                  {specs.map((c, i) => (
+                    <tr key={i} className="border-b border-black/[0.04] odd:bg-black/[0.012]">
+                      <td className="py-1.5 pr-3 font-medium text-ink-100">{c.variant}</td>
+                      <td className="py-1.5 pr-3 text-ink-300">{c.powertrain}</td>
+                      <td className="num py-1.5 pr-3 text-right text-ink-200">{c.co2 != null ? fmtNum(c.co2, 1) : '—'}</td>
+                      <td className="num py-1.5 pr-3 text-right text-ink-300">{(c as any).fuelKmpl != null ? fmtNum((c as any).fuelKmpl, 1) : '—'}</td>
+                      <td className="num py-1.5 pr-3 text-right text-ink-300">{c.kerbMass != null ? fmtInt(c.kerbMass) : '—'}</td>
+                      <td className="num py-1.5 pr-3 text-right text-ink-300">{c.battery != null ? `${c.battery} kWh${c.range ? ` · ${c.range} km` : ''}` : '—'}</td>
+                      <td className="num py-1.5 text-right text-ink-500">{c.year}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Section>
+        )
+      })()}
 
       {/* the master structure's computed columns (AO–AT) — India CAFE ledger */}
       {country === 'IN' && <CafeLedger basis={actuals ? 'actuals' : 'live'} />}

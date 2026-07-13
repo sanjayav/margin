@@ -177,8 +177,10 @@ export function runValidation(): Check[] {
     anchor('in-cafe2', 'India pre-FY2027 = CAFE II: 4.765 L/100km (113 gCO₂/km) at 1,145 kg reference', approx(c2, 113 / 23.7135, 0.01),
       `limit(2026, 1145kg) = ${f(c2, 3)} (expected ${f(113 / 23.7135, 3)})`, 'BEE CAFE II (in force to FY2026-27)')
     // Statutory stepped penalty — EC (Amendment) Act 2022, replaces the old placeholder.
-    const under02 = aggregate([veh({ co2: (p.limit(ctx({ year: 2027, avgMass: 1500 })) + 0.1) * 23.7135, mass: 1500, sales: 10000, vclass: 'Passenger car', fuel: 'petrol' })], p, scenario({ year: 2027 }), 'X', 'parent', 'x')
-    const over02 = aggregate([veh({ co2: (p.limit(ctx({ year: 2027, avgMass: 1500 })) + 0.5) * 23.7135, mass: 1500, sales: 10000, vclass: 'Passenger car', fuel: 'petrol' })], p, scenario({ year: 2027 }), 'X', 'parent', 'x')
+    // cnf: 0 pins the exceedance exactly — this anchor tests the PENALTY
+    // schedule, not the (auto-derived) E20 CNF discount.
+    const under02 = aggregate([veh({ co2: (p.limit(ctx({ year: 2027, avgMass: 1500 })) + 0.1) * 23.7135, mass: 1500, sales: 10000, vclass: 'Passenger car', fuel: 'petrol', cnf: 0 })], p, scenario({ year: 2027 }), 'X', 'parent', 'x')
+    const over02 = aggregate([veh({ co2: (p.limit(ctx({ year: 2027, avgMass: 1500 })) + 0.5) * 23.7135, mass: 1500, sales: 10000, vclass: 'Passenger car', fuel: 'petrol', cnf: 0 })], p, scenario({ year: 2027 }), 'X', 'parent', 'x')
     anchor('in-fine-step', 'India fine: ₹25,000/car ≤0.2 L/100km over · ₹50,000/car beyond (EC Act 2022)',
       approx(under02.fine, 25000 * 10000, 1) && approx(over02.fine, 50000 * 10000, 1),
       `0.1 over → ₹${f(under02.fine, 0)} (₹25k×10k) · 0.5 over → ₹${f(over02.fine, 0)} (₹50k×10k)`, 'Energy Conservation (Amendment) Act 2022')
@@ -216,6 +218,9 @@ export function runValidation(): Check[] {
     review('uk-flexibilities', 'UK: vans at car fine rate; banking/borrowing & CO₂-conversion not yet modelled',
       'Vans carry a £15,000 rate vs cars\' £12,000 — the engine applies the car rate to both (van volume is small in the extract). Allowance banking (≤3 yrs), borrowing (2024–29 scheme years, 3.5% compounding interest, repay by 2030) and the non-ZE CO₂-conversion flexibility are not modelled; the ≈£4k credit price is an observed market level, not statutory.',
       'DfT VETS Order 2023 · SI 2025/1101 · DfT "VETS: How to Comply" (Jun 2026)')
+    review('in-cafe2-supercredits', 'India CAFE II super-credit treatment unverified',
+      'The pack grants super-credits and CNF discounts only from FY2027-28 (CAFE III draft). If the in-force CAFE II notification grants EV/hybrid derogation factors, FY2025-26 corporate averages for EV-heavy makers (MG) are overstated here. Confirm against the BEE CAFE II notification before quoting FY25-26 P values externally.',
+      'BEE CAFE II notification — primary-source check pending')
     review('draft-regime-rates', 'India CAFE III constants & credit price are DRAFT until BEE notifies',
       'The fine is now statutory (EC Act 2022: ₹25k/₹50k per car, stepped at 0.2 L/100km) but the CAFE III targets (d constants) and the ~₹2,500/g credit price come from the 25 Sep 2025 draft. The pack badges CAFE III years "draft" and exposes a ±10% stringency stress; re-anchor when the final notification lands.',
       'BEE Draft CAFE III · EC (Amendment) Act 2022')

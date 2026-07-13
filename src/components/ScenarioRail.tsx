@@ -503,6 +503,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         )}
         {pack.pooling.enabled && <Toggle label="Pooling" checked={scenario.poolingEnabled} onChange={(b) => patch({ poolingEnabled: b })} hint="combine makers, share one average" />}
         {pack.id === 'IN' && <Toggle label="Super-credits" checked={scenario.superCreditsEnabled} onChange={(b) => patch({ superCreditsEnabled: b })} hint="BEV ×3, PHEV ×2.5" />}
+        {pack.id === 'IN' && <Toggle label="CNF discounts" checked={scenario.cnfEnabled !== false} onChange={(b) => patch({ cnfEnabled: b })} hint="E20 petrol −8% · CNG −5% (CAFE III draft) — off = struck from final rules" />}
         {pack.creditPrice != null && (
           <NumSlider label="Credit price" value={scenario.creditPrice ?? pack.creditPrice} min={0} max={Math.max(150, pack.creditPrice * 2)} step={5} unit={`${pack.currency}/u`} baseline={pack.creditPrice}
             onChange={(v) => patch({ creditPrice: v })} hint="assumed trading price · drives pooling value" />

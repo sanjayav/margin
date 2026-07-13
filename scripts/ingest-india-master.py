@@ -137,7 +137,7 @@ def main():
             "segment": txt(d.get("K")),
             "bodyStyle": next((txt(s.get("J")) for s in specs if s.get("J")), None),
             "footprint": next((num(s.get("Z")) for s in specs if num(s.get("Z"))), None),
-            "cnf": 0, "vclass": "Passenger car", "scenario": "Base",
+            "vclass": "Passenger car", "scenario": "Base",
         }
         fleet.append({k: v for k, v in rec.items() if v is not None})
 

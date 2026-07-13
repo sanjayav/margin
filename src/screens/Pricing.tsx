@@ -97,6 +97,35 @@ export default function Pricing() {
         ))}
       </div>
 
+      {/* India's stepped penalty: improvements only monetise at tier boundaries */}
+      {country === 'IN' && focus && (() => {
+        const units = focus.rawUnits
+        const gap = focus.gap
+        const tiers = [
+          { label: 'Gap > 0.2 L/100km', fine: 50_000 * units, active: gap > 0.2, desc: '₹50,000 × every vehicle' },
+          { label: 'Gap ≤ 0.2 L/100km', fine: 25_000 * units, active: gap > 0 && gap <= 0.2, desc: '₹25,000 × every vehicle' },
+          { label: 'Under the line', fine: 0, active: gap <= 0, desc: 'no penalty · credits accrue' },
+        ]
+        return (
+          <div className="rise card p-4 [animation-delay:190ms]" data-testid="fine-staircase">
+            <div className="mb-2 flex items-baseline justify-between">
+              <span className="label text-ink-400">EC Act 2022 · the fine is a STAIRCASE, not a slope — {focus.label.split(' ')[0]} · {scenario.year}</span>
+              <span className="num text-[11px] text-ink-500">current gap {gap > 0 ? '+' : ''}{fmtNum(gap, 2)} L/100km</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {tiers.map((t) => (
+                <div key={t.label} className={`rounded-xl border p-3 transition ${t.active ? (t.fine > 0 ? 'border-danger/40 bg-danger/[0.06] ring-1 ring-danger/30' : 'border-safe/40 bg-safe/[0.06] ring-1 ring-safe/30') : 'border-black/[0.06] bg-black/[0.015] opacity-70'}`}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">{t.label}{t.active && <span className={`ml-1.5 rounded-full px-1.5 py-px text-[8.5px] font-black ${t.fine > 0 ? 'bg-danger text-white' : 'bg-safe text-white'}`}>NOW</span>}</div>
+                  <div className={`dnum mt-1 text-[19px] font-bold ${t.fine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(t.fine, pack.currency)}</div>
+                  <div className="text-[10px] text-ink-500">{t.desc}</div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-[10.5px] leading-relaxed text-ink-500">Marginal improvements don't reduce the penalty until the gap crosses a tier — cutting {focus.label.split(' ')[0]}'s gap below 0.2 halves the bill; only clearing the line zeroes it. Plan to a boundary, not to a slope.</p>
+          </div>
+        )
+      })()}
+
       {/* levers */}
       <div className="rise card flex flex-wrap items-center gap-6 p-4 [animation-delay:200ms]">
         <label className="min-w-[220px] flex-1">

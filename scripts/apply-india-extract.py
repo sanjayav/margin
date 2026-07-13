@@ -46,7 +46,9 @@ def main():
     projected = []
     for y in HORIZON:
         for v in base:
-            projected.append({**v, "year": y, "fyLabel": FY(y)})
+            # tagged so every surface (Data table, exports) can tell projection
+            # from record — Analyse additionally badges these years "P".
+            projected.append({**v, "year": y, "fyLabel": FY(y), "scenario": "Baseline projection"})
     fleet["IN"] = actual + projected  # FULL replace — nothing of the old IN survives
 
     with open(FLEET_JSON, "w") as f:

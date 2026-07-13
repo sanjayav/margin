@@ -177,6 +177,10 @@ export default function Data() {
   ], [])
   const cols = useMemo(() => {
     const present = OPT_COLS.filter((c) => base.some((r) => (r as any)[c.k] != null && (r as any)[c.k] !== ''))
+    // projected horizon rows must be tellable from record rows — in the table
+    // AND in any CSV export of it
+    if (base.some((r) => r.scenario === 'Baseline projection'))
+      present.push({ k: 'scenario' as ColKey, label: 'Basis' })
     const out = COLS.filter((c) => !c.scenarioOnly || scenarioMode)
     // slot the structure columns before Class so the table reads like the master
     const at = out.findIndex((c) => c.k === 'vclass')
@@ -432,18 +436,39 @@ export default function Data() {
               <tbody>
                 {rows.map((r, i) => {
                   const m = metricOf(r)
+                  // one cell per header — cols is dynamic (scenario metric, master
+                  // structure columns, Basis), so the body must map the same array
+                  const td = (c: Col) => {
+                    switch (c.k) {
+                      case 'parent': return <td key={c.k} className="whitespace-nowrap px-3 py-2 font-medium text-ink-100">{r.parent}</td>
+                      case 'model': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-200">{r.model}</td>
+                      case 'variant': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-400">{variantLabel(r)}</td>
+                      case 'powertrain': return <td key={c.k} className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-ink-200"><i className="h-2 w-2 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
+                      case 'year': return <td key={c.k} className="num px-3 py-2 text-right text-ink-300">{r.year}</td>
+                      case 'co2': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${r.co2 === 0 ? 'text-safe' : 'text-ink-100'}`}>{fmtNum(r.co2, 0)}</td>
+                      case 'metric': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${m === 0 ? 'text-safe' : 'text-brand'}`}>{fmtNum(m, 1)}</td>
+                      case 'mass': return <td key={c.k} className="num px-3 py-2 text-right text-ink-200">{fmtInt(r.mass)}</td>
+                      case 'sales': return <td key={c.k} className="num px-3 py-2 text-right font-semibold text-ink-100">{fmtInt(r.sales)}</td>
+                      case 'vclass': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-400">{r.vclass}</td>
+                      case 'scenario': return (
+                        <td key={c.k} className="whitespace-nowrap px-3 py-2">
+                          {r.scenario === 'Baseline projection'
+                            ? <span className="rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn">Baseline projection</span>
+                            : <span className="text-[10px] font-semibold text-ink-500">Record</span>}
+                        </td>
+                      )
+                      default: {
+                        const v = (r as any)[c.k]
+                        if (v == null || v === '') return <td key={c.k} className="px-3 py-2 text-ink-600">—</td>
+                        return c.num
+                          ? <td key={c.k} className="num px-3 py-2 text-right text-ink-300">{fmtNum(Number(v), Number.isInteger(Number(v)) ? 0 : 1)}</td>
+                          : <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-300">{String(v)}</td>
+                      }
+                    }
+                  }
                   return (
                     <tr key={i} className="border-b border-black/[0.04] transition-colors odd:bg-black/[0.012] hover:bg-brand/[0.04]">
-                      <td className="whitespace-nowrap px-3 py-2 font-medium text-ink-100">{r.parent}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-ink-200">{r.model}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-ink-400">{variantLabel(r)}</td>
-                      <td className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-ink-200"><i className="h-2 w-2 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
-                      <td className="num px-3 py-2 text-right text-ink-300">{r.year}</td>
-                      <td className={`num px-3 py-2 text-right font-semibold ${r.co2 === 0 ? 'text-safe' : 'text-ink-100'}`}>{fmtNum(r.co2, 0)}</td>
-                      {scenarioMode && <td className={`num px-3 py-2 text-right font-semibold ${m === 0 ? 'text-safe' : 'text-brand'}`}>{fmtNum(m, 1)}</td>}
-                      <td className="num px-3 py-2 text-right text-ink-200">{fmtInt(r.mass)}</td>
-                      <td className="num px-3 py-2 text-right font-semibold text-ink-100">{fmtInt(r.sales)}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-ink-400">{r.vclass}</td>
+                      {cols.map(td)}
                     </tr>
                   )
                 })}

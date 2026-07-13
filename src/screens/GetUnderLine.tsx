@@ -74,6 +74,14 @@ export default function GetUnderLine() {
         ))}
       </div>
 
+      {/* India: the payoff curve is a staircase — say so before ranking steps */}
+      {country === 'IN' && plan.fineBefore > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-warn/35 bg-warn/[0.07] px-3.5 py-2 text-[11.5px] text-ink-300" data-testid="stepped-note">
+          <Icon name="alert" size={14} className="shrink-0 text-warn" />
+          <span><b>Stepped penalty (EC Act 2022):</b> the fine only changes at tier boundaries — below a 0.2 L/100km gap it drops to <b className="num">{fmtMoney(25_000 * plan.before.rawUnits, pack.currency)}</b> (₹25k/car), and to zero only on clearing. Steps that don't cross a boundary buy compliance progress, not fine relief.</span>
+        </div>
+      )}
+
       {/* Headline outcome */}
       <div className="card overflow-hidden p-0">
         <div className="grid grid-cols-1 md:grid-cols-4">

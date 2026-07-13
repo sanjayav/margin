@@ -78,6 +78,10 @@ export interface Scenario {
    *  line by packs whose norms are not yet notified — India CAFE III). Negative
    *  = final rules land tighter than the draft. null/0 = as drafted. */
   targetShiftPct?: number | null
+  /** India CAFE III: carbon-neutral-fuel discounts (E20 petrol 8%, CNG 5%,
+   *  flex 22.3%) — auto-derived from fuel where the row carries no explicit
+   *  cnf. Default true; false models "CNF struck from the final rules". */
+  cnfEnabled?: boolean
 }
 
 /** How an added variant's volume is expressed. `absolute` adds units on top of
@@ -119,6 +123,9 @@ export interface RulePack {
   credits: string         // human description of the credit system
   limitNote: string       // how the limit is built, plain language
   source: string          // where the official numbers come from
+  /** Set when the bundled dataset covers only part of the real market —
+   *  surfaces an honesty chip so "market" verdicts read as covered-scope. */
+  coverageNote?: string
 
   /** Per-vehicle emissions figure that gets weighted-averaged (after credits). */
   vehicleMetric: (v: Vehicle, s: Scenario) => number

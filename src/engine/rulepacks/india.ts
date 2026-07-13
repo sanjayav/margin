@@ -43,6 +43,16 @@ const SUPER: Record<string, number> = {
   'Strong Hybrid': 2, 'Flex Fuel Ethanol': 1.5,
 }
 
+// Draft CAFE III carbon-neutral-fuel discounts, auto-derived from the fuel when
+// a row carries no explicit cnf: Indian pump petrol is E20 nationwide → 8%;
+// CNG 5%; flex-fuel ethanol 22.3%. An explicit v.cnf always wins.
+function autoCnf(fuel: string): number {
+  if (/flex/i.test(fuel)) return 0.223
+  if (/cng|natural gas/i.test(fuel)) return 0.05
+  if (/petrol|gasoline/i.test(fuel)) return 0.08
+  return 0
+}
+
 export const IN: RulePack = {
   id: 'IN',
   name: 'India',
@@ -68,6 +78,7 @@ export const IN: RulePack = {
   credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
   limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',
   source: 'BEE — Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
+  coverageNote: 'Reporting manufacturers only — not all-India volume. Add the remaining OEMs via the master file or the Import Studio.',
 
   regimeFor: (year) => (year < CAFE3_FROM ? { name: 'CAFE II' } : { name: 'CAFE III', draft: true }),
 
@@ -75,7 +86,10 @@ export const IN: RulePack = {
     if (/electric|bev/i.test(v.fuel) || v.co2 === 0) return 0
     const petrolEq = v.co2 / PETROL_DIV
     // CNF discounts are a CAFE III (draft) mechanism — inert in CAFE II years.
-    const cnf = s.year >= CAFE3_FROM ? (v.cnf ?? 0) : 0
+    // Auto-derived from fuel (E20 petrol 8% · CNG 5% · flex 22.3%) unless the
+    // row carries an explicit cnf; the cnfEnabled lever stress-tests "CNF is
+    // struck from the final notification".
+    const cnf = s.year >= CAFE3_FROM && s.cnfEnabled !== false ? (v.cnf ?? autoCnf(v.fuel)) : 0
     return Math.max(0, petrolEq * (1 - cnf))
   },
   vehicleUnits: (v: Vehicle, s) => {

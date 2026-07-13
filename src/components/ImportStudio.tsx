@@ -14,7 +14,7 @@ import type { CountryId, RulePack, Vehicle } from '../engine/types'
 import {
   FIELDS, REQUIRED, type FieldKey, type Mapping, type SheetData, type IssueMap,
   parseFile, parseDelimited, autoMap, detectVendor, looksLikeHeader,
-  validateGrid, toVehicles, mergeFleet, templateCsv, type Vendor,
+  validateGrid, toVehicles, mergeFleet, templateCsv, applyMasterDataMode, type Vendor,
 } from '../lib/importer'
 import { getFleet, setLiveFleet } from '../data/fleet'
 import { useStore } from '../state/store'
@@ -35,8 +35,18 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
   const [vendor, setVendor] = useState<Vendor | null>(null)
   const [parseErr, setParseErr] = useState<string | null>(null)
   const [drag, setDrag] = useState(false)
+  const [masterMode, setMasterMode] = useState<'Model' | 'Variant'>('Model')
 
   const grid = sheets[sheetIdx]?.grid ?? []
+  const isMasterFile = useMemo(() => hasHeader && (grid[0] ?? []).some((h) => h.toLowerCase().replace(/[^a-z0-9]/g, '') === 'datamode'), [grid, hasHeader])
+  // default to the level that actually carries rows (a specs-only extract has
+  // no Model rows; the full master has both — Model = the sales level)
+  useEffect(() => {
+    if (!isMasterFile) return
+    const dm = grid[0].findIndex((h) => h.toLowerCase().replace(/[^a-z0-9]/g, '') === 'datamode')
+    const hasModel = grid.slice(1).some((r) => (r[dm] ?? '').trim() === 'Model')
+    setMasterMode(hasModel ? 'Model' : 'Variant')
+  }, [isMasterFile, grid])
   const headers = useMemo(() => {
     if (!grid.length) return []
     return hasHeader ? grid[0].map((h, i) => h || `Column ${i + 1}`) : grid[0].map((_, i) => `Column ${i + 1}`)
@@ -105,7 +115,9 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
     }))
   }
   const toGrid = () => {
-    const src = hasHeader ? grid.slice(1) : grid
+    // the India master file: keep exactly one roll-up level
+    const effGrid = isMasterFile ? applyMasterDataMode(grid, hasHeader, masterMode) : grid
+    const src = hasHeader ? effGrid.slice(1) : effGrid
     const ordered = mapping
       .map((m, i) => ({ field: m.field, i }))
       .filter((m): m is { field: FieldKey; i: number } => m.field != null)
@@ -241,6 +253,19 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
             <div className="flex flex-wrap items-center gap-2">
               {vendor && <span className="chip border-safe/30 bg-safe/[0.08] text-safe"><Icon name="check" size={12} /> Detected: {vendor.name}</span>}
               <span className="chip"><Icon name="table" size={12} /> {fileName ?? 'Pasted data'} · {fmtInt((hasHeader ? grid.length - 1 : grid.length))} rows</span>
+              {isMasterFile && (
+                <span className="flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/[0.06] py-1 pl-2.5 pr-1 text-[11px] font-semibold text-brand" data-testid="master-mode">
+                  Master file — import
+                  <span className="flex items-center gap-0.5 rounded-lg bg-white/70 p-0.5">
+                    {(['Model', 'Variant'] as const).map((m) => (
+                      <button key={m} onClick={() => setMasterMode(m)}
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold transition ${masterMode === m ? 'bg-ink-100 text-white' : 'text-ink-500 hover:text-ink-100'}`}>
+                        {m === 'Model' ? 'Model rows (sales)' : 'Variant rows (specs)'}
+                      </button>
+                    ))}
+                  </span>
+                </span>
+              )}
               {sheets.length > 1 && (
                 <span className="flex items-center gap-1 text-[11px] text-ink-500">Sheet
                   <select value={sheetIdx} onChange={(e) => selectSheet(sheets, parseInt(e.target.value))}
