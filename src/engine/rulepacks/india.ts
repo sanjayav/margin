@@ -1,18 +1,43 @@
 // ───────────────────────────────────────────────────────────────────────────
-// RULE PACK · India (Draft CAFE III, FY2027-32, BEE 25 Sep 2025)
-// Limit & fleet figure are in L/100km (petrol-equivalent fuel consumption).
-// Mirrors the India_CAFE_III workbook Assumptions + Calculator.
+// RULE PACK · India — a market IN TRANSITION, modelled as such
+//
+// Three regulatory layers, each handled explicitly:
+//   1. CAFE II  (in force to 31 Mar 2027): 113 gCO₂/km at the 1,145 kg
+//      reference kerb mass ⇒ 4.765 L/100km petrol-equivalent, 0.002 L/kg slope.
+//      No super-credits, no CNF discounts.
+//   2. CAFE III (DRAFT, BEE 25 Sep 2025; applies FY2027-28 → FY2031-32):
+//      tightening constant d 3.73 → 3.01 L/100km, super-credits (BEV ×3 …),
+//      carbon-neutral-fuel discounts, and a credit-trading mechanism.
+//      Every CAFE III year is flagged `draft: true` until BEE notifies the
+//      final rules — the UI badges it, and scenario.targetShiftPct lets an
+//      analyst stress the target line for "final lands tighter/looser".
+//   3. The PENALTY is not draft: the Energy Conservation (Amendment) Act 2022
+//      sets a stepped statutory schedule — ₹25,000 per vehicle when the fleet
+//      exceedance is ≤ 0.2 L/100km, ₹50,000 per vehicle beyond — modelled
+//      exactly via fineFor (replacing the old ₹1,000/L placeholder).
 // ───────────────────────────────────────────────────────────────────────────
 import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
+// CAFE III (draft): slope + reference + yearly constant d (L/100km)
 const A = 0.002          // slope, per kg
-const C = 1170           // kg reference (kerb / unladen mass)
-// Constant d (L/100km) by fiscal year
-const D: Record<number, number> = {
+const C3 = 1170          // kg reference (kerb / unladen mass), draft CAFE III
+const D3: Record<number, number> = {
   2027: 3.7264, 2028: 3.5737, 2029: 3.4573, 2030: 3.2224, 2031: 3.0139,
 }
+// CAFE II (in force): 113 gCO₂/km at 1,145 kg reference ⇒ petrol-equivalent
+const C2 = 1145
+const D2 = 113 / 23.7135 // ≈ 4.765 L/100km
+const CAFE3_FROM = 2027  // FY2027-28 onward per the draft
+
 const PETROL_DIV = 23.7135 // CO₂ → petrol-equiv L/100km
-const FINE_RATE = 1000     // ₹ per excess L/100km-unit · per vehicle (illustrative)
+// EC (Amendment) Act 2022 stepped penalty per vehicle of the non-compliant fleet
+const FINE_TIER1 = 25_000  // ₹/vehicle · exceedance ≤ 0.2 L/100km
+const FINE_TIER2 = 50_000  // ₹/vehicle · exceedance > 0.2 L/100km
+const FINE_STEP = 0.2
+// Draft CAFE III credit trading: ~₹2,500 per gCO₂/km per vehicle at FY2027-28
+// (rising toward ₹4,500 by FY2031-32) ⇒ per L/100km-unit: × 23.7135
+const CREDIT_PER_L = Math.round(2500 * PETROL_DIV) // ≈ ₹59,300
+
 const SUPER: Record<string, number> = {
   BEV: 3, 'Range-Extender Hybrid': 3, PHEV: 2.5, 'Strong Hybrid Flex Fuel': 2.5,
   'Strong Hybrid': 2, 'Flex Fuel Ethanol': 1.5,
@@ -26,37 +51,52 @@ export const IN: RulePack = {
   metricUnit: 'L/100km',
   metricLabel: 'Fleet fuel use',
   massLabel: 'Kerb mass',
-  fineRate: FINE_RATE,
-  fineRateLabel: '₹1,000 per L/100km over · per car (illustrative)',
-  years: [2027, 2028, 2029, 2030, 2031],
+  // Linear-equivalent of the first statutory tier (₹25,000 per 0.2 L/100km) —
+  // used only for benchmark lines (MACC); the actual fine is fineFor below.
+  fineRate: FINE_TIER1 / FINE_STEP,
+  fineRateLabel: '₹25,000/car (≤0.2 L/100km over) · ₹50,000/car beyond — EC Act 2022',
+  creditPrice: CREDIT_PER_L,
+  creditPriceLabel: '≈₹2,500 per gCO₂/km per car (draft CAFE III trading price, FY28)',
+  // 2025–26 are the CAFE II actuals baseline (real 4-OEM extract); 2027–31 are
+  // the CAFE III draft horizon. defaultYear keeps the workspace opening on the
+  // CAFE III headline year while the actuals stay selectable in the year strip.
+  years: [2025, 2026, 2027, 2028, 2029, 2030, 2031],
+  defaultYear: 2027,
   classes: ['Passenger car'],
   smallVolumeThreshold: 1000,
-  pooling: { enabled: false, note: 'CAFE III is assessed per manufacturer; pooling not provided in the draft.' },
-  credits: 'Super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2) and carbon-neutral fuels (E20, CNG) discount fuel use.',
-  limitNote: 'Fuel-use target: 0.002 × (kerb mass − 1170 kg) + a yearly constant that tightens from 3.73 to 3.01 L/100km.',
-  source: 'Bureau of Energy Efficiency — Draft CAFE 2027 norms (25 Sep 2025).',
+  pooling: { enabled: false, note: 'CAFE is assessed per manufacturer; the draft provides credit trading between makers, not pooled averages.' },
+  credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
+  limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',
+  source: 'BEE — Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
 
-  vehicleMetric: (v: Vehicle) => {
+  regimeFor: (year) => (year < CAFE3_FROM ? { name: 'CAFE II' } : { name: 'CAFE III', draft: true }),
+
+  vehicleMetric: (v: Vehicle, s) => {
     if (/electric|bev/i.test(v.fuel) || v.co2 === 0) return 0
     const petrolEq = v.co2 / PETROL_DIV
-    // CAFE III has no eco-innovation lever; the only discount is the data-driven
-    // carbon-neutral-fuel fraction (E20/CNG). (Previously the g/km `ecoBoostG`
-    // lever was mis-applied here as a flat 5% fuel discount — a unit error.)
-    const cnf = v.cnf ?? 0
+    // CNF discounts are a CAFE III (draft) mechanism — inert in CAFE II years.
+    const cnf = s.year >= CAFE3_FROM ? (v.cnf ?? 0) : 0
     return Math.max(0, petrolEq * (1 - cnf))
   },
   vehicleUnits: (v: Vehicle, s) => {
-    if (!s.superCreditsEnabled) return v.sales
-    // Super-credits boost clean-tech volume; key off the same zero-emission test
-    // the share/limit use, so a BEV labelled e.g. "Battery Electric" still gets ×3.
+    // Super-credits exist only in the draft CAFE III regime.
+    if (s.year < CAFE3_FROM || !s.superCreditsEnabled) return v.sales
     const f = SUPER[v.powertrain] ?? (v.co2 === 0 || /electric|bev/i.test(v.fuel) ? 3 : 1)
     return v.sales * f
   },
   isZeroEmission: (v) => v.co2 === 0 || /electric|bev/i.test(v.fuel),
   isPlugInHybrid: (v) => /phev|plug/i.test(v.powertrain),
   limit: (ctx: LimitContext) => {
-    const d = D[ctx.year] ?? 3.0139
-    return A * (ctx.avgMass - C) + d
+    if (ctx.year < CAFE3_FROM) return A * (ctx.avgMass - C2) + D2 // CAFE II, as in force
+    const d = D3[ctx.year] ?? 3.0139
+    // Draft-stringency stress: the constant is the negotiable part of the draft.
+    const shift = 1 + (ctx.scenario.targetShiftPct ?? 0) / 100
+    return A * (ctx.avgMass - C3) + d * shift
   },
-  forecast: (year) => ({ limit: A * (1300 - C) + (D[year] ?? 3.0139), note: `FY ${year}-${(year + 1) % 100}` }),
+  // EC Act 2022: stepped per-vehicle penalty on the fleet's average exceedance.
+  fineFor: (excess, units) => (excess <= FINE_STEP ? FINE_TIER1 : FINE_TIER2) * units,
+  forecast: (year) => ({
+    limit: year < CAFE3_FROM ? A * (1300 - C2) + D2 : A * (1300 - C3) + (D3[year] ?? 3.0139),
+    note: year < CAFE3_FROM ? `FY ${year}-${(year + 1) % 100} · CAFE II` : `FY ${year}-${(year + 1) % 100} · CAFE III draft`,
+  }),
 }

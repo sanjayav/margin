@@ -1,10 +1,11 @@
 import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useStore, scopeKey } from '../state/store'
+import { useStore, scopeKey, defaultScenario } from '../state/store'
 import type { Aggregate } from '../engine/types'
 import { useCompliance } from '../lib/useCompliance'
 import { fmtNum, fmtMoney, buildDrillTree, threeYearAverage, variantKey, fleetFineFast } from '../engine/engine'
 import { simulateRisk, type RiskResult } from '../engine/montecarlo'
 import type { Vehicle, Scenario, ShareScope } from '../engine/types'
+import { INDIA_CATALOG_BY_MODEL, INDIA_MODELS } from '../data/india_catalog'
 import Icon, { type IconName } from './Icon'
 
 const PT_COLOR: Record<string, string> = {
@@ -16,21 +17,40 @@ const SCOPE_NAME = ['Market', 'Pool', 'Manufacturer', 'Model', 'Variant']
 interface Outcome { metric: number; limit: number; gap: number; fine: number; units: number; zlevShare?: number; marketFine: number; poolFine: number; makerFine: number }
 
 // ── small UI atoms ──────────────────────────────────────────────────────────
-function Group({ title, icon, children, defaultOpen = true, modified, subtitle }: { title: string; icon: IconName; children: ReactNode; defaultOpen?: boolean; modified?: boolean; subtitle?: string }) {
+function Group({ title, icon, owner, children, defaultOpen = true, modified, subtitle, onReset }: {
+  title: string; icon: IconName; owner?: string; children: ReactNode
+  defaultOpen?: boolean; modified?: boolean; subtitle?: string; onReset?: () => void
+}) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-xl border border-black/[0.06] bg-white/40">
+    <div className={`rounded-xl border bg-white/40 transition-colors ${modified ? 'border-brand/20' : 'border-black/[0.06]'}`}>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between px-3 py-2.5">
-        <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-300">
-          <Icon name={icon} size={13} className="text-brand" />{title}
-          {modified && <i className="h-1.5 w-1.5 rounded-full bg-brand" />}
+        <span className="flex min-w-0 items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-300">
+          <Icon name={icon} size={13} className="text-brand" />
+          <span className="truncate">{title}</span>
+          {modified && <i className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {subtitle && !open && <span className="text-[10px] normal-case text-ink-500">{subtitle}</span>}
           <Icon name="chevron" size={13} className={`text-ink-500 transition-transform ${open ? 'rotate-90' : ''}`} />
         </div>
       </button>
-      {open && <div className="space-y-3.5 px-3 pb-3.5">{children}</div>}
+      {open && (
+        <div className="space-y-3.5 px-3 pb-3.5">
+          {/* who owns these decisions — the hierarchy made visible */}
+          {(owner || (modified && onReset)) && (
+            <div className="-mt-1 flex items-center justify-between gap-2 border-b border-black/[0.05] pb-2">
+              <span className="text-[9.5px] leading-snug text-ink-500">{owner}</span>
+              {modified && onReset && (
+                <button onClick={onReset} className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold text-ink-500 transition hover:bg-danger/10 hover:text-danger">
+                  <Icon name="reset" size={10} /> Reset group
+                </button>
+              )}
+            </div>
+          )}
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -42,6 +62,7 @@ function NumSlider({ label, value, min, max, step, onChange, unit, hint, baselin
   const modified = baseline != null && Math.abs(value - baseline) > step / 2
   const round = (n: number) => Math.round(n / step) * step
   const shown = step < 1 ? round(value) : Math.round(value)
+  const pct = (v: number) => ((v - min) / (max - min)) * 100
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -49,14 +70,21 @@ function NumSlider({ label, value, min, max, step, onChange, unit, hint, baselin
         <div className="flex items-center gap-1">
           <input type="number" value={shown} min={min} max={max} step={step}
             onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) onChange(Math.max(min, Math.min(max, v))) }}
-            className="num w-14 rounded-md border border-black/10 bg-black/[0.03] px-1.5 py-0.5 text-right text-xs font-bold text-brand outline-none focus:border-brand/40" />
+            className={`num w-14 rounded-md border px-1.5 py-0.5 text-right text-xs font-bold outline-none focus:border-brand/40 ${modified ? 'border-brand/30 bg-brand/[0.06] text-brand' : 'border-black/10 bg-black/[0.03] text-ink-300'}`} />
           {unit && <span className="text-[10px] text-ink-500">{unit}</span>}
-          {modified && <button onClick={() => onChange(baseline!)} title="reset"><Icon name="reset" size={11} className="text-ink-500 hover:text-ink-100" /></button>}
+          {modified && <button onClick={() => onChange(baseline!)} title={`back to ${baseline}`}><Icon name="reset" size={11} className="text-ink-500 hover:text-ink-100" /></button>}
         </div>
       </div>
-      <input type="range" className="mt-2 w-full" min={min} max={max} step={step} value={value}
-        style={{ ['--fill' as string]: `${((value - min) / (max - min)) * 100}%` }}
-        onChange={(e) => onChange(parseFloat(e.target.value))} />
+      <div className="relative mt-2">
+        <input type="range" className="w-full" min={min} max={max} step={step} value={value}
+          style={{ ['--fill' as string]: `${pct(value)}%` }}
+          onChange={(e) => onChange(parseFloat(e.target.value))} />
+        {/* the as-sold baseline, always visible on the track */}
+        {baseline != null && baseline >= min && baseline <= max && (
+          <span className="pointer-events-none absolute top-1/2 h-[11px] w-[2px] -translate-y-[54%] rounded-full bg-ink-400/60"
+            style={{ left: `calc(${pct(baseline)}% )` }} title={`as-sold ${baseline}`} />
+        )}
+      </div>
       {hint && <div className="mt-1 text-[10px] text-ink-500">{hint}</div>}
     </div>
   )
@@ -120,6 +148,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const makerOverrides = useStore((s) => s.makerOverrides)
   const patch = useStore((s) => s.patchScenario)
   const reset = useStore((s) => s.resetScenario)
+  const setScreen = useStore((s) => s.setScreen)
   const savedScenarios = useStore((s) => s.savedScenarios)
   const saveScenario = useStore((s) => s.saveScenario)
   const loadScenario = useStore((s) => s.loadScenario)
@@ -144,7 +173,9 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     : `Tuning the ${variant} variant of ${model}.`
 
   const [show3yr, setShow3yr] = useState(false)
-  const [snapA, setSnapA] = useState<{ scenario: Scenario; overrides: Record<string, Partial<Scenario>>; label: string } | null>(null)
+  const [naming, setNaming] = useState(false)
+  const [scenarioName, setScenarioName] = useState('')
+  const commitSave = () => { if (scenarioName.trim()) { saveScenario(scenarioName.trim()); setScenarioName(''); setNaming(false) } }
 
   const nodeAt = (root: Aggregate, path: string[]): Aggregate => {
     let n = root
@@ -167,12 +198,11 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const fastFine = (sc: Scenario, ov: Record<string, Partial<Scenario>>) =>
     fleetFineFast(raw, pack, sc, ov, level >= 2 ? { maker } : level === 1 ? { pool } : {})
 
-  const baseScenario: Scenario = { ...scenario, mix: null, massShiftKg: 0, salesMultiplier: 1, ecoBoostG: 0, evSharePct: null, phevUF: true, creditPrice: null }
+  const baseScenario: Scenario = { ...scenario, mix: null, massShiftKg: 0, salesMultiplier: 1, ecoBoostG: 0, evSharePct: null, phevUF: true, creditPrice: null, targetShiftPct: null }
   const path = drillPath.join('/')
   // Reuse the live drill tree that useCompliance already built — don't rebuild it.
   const cur = useMemo(() => outcomeFromTree(drillTree), [drillTree, path]) // eslint-disable-line react-hooks/exhaustive-deps
   const base = useMemo(() => outcomeOf(baseScenario, {}), [raw, pack, scenario.year, path]) // eslint-disable-line react-hooks/exhaustive-deps
-  const aOut = useMemo(() => (snapA ? outcomeOf(snapA.scenario, snapA.overrides) : null), [snapA, raw, pack, path]) // eslint-disable-line react-hooks/exhaustive-deps
   const three = useMemo(
     () => (country === 'EU' && level >= 2 ? threeYearAverage(raw, pack, scenario, maker, [2025, 2026, 2027], makerOverrides) : null),
     [country, level, maker, raw, pack, scenario, makerOverrides],
@@ -220,6 +250,10 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const setWeight = (p: string, v: number) => patch({ mix: { ...(ownMix ?? mixInfo.shares), [p]: v } })
   const massVal = scope ? (ownOv.massShiftKg ?? 0) : scenario.massShiftKg
   const salesVal = scope ? (ownOv.salesMultiplier ?? 1) : scenario.salesMultiplier
+  // Eco-innovation certificates are per-OEM (Art 11), so the lever scopes with
+  // the drill: the scoped value replaces the market value for that scope.
+  const ecoVal = scope ? (ownOv.ecoBoostG ?? scenario.ecoBoostG) : scenario.ecoBoostG
+  const ecoModified = scope ? ownOv.ecoBoostG != null && ownOv.ecoBoostG !== scenario.ecoBoostG : scenario.ecoBoostG !== 0
 
   const mixFromBEV = (bev: number) => {
     const c0 = mixInfo.shares['BEV'] ?? 0
@@ -240,9 +274,31 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   }
 
   const mixModified = !!ownMix
-  const fleetModified = mixModified || massVal !== 0 || salesVal !== 1
-  const policyModified = scenario.ecoBoostG !== 0 || scenario.phevUF === false || scenario.poolingEnabled || scenario.superCreditsEnabled || scenario.creditPrice != null
+  const fleetModified = mixModified || massVal !== 0 || salesVal !== 1 || ecoModified
+  const policyModified = scenario.phevUF === false || scenario.poolingEnabled || scenario.superCreditsEnabled || scenario.creditPrice != null || (scenario.targetShiftPct ?? 0) !== 0
   const variants = scenario.extraVariants ?? []
+
+  // ── Every active assumption, in plain English, individually revertible ─────
+  // This is the "what exactly am I assuming?" ledger: anything that differs from
+  // the as-sold default becomes a chip. patch() routes scoped keys (mix/mass/
+  // sales/EV) to the current drill scope and the rest globally, so revert is
+  // always symmetric with how the value was set.
+  const def = defaultScenario(country)
+  const evVal = scope ? (ownOv.evSharePct ?? null) : scenario.evSharePct
+  const assumptions: { label: string; revert?: () => void; title?: string }[] = []
+  if (mixModified) assumptions.push({ label: 'Custom powertrain mix', revert: () => patch({ mix: null }), title: 'Mix sliders moved — click × to return to as-sold shares' })
+  if (evVal != null) assumptions.push({ label: `EV share ${Math.round(evVal)}%`, revert: () => patch({ evSharePct: null }) })
+  if (massVal !== 0) assumptions.push({ label: `Mass ${massVal > 0 ? '+' : ''}${massVal} kg`, revert: () => patch({ massShiftKg: 0 }) })
+  if (salesVal !== 1) assumptions.push({ label: `Sales ×${fmtNum(salesVal, 2)}`, revert: () => patch({ salesMultiplier: 1 }) })
+  if (ecoModified) assumptions.push({ label: `Eco-innovation ${fmtNum(ecoVal, 1)} g${scope ? ' · this scope' : ''}`, revert: () => patch({ ecoBoostG: scope ? scenario.ecoBoostG : 0 }) })
+  if ((scenario.targetShiftPct ?? 0) !== 0) assumptions.push({ label: `Draft target ${scenario.targetShiftPct! > 0 ? '+' : ''}${scenario.targetShiftPct}%`, revert: () => patch({ targetShiftPct: null }), title: 'Stress on the draft regime\'s target line' })
+  if (scenario.phevUF === false) assumptions.push({ label: 'PHEV utility factor off', revert: () => patch({ phevUF: true }) })
+  if (scenario.poolingEnabled) assumptions.push({ label: 'Pooling on', revert: () => patch({ poolingEnabled: false }) })
+  if (scenario.superCreditsEnabled !== def.superCreditsEnabled) assumptions.push({ label: scenario.superCreditsEnabled ? 'Super-credits on' : 'Super-credits off', revert: () => patch({ superCreditsEnabled: def.superCreditsEnabled }) })
+  if (scenario.creditPrice != null) assumptions.push({ label: `Credit price ${fmtMoney(scenario.creditPrice, pack.currency)}/u`, revert: () => patch({ creditPrice: null }) })
+  if (variants.length > 0) assumptions.push({ label: `${variants.length} hypothetical variant${variants.length > 1 ? 's' : ''}`, revert: () => patch({ extraVariants: [] }) })
+  const otherScopes = Object.entries(makerOverrides).filter(([k, v]) => k !== scope && v && Object.keys(v).length > 0)
+  if (otherScopes.length > 0) assumptions.push({ label: `+${otherScopes.length} other scope${otherScopes.length > 1 ? 's' : ''} touched`, title: otherScopes.map(([k]) => k).join(' · ') })
 
   const isVariantLevel = level >= 4
   const showMix = !isVariantLevel && mixInfo.pts.length > 1
@@ -273,8 +329,50 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       </div>
       <div className="-mt-1.5 text-[10px] leading-relaxed text-ink-500">{levelHint}</div>
 
-      {/* live outcome */}
-      <div className="rounded-2xl border border-black/[0.07] bg-gradient-to-b from-black/[0.04] to-transparent p-3.5">
+      {/* the assumption ledger — what exactly is being assumed right now */}
+      {assumptions.length > 0 ? (
+        <div className="rounded-xl border border-brand/[0.18] bg-brand/[0.04] p-2.5">
+          <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-brand/80">Active assumptions · {assumptions.length}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {assumptions.map((a) => (
+              <span key={a.label} title={a.title}
+                className="flex items-center gap-1 rounded-full border border-brand/25 bg-white/70 py-0.5 pl-2 pr-1 text-[10px] font-semibold text-ink-200">
+                {a.label}
+                {a.revert
+                  ? <button onClick={a.revert} title="Revert this assumption" className="grid h-3.5 w-3.5 place-items-center rounded-full text-ink-500 transition hover:bg-danger/10 hover:text-danger"><Icon name="close" size={8} /></button>
+                  : <Icon name="dot" size={8} className="mr-1 text-ink-500" />}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-black/[0.05] bg-black/[0.02] px-2.5 py-2 text-[10px] leading-relaxed text-ink-500">
+          <span className="font-semibold text-safe">As sold.</span> No assumptions applied — every number is the official registration data.
+        </div>
+      )}
+
+      {/* compliance year — context for everything below, visible at every drill level */}
+      <div>
+        <div className="mb-1.5 flex items-center justify-between">
+          <span className="label">Compliance year</span>
+          {pack.regimeFor?.(scenario.year)?.draft && <span className="rounded-full border border-warn/30 bg-warn/10 px-1.5 py-px text-[8.5px] font-bold uppercase tracking-wide text-warn">{pack.regimeFor(scenario.year).name} · draft</span>}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {pack.years.map((y) => {
+            const draft = pack.regimeFor?.(y)?.draft
+            return (
+              <button key={y} onClick={() => patch({ year: y })}
+                className={`num relative rounded-lg px-2 py-1 text-xs font-semibold transition ${scenario.year === y ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>
+                {y}
+                {draft && <i className={`absolute right-0.5 top-0.5 h-1 w-1 rounded-full ${scenario.year === y ? 'bg-white/80' : 'bg-warn'}`} title="draft regime" />}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* live outcome — pinned while the levers scroll */}
+      <div className="sticky top-0 z-10 rounded-2xl border border-black/[0.07] bg-[#F6F0E3] p-3.5 shadow-[0_10px_18px_-14px_rgba(60,45,20,0.35)]">
         <div className="flex items-center justify-between">
           <span className="label">Outcome · {outcomeName}</span>
           <div className="flex items-center gap-1.5">
@@ -316,31 +414,28 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       </div>
 
       {/* quick presets */}
-      <div className="flex flex-wrap gap-1.5">
-        {([
-          ['As-sold', reset],
-          ...(showMix && mixInfo.pts.includes('BEV') ? [['BEV +20pp', () => presetBEV(20)], ['Slow EV', () => presetBEV(-10)]] as [string, () => void][] : []),
-          ...(scope && showMix && mixInfo.pts.includes('BEV') && cur.gap > 0 ? [['⚡ To the line', solveToLine]] as [string, () => void][] : []),
-          ['Heavier +100kg', () => patch({ massShiftKg: 100 })],
-        ] as [string, () => void][]).map(([label, fn]) => (
-          <button key={label} onClick={fn} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition hover:-translate-y-px ${label.startsWith('⚡') ? 'border-brand/40 bg-brand/10 text-brand' : 'border-black/[0.07] bg-white/50 text-ink-400 hover:border-brand/40 hover:text-brand'}`}>{label}</button>
-        ))}
+      <div>
+        <div className="label mb-1.5 text-ink-400">Quick scenarios</div>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            ['As-sold', reset],
+            ...(showMix && mixInfo.pts.includes('BEV') ? [['BEV +20pp', () => presetBEV(20)], ['Slow EV', () => presetBEV(-10)]] as [string, () => void][] : []),
+            ...(scope && showMix && mixInfo.pts.includes('BEV') && cur.gap > 0 ? [['⚡ To the line', solveToLine]] as [string, () => void][] : []),
+            ...(pack.massBasedLimit !== false ? [['Heavier +100kg', () => patch({ massShiftKg: 100 })]] as [string, () => void][] : []),
+          ] as [string, () => void][]).map(([label, fn]) => (
+            <button key={label} onClick={fn} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition hover:-translate-y-px ${label.startsWith('⚡') ? 'border-brand/40 bg-brand/10 text-brand' : 'border-black/[0.07] bg-white/50 text-ink-400 hover:border-brand/40 hover:text-brand'}`}>{label}</button>
+          ))}
+        </div>
       </div>
 
-      {/* LEVERS — level-aware */}
-      <Group title={`${scopeName} levers`} icon="scatter" modified={fleetModified}>
-        {level === 0 && (
-          <div>
-            <span className="label">Compliance year</span>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {pack.years.map((y) => (
-                <button key={y} onClick={() => patch({ year: y })}
-                  className={`num rounded-lg px-2.5 py-1 text-xs font-semibold transition ${scenario.year === y ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{y}</button>
-              ))}
-            </div>
-          </div>
-        )}
-
+      {/* FLEET STRATEGY — decisions the current scope actually owns */}
+      <Group title={`${scopeName} strategy`} icon="scatter" modified={fleetModified}
+        owner={level === 0 ? 'Fleet-side decisions, applied to every maker in the market'
+          : level === 1 ? `Members of the ${pool.split(' ')[0]} pool move together — engineering stays per maker`
+          : level === 2 ? `${maker.split(' ')[0]}'s product decisions: mix, volumes, mass, certified credits`
+          : level === 3 ? `${model} decisions within ${maker.split(' ')[0]}`
+          : `Spec-level tuning of the ${variant} variant`}
+        onReset={() => { if (scope) reset(); else patch({ mix: null, massShiftKg: 0, salesMultiplier: 1, evSharePct: null, ecoBoostG: 0 }) }}>
         {showMix ? (
           <div>
             <div className="flex items-center justify-between">
@@ -366,17 +461,38 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           <div className="rounded-lg bg-black/[0.02] px-2.5 py-2 text-[10px] text-ink-500">Single variant — adjust its volume and mass below; switch powertrain mix at the model level.</div>
         ) : null}
 
+        {/* Eco-innovation certificates belong to the manufacturer (Art 11) — the
+            lever scopes with the drill, and is hidden at pool level (pools don't
+            certify) and variant level. */}
+        {pack.ecoCap && level !== 1 && !isVariantLevel && (
+          <NumSlider label="Eco-innovation" value={ecoVal} min={0} max={pack.ecoCap(scenario.year)} step={0.5} unit="g"
+            baseline={scope ? scenario.ecoBoostG : 0}
+            onChange={(v) => patch({ ecoBoostG: v })}
+            hint={level === 0
+              ? `certified off-cycle credits · capped ${pack.ecoCap(scenario.year)} g/km · every maker`
+              : level === 2
+              ? 'this manufacturer\'s certified credits (certificates are per-OEM)'
+              : 'credits fitted on this model'} />
+        )}
         <NumSlider label={isVariantLevel ? 'Variant volume' : 'Sales volume'} value={salesVal} min={0.5} max={1.6} step={0.05} unit="×" baseline={1}
           onChange={(v) => patch({ salesMultiplier: v })} hint={isVariantLevel ? 'scales this variant only' : undefined} />
-        <NumSlider label={`${pack.massLabel} shift`} value={massVal} min={-150} max={150} step={5} unit="kg" baseline={0}
-          onChange={(v) => patch({ massShiftKg: v })} hint="moves fleet & the limit together" />
+        {/* Mass only moves compliance where the limit is mass-indexed (EU/IN/AU);
+            for unit mandates (UK ZEV) it's engineering with no compliance effect.
+            Pools don't do engineering, so it's hidden there too. */}
+        {pack.massBasedLimit !== false && level !== 1 && (
+          <NumSlider label={`${pack.massLabel} shift`} value={massVal} min={-150} max={150} step={5} unit="kg" baseline={0}
+            onChange={(v) => patch({ massShiftKg: v })} hint="moves fleet & the limit together" />
+        )}
       </Group>
 
-      {/* POLICY & CREDITS — market-wide, collapsed */}
-      <Group title="Policy & credits" icon="scale" defaultOpen={false} modified={policyModified} subtitle="market-wide">
-        {pack.ecoCap && (
-          <NumSlider label="Eco-innovation" value={scenario.ecoBoostG} min={0} max={pack.ecoCap(scenario.year)} step={0.5} unit="g" baseline={0}
-            onChange={(v) => patch({ ecoBoostG: v })} hint={`capped at ${pack.ecoCap(scenario.year)} g/km · all makers`} />
+      {/* REGULATOR SETTINGS — one dial for the whole market, never per maker */}
+      <Group title="Regulator settings" icon="scale" defaultOpen={false} modified={policyModified} subtitle="market-wide"
+        owner="Regulator-side: pooling regime, credit mechanics, test-procedure corrections — one setting for the whole market"
+        onReset={() => patch({ poolingEnabled: false, superCreditsEnabled: country === 'IN', phevUF: true, creditPrice: null, targetShiftPct: null })}>
+        {pack.regimeFor?.(scenario.year)?.draft && (
+          <NumSlider label="Draft stringency" value={scenario.targetShiftPct ?? 0} min={-10} max={10} step={1} unit="%" baseline={0}
+            onChange={(v) => patch({ targetShiftPct: v === 0 ? null : v })}
+            hint={`${pack.regimeFor(scenario.year).name} is a draft — stress the target line: − = final rules land tighter, + = looser`} />
         )}
         {country === 'EU' && (
           <Toggle label="PHEV utility factor" checked={scenario.phevUF !== false} onChange={(b) => patch({ phevUF: b })}
@@ -391,8 +507,8 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         )}
       </Group>
 
-      {/* BUILD A VARIANT — not on the read-only analytics dashboard */}
-      {screen !== 'analytics' && (
+      {/* BUILD A VARIANT */}
+      {(
         <Group title="Build a variant" icon="spark" defaultOpen={variants.length > 0} modified={variants.length > 0} subtitle={variants.length ? `${variants.length} added` : undefined}>
           <AddVariant pack={pack} scenario={scenario} parent={drilledParent} defaultModel={model} addScope={addScope} scopeTotal={mixInfo.total} variants={variants} ptColor={ptColor}
             onAdd={(v) => patch({ extraVariants: [...variants, v] })}
@@ -400,23 +516,23 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         </Group>
       )}
 
-      {/* SNAPSHOTS — compare & saved, collapsed to declutter */}
-      <Group title="Snapshots & saved" icon="layers" defaultOpen={false} subtitle={myScenarios.length ? `${myScenarios.length} saved` : undefined}>
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => setSnapA({ scenario: { ...scenario }, overrides: { ...makerOverrides }, label: `${scopeName} · ${scenario.year}` })}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-black/10 bg-black/[0.02] px-2 py-1.5 text-[10px] font-semibold text-ink-300 transition hover:border-black/20 hover:text-ink-100"><Icon name="layers" size={11} /> {snapA ? 'Re-capture A' : 'Capture as A'}</button>
-          {snapA && <button onClick={() => setSnapA(null)} className="rounded-lg border border-black/10 px-2 py-1.5 text-[10px] text-ink-500 hover:text-danger">clear</button>}
+      {/* SAVED SCENARIOS — named, durable; comparison lives in Scenario → Compare */}
+      <Group title="Saved scenarios" icon="layers" defaultOpen={false} subtitle={myScenarios.length ? `${myScenarios.length} saved` : undefined}
+        owner="A saved scenario captures every assumption above — reload it anytime, or compare scenarios side-by-side">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-ink-500">Capture the current assumptions</span>
+          {!naming && <button onClick={() => setNaming(true)} className="text-[10px] font-semibold text-brand transition hover:underline">+ Save current</button>}
         </div>
-        {snapA && aOut && (
-          <div className="overflow-hidden rounded-xl border border-black/[0.06] bg-black/[0.02] text-[10px]">
-            <div className="flex justify-between border-b border-black/[0.05] bg-black/[0.02] px-2.5 py-1 font-semibold uppercase tracking-wide text-ink-500"><span>A ⇄ B</span><span>gap · €-at-risk</span></div>
-            <div className="px-2.5 py-1.5"><Row label={`A · ${snapA.label}`} o={{ ...aOut, fine: scopeFine(aOut) }} cur={pack.currency} dim /><Row label="B · live now" o={{ ...cur, fine: riskFine }} cur={pack.currency} /></div>
+        {naming && (
+          <div className="flex items-center gap-1.5">
+            <input autoFocus value={scenarioName} onChange={(e) => setScenarioName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitSave(); else if (e.key === 'Escape') { setNaming(false); setScenarioName('') } }}
+              placeholder="Name this scenario…"
+              className="w-full min-w-0 flex-1 rounded-lg border border-black/10 bg-ink-850 px-2 py-1.5 text-[11px] text-ink-100 outline-none placeholder:text-ink-600 focus:border-brand/40" />
+            <button onClick={commitSave} disabled={!scenarioName.trim()} className="shrink-0 rounded-lg bg-brand px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:brightness-105 disabled:opacity-40">Save</button>
+            <button onClick={() => { setNaming(false); setScenarioName('') }} className="shrink-0 text-ink-500 transition hover:text-ink-100"><Icon name="close" size={12} /></button>
           </div>
         )}
-        <div className="flex items-center justify-between pt-1">
-          <span className="label">Saved scenarios</span>
-          <button onClick={() => { const n = window.prompt('Name this scenario'); if (n != null) saveScenario(n) }} className="text-[10px] font-semibold text-brand transition hover:underline">+ Save current</button>
-        </div>
         {myScenarios.length === 0
           ? <div className="text-[10px] text-ink-500">None yet — capture the current assumptions to reuse or compare.</div>
           : (
@@ -429,19 +545,17 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
               ))}
             </div>
           )}
+        {myScenarios.length > 0 && (
+          <button onClick={() => setScreen('compare')} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-brand/25 bg-brand/[0.06] py-1.5 text-[10.5px] font-semibold text-brand transition hover:bg-brand/10">
+            <Icon name="layers" size={12} /> Compare side-by-side <Icon name="chevron" size={11} />
+          </button>
+        )}
       </Group>
 
       {footer}
     </aside>
   )
 }
-
-const Row = ({ label, o, cur, dim }: { label: string; o: Outcome; cur: string; dim?: boolean }) => (
-  <div className={`flex items-center justify-between py-0.5 ${dim ? 'text-ink-400' : 'text-ink-100'}`}>
-    <span className="truncate pr-2">{label}</span>
-    <span className="num shrink-0 font-semibold"><span className={o.gap > 0 ? 'text-danger' : 'text-safe'}>{o.gap > 0 ? '+' : ''}{fmtNum(o.gap, 1)}</span> · {fmtMoney(o.fine, cur)}</span>
-  </div>
-)
 
 // Representative tailpipe CO₂ (g/km) per powertrain — the variant's emissions
 // follow the powertrain, not a free-typed number. BEV is always zero-emission.
@@ -465,6 +579,20 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
   useEffect(() => { setModel(defaultModel) }, [defaultModel])
   const isBev = pt === 'BEV'
   const choosePt = (p: string) => { setPt(p); setCo2(String(DEFAULT_CO2[p] ?? 0)) }
+
+  // India: typing (or picking) a real model prefills its powertrain, CO₂ and mass
+  // from the workbook catalog, so a scenario variant starts from a real spec.
+  const inCatalog = pack.id === 'IN'
+  const applyModel = (name: string) => {
+    setModel(name)
+    if (!inCatalog) return
+    const spec = INDIA_CATALOG_BY_MODEL[name.trim().toLowerCase()]
+    if (!spec) return
+    const p = spec.powertrain === 'Strong Hybrid' ? 'HEV' : (spec.powertrain ?? pt)
+    setPt(p)
+    setCo2(String(p === 'BEV' ? 0 : (spec.co2 ?? DEFAULT_CO2[p] ?? 0)))
+    if (spec.kerbMass) setMass(String(spec.kerbMass))
+  }
 
   const sharePct = Math.max(0, Math.min(95, parseFloat(share) || 0))
   const projectedUnits = volMode === 'share' ? Math.round(scopeTotal * (sharePct / 100)) : (parseInt(units) || 0)
@@ -500,7 +628,10 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
       )}
       {open && (
         <div className="mt-2 space-y-2">
-          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model / variant name" className="w-full rounded-lg border border-black/10 bg-ink-850 px-2 py-1.5 text-xs text-ink-100 outline-none placeholder:text-ink-600" />
+          <input value={model} onChange={(e) => applyModel(e.target.value)} list={inCatalog ? 'india-catalog-models' : undefined}
+            placeholder={inCatalog ? 'Model name — pick a real India model to prefill' : 'Model / variant name'}
+            className="w-full rounded-lg border border-black/10 bg-ink-850 px-2 py-1.5 text-xs text-ink-100 outline-none placeholder:text-ink-600" />
+          {inCatalog && <datalist id="india-catalog-models">{INDIA_MODELS.map((m) => <option key={m} value={m} />)}</datalist>}
           <div className="flex flex-wrap gap-1">
             {['BEV', 'PHEV', 'HEV', 'MHEV', 'ICE'].map((p) => (
               <button key={p} onClick={() => choosePt(p)} className={`rounded-md px-2 py-1 text-[10px] font-semibold ${pt === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-400'}`}>{p}</button>

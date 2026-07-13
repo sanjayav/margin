@@ -38,6 +38,11 @@ export interface Vehicle {
   gearbox?: string
   driveline?: string
   market?: string          // country / sub-market label
+  segment?: string         // market segment (India A–F, etc.)
+  bodyStyle?: string       // SUV / Hatchback / Sedan / MPV …
+  driveCycle?: string      // homologation cycle (MIDC / WLTC / NEDC …)
+  powerKW?: number         // rated power, kW
+  co2Estimated?: boolean   // co2 was back-filled from siblings/mass fit, not measured
   // ── added-variant volume control (only used on Scenario.extraVariants) ──
   share?: number           // 0–1: this variant's target share of its scope (proportional)
   shareScope?: 'market' | 'manufacturer' | 'model'
@@ -56,6 +61,10 @@ export interface Scenario {
   extraVariants?: Vehicle[]   // hypothetical variants the user added
   phevUF?: boolean            // EU: apply the 2025+ PHEV utility-factor correction (default true)
   creditPrice?: number | null // override the pack's credit price for trading value
+  /** Regulatory-stringency stress for DRAFT regimes (%, applied to the target
+   *  line by packs whose norms are not yet notified — India CAFE III). Negative
+   *  = final rules land tighter than the draft. null/0 = as drafted. */
+  targetShiftPct?: number | null
 }
 
 /** How an added variant's volume is expressed. `absolute` adds units on top of
@@ -81,9 +90,16 @@ export interface RulePack {
   massLabel: string       // 'Test mass' / 'Kerb mass' / 'MIRO'
   fineRate: number        // charged per metric-unit over, per vehicle
   fineRateLabel: string   // human string, e.g. '€95 per g/km · per car'
+  /** True while the pack's fine/credit rates are placeholders pending primary-source
+   *  confirmation — surfaced as an "illustrative" badge wherever money is shown. */
+  illustrativeRates?: boolean
   creditPrice?: number    // price of one credit (per metric-unit · per vehicle) where trading exists
   creditPriceLabel?: string
   years: number[]
+  /** Landing year for a fresh scenario. Defaults to years[0] when omitted — set
+   *  it when the chronological first year (e.g. a historic actuals baseline) is
+   *  not the year the workspace should open on. */
+  defaultYear?: number
   classes: string[]
   smallVolumeThreshold: number
   pooling: { enabled: boolean; note: string }
@@ -106,6 +122,18 @@ export interface RulePack {
   limit: (ctx: LimitContext) => number
   /** Year-specific reduction headline for the forecast view. */
   forecast: (year: number) => { limit: number; note: string }
+  /** Non-linear statutory penalty (e.g. India's stepped ₹25k/₹50k per car).
+   *  When present it replaces the linear excess × fineRate × units formula;
+   *  fineRate stays as the linear-equivalent used for MACC/benchmark lines. */
+  fineFor?: (excess: number, units: number, s: Scenario) => number
+  /** False when the compliance limit does not move with vehicle mass (unit
+   *  mandates like the UK ZEV scheme) — hides mass levers, which would be
+   *  engineering theatre with no compliance effect. Default: true. */
+  massBasedLimit?: boolean
+  /** Which regulatory regime governs a given year — lets one pack model a
+   *  market in transition (India: CAFE II → draft CAFE III) and lets the UI
+   *  badge draft years honestly. */
+  regimeFor?: (year: number) => { name: string; draft?: boolean }
   /** Legal eco-innovation credit cap (g/km) for a year, where the regime has one.
    *  Undefined ⇒ no eco-innovation mechanism (the eco lever has no effect and the
    *  optimiser won't propose it). Drives the ScenarioRail cap and recommend.ts. */

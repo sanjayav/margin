@@ -9,7 +9,7 @@ import type { CountryId, Scenario } from '../src/engine/types.js'
 const data = fleet as any
 const base = (c: CountryId): Scenario => {
   const p = getPack(c)
-  return { year: p.years[0], evSharePct: null, salesMultiplier: 1, massShiftKg: 0, ecoBoostG: 0, poolingEnabled: false, superCreditsEnabled: c === 'IN', mix: null, extraVariants: [], phevUF: true, creditPrice: null }
+  return { year: p.defaultYear ?? p.years[0], evSharePct: null, salesMultiplier: 1, massShiftKg: 0, ecoBoostG: 0, poolingEnabled: false, superCreditsEnabled: c === 'IN', mix: null, extraVariants: [], phevUF: true, creditPrice: null }
 }
 
 let pass = 0, fail = 0
@@ -33,11 +33,14 @@ const check = (name: string, cond: boolean, detail = '') => { console.log(`${con
   check('India ecoBoostG no longer changes the metric', Math.abs(m0 - m5) < 1e-9, `${m0.toFixed(4)} vs ${m5.toFixed(4)}`)
 }
 
-// 3. India eco mechanism is absent; EU/UK present (ecoCap contract)
+// 3. eco-innovation mechanism contract: EU only. India/Australia never had one,
+//    and the UK pack now models VETS as the unit mandate it is — a ZEV-share
+//    scheme has no eco-innovation credits (the old 7 g cap belonged to the
+//    illustrative CO₂ view this pack replaced).
 check('IN has no ecoCap', getPack('IN').ecoCap === undefined)
 check('AU has no ecoCap', getPack('AU').ecoCap === undefined)
 check('EU ecoCap 2030 = 4 g', getPack('EU').ecoCap?.(2030) === 4)
-check('UK ecoCap = 7 g', getPack('UK').ecoCap?.(2025) === 7)
+check('UK (unit mandate) has no ecoCap', getPack('UK').ecoCap === undefined)
 
 // 4. AU Type classification: Type 1 stays Type 1 even with a stray "2" in the label
 {
