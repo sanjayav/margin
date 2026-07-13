@@ -6,6 +6,7 @@ import { MODULE_META } from './lib/modules'
 import { StatusPill } from './components/ui'
 import Icon, { type IconName } from './components/Icon'
 import { ScenarioRail } from './components/ScenarioRail'
+import FactsRail from './components/FactsRail'
 import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import PlatformShell from './components/PlatformShell'
@@ -13,6 +14,9 @@ import ErrorBoundary from './components/ErrorBoundary'
 import CommandK, { useCmdK, CMDK_HINT } from './components/CommandK'
 import { applySharedFromHash } from './lib/share'
 import Analyze from './screens/Analyze'
+
+// Analyse = the drill workspace pinned to the actuals basis (book of record).
+const AnalyseActuals = () => <Analyze mode="actuals" />
 import Data from './screens/Data'
 import Pooling from './screens/Pooling'
 import ScenarioScreen from './screens/Scenario'
@@ -23,11 +27,11 @@ import Intelligence from './screens/Intelligence'
 import Admin from './screens/Admin'
 import Login from './screens/Login'
 
-// The five workspace modules — Plan is the compliance workspace (né Analyze);
-// Pooling is the add-on (only some regimes allow pooled averages). `addon`
-// items appear only when the org owns that add-on.
+// The five workspace modules — Analyse is the ACTUALS monitoring surface (the
+// book of record; levers live in Scenario); Pooling is the add-on (only some
+// regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling' }[] = [
-  { id: 'plan', label: 'Plan', icon: 'scatter', tier: 'Core' },
+  { id: 'analyse', label: 'Analyse', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
   { id: 'scenario', label: 'Scenario', icon: 'target', tier: 'Core' },
   { id: 'creditbook', label: 'Credit book', icon: 'scale', tier: 'Core' },
@@ -42,7 +46,8 @@ const UTIL: { id: ScreenId; label: string; icon: IconName }[] = [
   { id: 'admin', label: 'Admin', icon: 'settings' },
 ]
 
-const SCENARIO_TABS: { id: 'under' | 'compare'; label: string; icon: IconName }[] = [
+const SCENARIO_TABS: { id: 'model' | 'under' | 'compare'; label: string; icon: IconName }[] = [
+  { id: 'model', label: 'Model', icon: 'sliders' },
   { id: 'under', label: 'Get under the line', icon: 'target' },
   { id: 'compare', label: 'Compare scenarios', icon: 'layers' },
 ]
@@ -131,8 +136,10 @@ function Sidebar() {
 }
 
 function TopBar() {
-  const { pack, tree } = useCompliance()
   const screen = useStore((s) => s.screen)
+  // The header verdict states the basis of the screen below it: the book of
+  // record on Analyse/Credit book, the working assumptions everywhere else.
+  const { pack, tree } = useCompliance(screen === 'analyse' || screen === 'creditbook' ? 'actuals' : 'live')
   const year = useStore((s) => s.scenario.year)
   const openCmdK = useCmdK((s) => s.setOpen)
   const item = NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
@@ -185,10 +192,10 @@ function TopBar() {
   )
 }
 
-// Screens whose numbers move with the global assumptions rail. Forecast owns
-// its own scenario studio; Credit book is a multi-year ledger with its own
-// year axis — both hide the rail to avoid a second, conflicting control surface.
-const RAIL_SCREENS = new Set<ScreenId>(['plan', 'scenario', 'pooling', 'pricing'])
+// The assumptions rail appears only where assumptions exist: the Scenario
+// module and the Pooling optimiser. Analyse gets the FactsRail (actuals);
+// Forecast owns its own studio; Credit book & Pricing declare a basis instead.
+const RAIL_SCREENS = new Set<ScreenId>(['scenario', 'pooling'])
 
 function PoolingLocked() {
   const goto = useStore((s) => s.exitToPlatform)
@@ -207,7 +214,7 @@ function ModuleShell() {
   const aiEnabled = useStore((s) => s.aiEnabled)
   const poolingAddon = useStore((s) => s.poolingAddon)
   const Screen = {
-    plan: Analyze, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
+    analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
     pricing: Pricing, pooling: Pooling, data: Data, intel: Intelligence, admin: Admin,
   }[screen]
   const gated = screen === 'pooling' && !poolingAddon
@@ -224,6 +231,7 @@ function ModuleShell() {
               </ErrorBoundary>
             </div>
           </main>
+          {screen === 'analyse' && <FactsRail />}
           {RAIL_SCREENS.has(screen) && !gated && <ScenarioRail />}
         </div>
       </div>

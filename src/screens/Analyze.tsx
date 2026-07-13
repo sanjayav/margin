@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
-import { getMeta } from '../data/fleet'
 import type { Aggregate, Scenario, Vehicle } from '../engine/types'
 import { aggregate, applyScenario, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
 import LimitChart, { type ChartPoint } from '../components/LimitChart'
@@ -29,16 +28,20 @@ function nodeAt(root: Aggregate, path: string[]): Aggregate {
 const LEVEL_NAME = ['Pools', 'Manufacturers', 'Models', 'Variants']
 const SCOPE_NAME = ['Market', 'Pool', 'Manufacturer', 'Model', 'Variant']
 
-export default function Analyze() {
-  const { pack, raw, tree, drillTree, scenario, country } = useCompliance()
+/** One drill workspace, two bases.
+ *  mode='actuals' → the Analyse module: the as-sold book of record. Levers and
+ *  per-maker overrides are structurally out of reach (useCompliance basis).
+ *  mode='model'   → the Scenario module's Model workbench: the same workspace
+ *  under the working assumptions, with the rail alongside. */
+export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model' }) {
+  const actuals = mode === 'actuals'
+  const { pack, raw, tree, drillTree, scenario, overrides, country, meta } = useCompliance(actuals ? 'actuals' : 'live')
   const drill = useStore((s) => s.drillPath)
-  const overrides = useStore((s) => s.makerOverrides)
   const setDrill = useStore((s) => s.setDrill)
   const setParent = useStore((s) => s.setParent)
   const setScreen = useStore((s) => s.setScreen)
   const patchScenario = useStore((s) => s.patchScenario)
   const showProv = useProvenance((s) => s.show)
-  const meta = getMeta(country)
 
   const level = drill.length // 0 market · 1 pool · 2 manufacturer · 3 model · 4 variant
   const node = useMemo(() => nodeAt(drillTree, drill), [drillTree, drill])
@@ -388,7 +391,11 @@ export default function Analyze() {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Get me under the line</button>
+        {actuals ? (
+          <button className="btn-primary" onClick={() => setScreen('model')}><Icon name="sliders" size={16} /> Model this scope</button>
+        ) : (
+          <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Get me under the line</button>
+        )}
         <button className="btn-ghost" onClick={() => setScreen('pool')}><Icon name="handshake" size={15} /> Pooling & trading</button>
         <button className="btn-ghost" onClick={() => setScreen('forecast')}><Icon name="trending" size={15} /> Forecast</button>
       </div>

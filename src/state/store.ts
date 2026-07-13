@@ -1,14 +1,15 @@
 import { create } from 'zustand'
 import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
-import { parentsFor, setLiveFleet } from '../data/fleet'
+import { getMeta, parentsFor, setLiveFleet } from '../data/fleet'
 
-// Workspace modules: Plan (the compliance workspace, formerly "Analyze"),
-// Forecast (multi-year studio), Scenario (get-under-the-line + compare),
-// Credit book (positions & trading ledger), Pricing (price/tax economics).
+// Workspace modules: Analyse (the ACTUALS monitoring surface — book of record,
+// no levers can reach it), Forecast (multi-year studio), Scenario (the
+// modelling home: Model workbench + get-under-the-line + compare), Credit book
+// (positions ledger, actuals by default), Pricing (price/tax economics).
 // Pooling is the add-on; data/intel/admin are workspace utilities, not modules.
-export type ScreenId = 'plan' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'data' | 'intel' | 'admin'
-export type ScenarioTab = 'under' | 'compare'
+export type ScreenId = 'analyse' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'data' | 'intel' | 'admin'
+export type ScenarioTab = 'model' | 'under' | 'compare'
 /** @deprecated legacy alias kept for old deep-links */
 export type PlanTab = ScenarioTab | 'forecast'
 // The two-level shell: 'platform' = global launcher (home/modules/subscription);
@@ -16,8 +17,8 @@ export type PlanTab = ScenarioTab | 'forecast'
 export type AppView = 'platform' | 'module'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // legacy ids still accepted by setScreen and mapped to the new structure
-// ('analyze' became Plan; the old Scenario-group tabs became modules/tabs)
-type AnyScreen = ScreenId | 'analyze' | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | 'under' | 'compare'
+// ('analyze'/'plan' became Analyse; the old Scenario-group tabs became modules/tabs)
+type AnyScreen = ScreenId | 'analyze' | 'plan' | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | 'model' | 'under' | 'compare'
 
 interface UIState {
   country: CountryId
@@ -84,7 +85,7 @@ function saveEnt(modules: CountryId[], ai: boolean, pooling: boolean) { try { lo
 const ENT0 = loadEnt()
 
 // Named, durable scenarios (persisted) — promotes the ephemeral A/B snapshot.
-export interface SavedScenario { id: string; label: string; country: CountryId; scenario: Scenario; overrides: Record<string, Partial<Scenario>>; createdAt: number }
+export interface SavedScenario { id: string; label: string; country: CountryId; scenario: Scenario; overrides: Record<string, Partial<Scenario>>; createdAt: number; datasetVersion?: string }
 export interface SharedState { country?: CountryId; screen?: string; planTab?: string; drillPath?: string[]; scenario?: Scenario; overrides?: Record<string, Partial<Scenario>> }
 const SCEN_KEY = 'ul_scenarios'
 function loadScenarios(): SavedScenario[] { try { const r = JSON.parse(localStorage.getItem(SCEN_KEY) || '[]'); return Array.isArray(r) ? r : [] } catch { return [] } }
@@ -134,8 +135,10 @@ function assumptionsFor(country: CountryId): Assumptions {
 // [pool, manufacturer, model, variantKey]; keys mirror the engine's scopes:
 //   market → null · pool → "pool:NAME" · manufacturer → "MAKER" ·
 //   model → "MAKER/MODEL" · variant → "MAKER/MODEL/VARIANTKEY"
-export function scopeKey(screen: ScreenId, drillPath: string[]): string | null {
-  if (screen !== 'plan' || drillPath.length === 0) return null
+// Lever scoping exists only where levers exist: the Scenario module's Model
+// workbench. Analyse is actuals-only — nothing to scope there.
+export function scopeKey(screen: ScreenId, drillPath: string[], scenarioTab?: ScenarioTab): string | null {
+  if (screen !== 'scenario' || scenarioTab !== 'model' || drillPath.length === 0) return null
   const [pool, parent, model, variant] = drillPath
   switch (drillPath.length) {
     case 1: return `pool:${pool}`
@@ -173,7 +176,7 @@ const BOOT = assumptionsFor('EU')
 
 export const useStore = create<UIState>((set, get) => ({
   country: 'EU',
-  screen: 'plan',
+  screen: 'analyse',
   scenario: BOOT.scenario,
   selectedParent: parentsFor('EU')[0],
   drillPath: [],
@@ -197,8 +200,8 @@ export const useStore = create<UIState>((set, get) => ({
       drillPath: [],
       makerOverrides: a.makerOverrides,
       view: 'module',
-      screen: 'plan',
-      scenarioTab: 'under',
+      screen: 'analyse',
+      scenarioTab: 'model',
     })
   },
   exitToPlatform: (to) => set({ view: 'platform', ...(to ? { platformScreen: to } : {}) }),
@@ -217,7 +220,9 @@ export const useStore = create<UIState>((set, get) => ({
   savedScenarios: loadScenarios(),
   saveScenario: (label) => {
     const { scenario, makerOverrides, country, savedScenarios } = get()
-    const item: SavedScenario = { id: `${Date.now()}-${Math.round(Math.random() * 1e6)}`, label: label.trim() || `Scenario ${savedScenarios.length + 1}`, country, scenario, overrides: makerOverrides, createdAt: Date.now() }
+    // Pin the actuals vintage this scenario was seeded from — after a new
+    // import/refresh the UI can flag it as built on an older dataset.
+    const item: SavedScenario = { id: `${Date.now()}-${Math.round(Math.random() * 1e6)}`, label: label.trim() || `Scenario ${savedScenarios.length + 1}`, country, scenario, overrides: makerOverrides, createdAt: Date.now(), datasetVersion: getMeta(country).datasetVersion }
     const next = [item, ...savedScenarios].slice(0, 60)
     saveScenarios(next); set({ savedScenarios: next })
   },
@@ -245,20 +250,25 @@ export const useStore = create<UIState>((set, get) => ({
     const dp = Array.isArray(sh.drillPath) ? sh.drillPath : []
     const sharedParent = dp[1]
     // Old deep-links carry retired screen ids — normalise to the new modules.
-    // Legacy 'plan' was the Scenario GROUP (tabs under/forecast/compare); route
-    // it by its tab. 'analyze' (and its ancestors) became Plan.
+    // 'analyze' (and its ancestors) → Analyse. Legacy 'plan' was two things:
+    // the old Scenario GROUP (route by tab: forecast → Forecast, compare →
+    // Scenario·compare) and briefly the workspace — default it to Analyse.
     const raw = sh.screen as string | undefined
-    let screen: ScreenId = 'plan'
-    let scenarioTab: ScenarioTab = 'under'
-    if (raw === 'plan' || raw === 'under' || raw === 'compare' || raw === 'forecast') {
-      const tab = raw === 'plan' ? (sh.planTab ?? 'under') : raw
-      if (tab === 'forecast') screen = 'forecast'
-      else { screen = 'scenario'; scenarioTab = tab === 'compare' ? 'compare' : 'under' }
+    let screen: ScreenId = 'analyse'
+    let scenarioTab: ScenarioTab = 'model'
+    if (raw === 'model' || raw === 'under' || raw === 'compare' || raw === 'forecast') {
+      if (raw === 'forecast') screen = 'forecast'
+      else { screen = 'scenario'; scenarioTab = raw }
+    } else if (raw === 'plan') {
+      if (sh.planTab === 'forecast') screen = 'forecast'
+      else if (sh.planTab === 'compare') { screen = 'scenario'; scenarioTab = 'compare' }
+      // plan+under is ambiguous between eras — land on the monitoring surface
     } else if (raw === 'scenario') {
-      screen = 'scenario'; scenarioTab = sh.planTab === 'compare' ? 'compare' : 'under'
-    } else if (raw && ['creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'].includes(raw)) {
+      screen = 'scenario'
+      scenarioTab = sh.planTab === 'compare' ? 'compare' : sh.planTab === 'under' ? 'under' : 'model'
+    } else if (raw && ['analyse', 'creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'].includes(raw)) {
       screen = raw as ScreenId
-    } // 'analyze' / 'analytics' / unknown → 'plan'
+    } // 'analyze' / 'analytics' / unknown → 'analyse'
     set({
       country,
       scenario,
@@ -284,14 +294,14 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setScreen: (s) => {
     if (s === 'pool') set({ screen: 'pooling' })
-    else if (s === 'under' || s === 'compare') set({ screen: 'scenario', scenarioTab: s })
-    else if (s === 'analyze' || s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'plan' })
+    else if (s === 'model' || s === 'under' || s === 'compare') set({ screen: 'scenario', scenarioTab: s })
+    else if (s === 'analyze' || s === 'plan' || s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'analyse' })
     else set({ screen: s })
   },
   setParent: (p) => set({ selectedParent: p }),
   patchScenario: (p) => {
-    const { drillPath, screen, scenario, makerOverrides, country } = get()
-    const scope = scopeKey(screen, drillPath)
+    const { drillPath, screen, scenarioTab, scenario, makerOverrides, country } = get()
+    const scope = scopeKey(screen, drillPath, scenarioTab)
     if (!scope) {
       const next = { ...scenario, ...p }
       set({ scenario: next }); persistAssumptions(country, next, makerOverrides); return
@@ -312,8 +322,8 @@ export const useStore = create<UIState>((set, get) => ({
     persistAssumptions(country, nextScenario, nextOverrides)
   },
   resetScenario: () => {
-    const { drillPath, screen, makerOverrides, scenario, country } = get()
-    const scope = scopeKey(screen, drillPath)
+    const { drillPath, screen, scenarioTab, makerOverrides, scenario, country } = get()
+    const scope = scopeKey(screen, drillPath, scenarioTab)
     if (scope) {
       const next = { ...makerOverrides }; delete next[scope]
       set({ makerOverrides: next }); persistAssumptions(country, scenario, next); return

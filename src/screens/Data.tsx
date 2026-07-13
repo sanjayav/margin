@@ -296,7 +296,7 @@ export default function Data() {
           <button onClick={() => setView('ACTUAL')}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!scenarioMode ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>Actuals</button>
           {myScenarios.length === 0
-            ? <span className="text-[11px] text-ink-500">— save a scenario in Plan to view scenario-based data here</span>
+            ? <span className="text-[11px] text-ink-500">— save a scenario in the Scenario module to view scenario-based data here</span>
             : myScenarios.map((s) => (
               <button key={s.id} onClick={() => setView(s.id)}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === s.id ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{s.label}</button>

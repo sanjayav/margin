@@ -31,11 +31,16 @@ With `DATABASE_URL` set: `npm run db:setup` once, then `npm run ingest:eu` for t
 
 Inside a country module the sidebar is exactly five modules, plus utilities:
 
+Fact and hypothesis are separate surfaces (the FP&A / EEA-monitoring doctrine):
+**Analyse and the Credit book run on the ACTUALS basis** — the as-sold book of
+record, structurally unreachable by levers, citing its dataset vintage — while
+Scenario/Forecast model on the working assumptions and lead with Δ vs actuals.
+
 | Module | What it does |
 | --- | --- |
-| **Plan** | The compliance workspace — drill market → pool → maker → model → variant, move levers, watch the gap and the fine live. |
+| **Analyse** | The actuals monitoring surface — drill market → pool → maker → model → variant on the book of record. Facts rail: reporting period, dataset provenance & vintage, fleet profile. No levers can reach it. |
 | **Forecast** | Multi-year scenario studio: materialised scenario specs, ramp levers, Monte-Carlo P10–P90 bands, breach-year detection. |
-| **Scenario** | *Get under the line* (ranked, costed path to compliance) and *Compare scenarios* side-by-side. |
+| **Scenario** | The modelling home — *Model* (the drill workbench under working assumptions, variance-vs-actuals first), *Get under the line* (ranked, costed path) and *Compare scenarios*. Saved scenarios pin the dataset vintage they were seeded from. |
 | **Credit book** | The position ledger: surplus/deficit by maker and year, banked cumulative positions, buyer↔seller trade planner priced at the market credit price (shadow-priced at the fine rate where the regime only pools, e.g. EU). |
 | **Pricing** | Compliance cost per car, model-level price ladder (which nameplates carry the burden, which earn credit value), pass-through and point-of-sale tax levers (GST/cess, VAT, VED, LCT). |
 | *Pooling* (add-on) | Cheapest legal partition + Shapley fair settlement — an add-on because only some regimes allow pooled averages. |

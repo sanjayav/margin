@@ -140,7 +140,7 @@ function Histogram({ buckets, currency }: { buckets: RiskResult['buckets']; curr
 
 // ── the panel ─────────────────────────────────────────────────────────────--
 export function ScenarioRail({ footer }: { footer?: ReactNode }) {
-  const { pack, raw, country, drillTree } = useCompliance()
+  const { pack, raw, country, drillTree, meta } = useCompliance()
   const scenario = useStore((s) => s.scenario)
   const selectedParent = useStore((s) => s.selectedParent)
   const drillPath = useStore((s) => s.drillPath)
@@ -155,13 +155,15 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const deleteScenario = useStore((s) => s.deleteScenario)
   const myScenarios = savedScenarios.filter((s) => s.country === country)
 
-  // Drill path: [pool, manufacturer, model, variantKey]
-  const level = screen === 'plan' ? drillPath.length : 0
+  // Drill path: [pool, manufacturer, model, variantKey] — lever scoping is a
+  // Model-workbench concept (Analyse is actuals-only and has no rail at all).
+  const scenarioTab = useStore((st) => st.scenarioTab)
+  const level = screen === 'scenario' && scenarioTab === 'model' ? drillPath.length : 0
   const pool = drillPath[0] ?? ''
   const maker = drillPath[1] ?? ''
   const model = drillPath[2] ?? ''
   const variant = drillPath[3] ?? ''
-  const scope = scopeKey(screen, drillPath)
+  const scope = scopeKey(screen, drillPath, scenarioTab)
   const ownOv: Partial<Scenario> = scope ? (makerOverrides[scope] ?? {}) : {}
   const drilledParent = maker || selectedParent
   const scopeName = SCOPE_NAME[level] ?? 'Scope'
@@ -537,12 +539,17 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           ? <div className="text-[10px] text-ink-500">None yet — capture the current assumptions to reuse or compare.</div>
           : (
             <div className="space-y-1">
-              {myScenarios.slice(0, 6).map((s) => (
-                <div key={s.id} className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1">
-                  <button onClick={() => loadScenario(s.id)} title="Load" className="flex flex-1 items-center gap-1.5 truncate text-left text-[11px] font-medium text-ink-200 transition hover:text-brand"><Icon name="reset" size={10} className="shrink-0 rotate-180" /> {s.label}</button>
-                  <button onClick={() => deleteScenario(s.id)} title="Delete" className="shrink-0 text-ink-500 transition hover:text-danger"><Icon name="close" size={11} /></button>
-                </div>
-              ))}
+              {myScenarios.slice(0, 6).map((s) => {
+                const stale = s.datasetVersion != null && s.datasetVersion !== meta.datasetVersion
+                return (
+                  <div key={s.id} className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1">
+                    <button onClick={() => loadScenario(s.id)} title="Load" className="flex flex-1 items-center gap-1.5 truncate text-left text-[11px] font-medium text-ink-200 transition hover:text-brand"><Icon name="reset" size={10} className="shrink-0 rotate-180" /> {s.label}</button>
+                    {stale && <span title={`Seeded from dataset v${String(s.datasetVersion).slice(-6)} — the ${country} dataset has since changed (now v${String(meta.datasetVersion).slice(-6)}). Numbers will re-run on the new data when loaded.`}
+                      className="shrink-0 rounded-full border border-warn/40 bg-warn/10 px-1.5 py-px text-[8.5px] font-black uppercase tracking-wide text-warn">stale</span>}
+                    <button onClick={() => deleteScenario(s.id)} title="Delete" className="shrink-0 text-ink-500 transition hover:text-danger"><Icon name="close" size={11} /></button>
+                  </div>
+                )
+              })}
             </div>
           )}
         {myScenarios.length > 0 && (

@@ -15,7 +15,7 @@ import { useStore } from '../state/store'
 import { useCompliance } from '../lib/useCompliance'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import type { CountryId } from '../engine/types'
-import { Stat, Section } from '../components/ui'
+import { Stat, Section, BasisChip } from '../components/ui'
 import Icon from '../components/Icon'
 
 // Effective point-of-sale tax context per market (indicative, editable below).
@@ -27,9 +27,15 @@ const TAX: Record<CountryId, { rate: number; label: string; note: string }> = {
 }
 
 export default function Pricing() {
-  const { pack, tree, parent, scenario, country } = useCompliance()
+  // Pricing states its basis: actuals by default (what compliance costs the
+  // as-sold fleet); flip to the working scenario to price a plan. The
+  // pass-through and tax levers are PRICING decisions — they stay local and
+  // never touch the fleet assumptions.
+  const [basisSel, setBasisSel] = useState<'actuals' | 'scenario'>('actuals')
+  const { pack, tree, parent, scenario, country, meta } = useCompliance(basisSel === 'actuals' ? 'actuals' : 'live')
   const selectedParent = useStore((s) => s.selectedParent)
   const setParent = useStore((s) => s.setParent)
+  const patchScenario = useStore((s) => s.patchScenario)
   const [passThrough, setPassThrough] = useState(100)
   const [taxPct, setTaxPct] = useState(Math.round(TAX[country].rate * 100))
   // no credit market (EU) → value headroom at the shadow price (the fine rate)
@@ -70,6 +76,25 @@ export default function Pricing() {
         <Stat className="rise [animation-delay:100ms]" label="Credit value / car" value={fmtMoney(focusCreditPerUnit, pack.currency)} sub={focusCreditPerUnit > 0 ? 'headroom × credit price' : 'no surplus at current mix'} accent={focusCreditPerUnit > 0 ? 'text-safe' : undefined} />
         <Stat className="rise [animation-delay:150ms]" label="Sticker uplift needed" value={fmtMoney(uplift, pack.currency)} sub={`at ${passThrough}% pass-through`} />
         <Stat className="rise [animation-delay:200ms]" label="On-road uplift" value={fmtMoney(uplift * (1 + tax), pack.currency)} sub={`incl. ${TAX[country].label}`} />
+      </div>
+
+      {/* basis + reporting year */}
+      <div className="rise card flex flex-wrap items-center gap-2 p-4 [animation-delay:180ms]">
+        <BasisChip basis={basisSel === 'actuals' ? 'actuals' : 'live'} meta={basisSel === 'actuals' ? meta : undefined} />
+        <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
+          {(['actuals', 'scenario'] as const).map((b) => (
+            <button key={b} onClick={() => setBasisSel(b)}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold transition ${basisSel === b ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
+              {b === 'actuals' ? 'Actuals' : 'Working scenario'}
+            </button>
+          ))}
+        </span>
+        <span className="h-5 w-px bg-black/[0.07]" />
+        <span className="label flex items-center gap-1.5 text-ink-400"><Icon name="clock" size={13} /> Year</span>
+        {pack.years.map((y) => (
+          <button key={y} onClick={() => patchScenario({ year: y })}
+            className={`num rounded-lg px-2.5 py-1 text-xs font-bold transition ${y === scenario.year ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{y}</button>
+        ))}
       </div>
 
       {/* levers */}

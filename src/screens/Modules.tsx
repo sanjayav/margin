@@ -4,7 +4,7 @@ import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP, moduleSummar
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import Icon from '../components/Icon'
 
-const INCLUDED = ['Plan drill-down', 'Forecast studio', 'Scenario & compare', 'Credit book', 'Pricing & tax']
+const INCLUDED = ['Analyse (actuals drill-down)', 'Forecast studio', 'Scenario workbench & compare', 'Credit book', 'Pricing & tax']
 
 export default function Modules() {
   const owned = useStore((s) => s.subscribedModules)

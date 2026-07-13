@@ -1,5 +1,27 @@
 import type { ReactNode } from 'react'
 import type { Aggregate } from '../engine/types'
+import type { FleetMeta } from '../data/fleet'
+
+/** The basis declaration every computed screen carries: fact vs hypothesis.
+ *  Actuals cite their dataset vintage (the FP&A/EEA convention — a verdict is
+ *  only meaningful against a named dataset version). */
+export function BasisChip({ basis, meta, scenarioName }: { basis: 'actuals' | 'live'; meta?: FleetMeta; scenarioName?: string }) {
+  if (basis === 'actuals') {
+    const vintage = meta ? `${meta.live ? 'live' : 'extract'} · v${String(meta.datasetVersion).slice(-6)}` : 'as sold'
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-safe/30 bg-safe/[0.08] px-2.5 py-1 text-[10.5px] font-bold text-safe"
+        title={meta ? `${meta.source}${meta.lastRefreshed ? ` · refreshed ${new Date(meta.lastRefreshed).toLocaleDateString()}` : ''}` : undefined}>
+        <span className="h-1.5 w-1.5 rounded-full bg-safe" /> Basis: Actuals <span className="font-semibold opacity-70">{vintage}</span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-brand/30 bg-brand/[0.08] px-2.5 py-1 text-[10.5px] font-bold text-brand"
+      title="Computed under the working assumptions — not the book of record">
+      <span className="h-1.5 w-1.5 rounded-full bg-brand" /> Basis: Scenario{scenarioName ? <span className="font-semibold opacity-80">· {scenarioName}</span> : null}
+    </span>
+  )
+}
 
 export function StatusPill({ status, big }: { status: Aggregate['status']; big?: boolean }) {
   const map = {

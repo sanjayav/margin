@@ -9,25 +9,31 @@
 //   · Trade planner: pair a buyer with a seller, price it, show both sides
 // ───────────────────────────────────────────────────────────────────────────
 import { useMemo, useState } from 'react'
-import { useStore } from '../state/store'
+import { useStore, defaultScenario } from '../state/store'
 import { useCompliance } from '../lib/useCompliance'
 import { standings } from '../engine/pooling'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
-import { Stat, Section } from '../components/ui'
+import { Stat, Section, BasisChip } from '../components/ui'
 import Icon from '../components/Icon'
 
 const short = (name: string) => name.split(/\s+/).slice(0, 2).join(' ')
 
 export default function CreditBook() {
-  const { pack, raw, scenario } = useCompliance()
-  const overrides = useStore((s) => s.makerOverrides)
+  // A ledger is a record of fact: the book defaults to the ACTUALS basis and
+  // only overlays the working scenario when explicitly asked (basis toggle).
+  const [basisSel, setBasisSel] = useState<'actuals' | 'scenario'>('actuals')
+  const { pack, raw, scenario: liveScenario, overrides: liveOverrides, country, meta } = useCompliance()
   const selectedParent = useStore((s) => s.selectedParent)
   const setParent = useStore((s) => s.setParent)
-  const [focusYear, setFocusYear] = useState(scenario.year)
+  const [focusYear, setFocusYear] = useState(liveScenario.year)
+  const actualsBase = useMemo(() => defaultScenario(country), [country])
+  const scenario = basisSel === 'actuals' ? actualsBase : liveScenario
+  const overrides = basisSel === 'actuals' ? {} : liveOverrides
   // Where the regime has no credit market (EU: pooling only), value positions at
-  // the shadow price — the fine one unit of surplus would extinguish.
+  // the shadow price — the fine one unit of surplus would extinguish. The
+  // scenario basis may override the trading price; the actuals book never does.
   const hasMarket = pack.creditPrice != null
-  const price = scenario.creditPrice ?? pack.creditPrice ?? pack.fineRate
+  const price = (basisSel === 'scenario' ? liveScenario.creditPrice : null) ?? pack.creditPrice ?? pack.fineRate
   const priceLabel = hasMarket
     ? (pack.creditPriceLabel ?? `at ${pack.currency}${fmtNum(price, 0)} per unit`)
     : `shadow price = fine rate (${pack.name} pools rather than trades)`
@@ -79,8 +85,18 @@ export default function CreditBook() {
         <Stat className="rise [animation-delay:200ms]" label="Fine at risk" value={fmtMoney(atRisk, pack.currency)} sub="buyers, if nothing trades" accent={atRisk > 0 ? 'text-danger' : 'text-safe'} />
       </div>
 
-      {/* year strip */}
+      {/* year strip + basis */}
       <div className="rise card flex flex-wrap items-center gap-2 p-4 [animation-delay:200ms]">
+        <BasisChip basis={basisSel === 'actuals' ? 'actuals' : 'live'} meta={basisSel === 'actuals' ? meta : undefined} />
+        <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
+          {(['actuals', 'scenario'] as const).map((b) => (
+            <button key={b} onClick={() => setBasisSel(b)}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize transition ${basisSel === b ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
+              {b === 'actuals' ? 'Actuals' : 'Working scenario'}
+            </button>
+          ))}
+        </span>
+        <span className="h-5 w-px bg-black/[0.07]" />
         <span className="label flex items-center gap-1.5 text-ink-400"><Icon name="clock" size={13} /> Book year</span>
         {byYear.map(({ year, rows }) => {
           const net = rows.reduce((a, r) => a + r.creditBalance, 0)
