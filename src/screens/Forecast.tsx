@@ -8,12 +8,12 @@ import {
   type ForecastResult, type ForecastScenarioDef, type Ramp,
 } from '../engine/forecast'
 import type { Scenario } from '../engine/types'
-import { streamForecast, colorHex, BASELINE_HEX, LIMIT_HEX, SCEN_COLORS } from '../lib/forecast'
-import { CASES, caseDrivers, outlookRun, bridgeYear, breakEvenAdoption, type CaseId, type OutlookConfig } from '../engine/outlook'
+import { streamForecast, colorHex, BASELINE_HEX, LIMIT_HEX, SCEN_COLORS, type AiBook } from '../lib/forecast'
+import { CASES, caseDrivers, outlookRun, bridgeYear, breakEvenAdoption, mandateFloor, DRIVER_META, type CaseId, type OutlookConfig } from '../engine/outlook'
 import { useDrivers, driverSetFor, weightsFor } from '../lib/drivers'
 import OutlookPanel from '../components/OutlookPanel'
 import { buildForecastPack, openPrintReport } from '../lib/report'
-import { DRIVER_META } from '../engine/outlook'
+import { svgFanChart, svgWaterfall, svgSCurve } from '../lib/packcharts'
 import { Section, StatusPill } from '../components/ui'
 import TornadoChart, { type TornadoDriver } from '../components/TornadoChart'
 import Icon, { type IconName } from '../components/Icon'
@@ -94,6 +94,8 @@ export default function Forecast() {
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
   const [brief, setBrief] = useState('')
+  const [aiBook, setAiBook] = useState<AiBook | null>(null)
+  const [bookApplied, setBookApplied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // ── planLive differs from as-sold? (offers the "add my live plan" chip) ──
@@ -204,8 +206,9 @@ export default function Forecast() {
   async function generate() {
     const q = prompt.trim()
     if (!q || generating) return
-    setError(null); setBrief(''); setGenerating(true)
-    await streamForecast(q, { country, target, ownedModules: subscribedModules }, {
+    setError(null); setBrief(''); setGenerating(true); setAiBook(null); setBookApplied(false)
+    await streamForecast(q, { country, target, ownedModules: subscribedModules, drivers: driverSet }, {
+      onBook: (b) => setAiBook(b),
       onScenarios: (list) => {
         const studio: StudioScenario[] = list.map((a, i) => ({
           id: a.id || uid('ai'), name: a.name, description: a.description, hex: colorHex(a.color), kind: 'ai',
@@ -238,14 +241,38 @@ export default function Forecast() {
     const gov = useDrivers.getState().governance[country] ?? {}
     const finalYear = pack.years[pack.years.length - 1]
     const by = pack.years[Math.min(1, pack.years.length - 1)]
+    // the deck's graphics — same engine numbers as the screen
+    const packBridge = bridgeYear(cfg, by)
+    const fanSeries = caseScenarios.map((s) => {
+      const fc = fcById.get(s.id)
+      return fc ? { name: s.name, hex: s.hex, values: fc.years.map((y) => y.lMetric) } : null
+    }).filter((x): x is NonNullable<typeof x> => x != null)
+    const baseFcPack = fcById.get('baseline')
+    const charts = {
+      fan: baseFcPack ? svgFanChart(pack.years, fanSeries, baseFcPack.years.map((y) => y.bLimit), pack.metricUnit, `Cases vs the statutory line · ${isMarket ? 'market' : parent.split(' ')[0]}`) : undefined,
+      waterfall: packBridge ? svgWaterfall([
+        { label: `${packBridge.year - 1} fine`, value: packBridge.from, kind: 'total' },
+        ...packBridge.effects.map((e) => ({ label: e.label, value: e.delta, kind: 'delta' as const })),
+        { label: `${packBridge.year} fine`, value: packBridge.to, kind: 'total' },
+      ], pack.currency, `Fine bridge ${packBridge.year - 1} → ${packBridge.year} (base case, market)`) : undefined,
+      sCurve: svgSCurve(pack.years, pack.years.map((y) => run.shareFor(y)), pack.years.map((y) => mandateFloor(pack, y)), `Zero-emission adoption path · seeded from ${run.baseYear} actuals`),
+    }
     openPrintReport(`Autocred AI · Forecast board pack · ${pack.name}`, buildForecastPack({
       pack, meta, dateISO: new Date().toISOString().slice(0, 10),
       targetLabel: isMarket ? 'Whole market' : parent,
       horizon: [pack.years[0], finalYear], baseYear: run.baseYear,
       cases, expected,
       drivers: DRIVER_META.map((m) => ({ label: m.label, value: driverSet[m.key], unit: m.unit, status: gov[m.key]?.status ?? 'draft', rationale: m.rationale, source: m.source, owner: m.owner })),
-      bridge: bridgeYear(cfg, by), breakEven: breakEvenAdoption(cfg, finalYear), finalYear,
+      bridge: packBridge, breakEven: breakEvenAdoption(cfg, finalYear), finalYear, charts,
     }))
+  }
+
+  const applyAiBook = () => {
+    if (!aiBook) return
+    const setDriver = useDrivers.getState().setDriver
+    for (const m of DRIVER_META) setDriver(country, m.key, aiBook.drivers[m.key])
+    setWeights(country, aiBook.weights)
+    setBookApplied(true)
   }
 
   return (
@@ -286,6 +313,36 @@ export default function Forecast() {
           </div>
         )}
       </Section>
+
+      {/* the AI's recommended forecast MODEL — apply to the Assumption Book */}
+      {aiBook && (
+        <Section
+          title={<span className="flex items-center gap-2"><Icon name="spark" size={15} className="text-brand" /> AI forecast model</span>}
+          right={bookApplied
+            ? <span className="flex items-center gap-1.5 rounded-full border border-safe/40 bg-safe/10 px-2.5 py-1 text-[10.5px] font-bold text-safe"><Icon name="check" size={11} /> Applied to the Assumption Book</span>
+            : <button onClick={applyAiBook} className="btn-primary px-3 py-1.5 text-xs"><Icon name="check" size={13} /> Apply model</button>}>
+          <p className="-mt-1 mb-3 text-[12px] leading-relaxed text-ink-300">{aiBook.narrative}</p>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {DRIVER_META.map((m) => {
+              const cur = driverSet[m.key]
+              const prop = aiBook.drivers[m.key]
+              const changed = Math.abs(prop - cur) > m.step / 2
+              return (
+                <div key={m.key} className={`rounded-xl border p-2.5 ${changed ? 'border-brand/30 bg-brand/[0.04]' : 'border-black/[0.06] bg-black/[0.015]'}`}>
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">{m.label}</div>
+                  <div className="num mt-1 text-[15px] font-bold text-ink-100">{fmtNum(prop, 2)} <span className="text-[10px] font-medium text-ink-500">{m.unit}</span></div>
+                  <div className={`num text-[10px] ${changed ? 'text-brand' : 'text-ink-500'}`}>{changed ? `book: ${fmtNum(cur, 2)} → proposed` : 'unchanged'}</div>
+                </div>
+              )
+            })}
+            <div className="rounded-xl border border-black/[0.06] bg-black/[0.015] p-2.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">Case weights</div>
+              <div className="num mt-1 text-[13px] font-bold text-ink-100">{Math.round(aiBook.weights.base * 100)} / {Math.round(aiBook.weights.upside * 100)} / {Math.round(aiBook.weights.downside * 100)}</div>
+              <div className="text-[10px] text-ink-500">base / upside / downside</div>
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* scenario rail */}
       <div className="flex flex-wrap items-center gap-2">

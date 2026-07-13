@@ -82,6 +82,8 @@ export interface ForecastPackInput {
   bridge: PackBridge | null
   breakEven: number | null
   finalYear: number
+  /** Pre-rendered SVG strings (lib/packcharts) — the deck's graphics. */
+  charts?: { fan?: string; waterfall?: string; sCurve?: string }
 }
 
 export function buildForecastPack(i: ForecastPackInput): string {
@@ -103,6 +105,8 @@ export function buildForecastPack(i: ForecastPackInput): string {
   ${i.breakEven != null ? `<div class="row"><span class="k">Break-even electrification</span><span class="v">${fmtNum(i.breakEven, 1)}% ZE share at horizon zeroes the ${i.finalYear} fine</span></div>` : `<div class="row"><span class="k">Break-even electrification</span><span class="v">electrification alone cannot zero the ${i.finalYear} fine</span></div>`}
   <div class="row"><span class="k">Seeded from</span><span class="v">${i.baseYear} actuals · dataset v${i.meta.datasetVersion} · refreshed ${refreshed}</span></div>
 
+  ${i.charts?.fan ? `<div style="margin:14px 0">${i.charts.fan}</div>` : ''}
+
   <h2>Case matrix</h2>
   <table><thead><tr><th>Case</th><th style="text-align:right">Weight</th><th style="text-align:right">Cumulative fine</th><th style="text-align:right">First breach</th><th style="text-align:right">Final-year gap</th></tr></thead><tbody>${caseRows}</tbody></table>
 
@@ -110,7 +114,10 @@ export function buildForecastPack(i: ForecastPackInput): string {
   <div class="row"><span class="k">${i.bridge.year - 1} market fine</span><span class="v">${fmtMoney(i.bridge.from, pack.currency)}</span></div>
   <table><thead><tr><th>Effect</th><th style="text-align:right">Δ fine</th></tr></thead><tbody>${bridgeRows}</tbody></table>
   <div class="row"><span class="k">${i.bridge.year} market fine</span><span class="v">${fmtMoney(i.bridge.to, pack.currency)}</span></div>
+  ${i.charts?.waterfall ? `<div style="margin:14px 0">${i.charts.waterfall}</div>` : ''}
   <p class="sub">Sequential attribution: regulation → volume → technology → zero-emission mix. Effects sum to the total.</p>` : ''}
+
+  ${i.charts?.sCurve ? `<h2>Electrification path</h2><div style="margin:8px 0">${i.charts.sCurve}</div>` : ''}
 
   <h2>Assumption Book (appendix)</h2>
   <table><thead><tr><th>Driver</th><th style="text-align:right">Value</th><th>Status</th><th>Owner</th><th>Rationale · source</th></tr></thead><tbody>${driverRows}</tbody></table>

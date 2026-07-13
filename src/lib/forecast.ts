@@ -29,9 +29,18 @@ export interface BaselineWire {
   firstBreachYear: number | null; cumExposure: number
 }
 
+/** The AI's recommended forecast MODEL — an Assumption-Book configuration
+ *  (drivers + case weights + narrative) the analyst can apply in one click. */
+export interface AiBook {
+  drivers: { marketGrowth: number; evShareHorizon: number; iceCo2Improve: number; massDrift: number }
+  weights: { base: number; upside: number; downside: number }
+  narrative: string
+}
+
 export interface StreamHandlers {
   onBaseline?: (b: BaselineWire) => void
   onScenarios?: (s: AiScenario[]) => void
+  onBook?: (b: AiBook) => void
   onBriefDelta?: (text: string) => void
   onDone?: () => void
   onError?: (message: string) => void
@@ -41,6 +50,8 @@ export interface ForecastContext {
   country: CountryId
   target: string
   ownedModules: CountryId[]
+  /** The analyst's current Assumption Book — the AI models against it. */
+  drivers?: { marketGrowth: number; evShareHorizon: number; iceCo2Improve: number; massDrift: number }
 }
 
 // Palette the AI picks from (must match COLORS in api/forecast.ts). Baseline and
@@ -82,6 +93,7 @@ export async function streamForecast(prompt: string, context: ForecastContext, h
     switch (event) {
       case 'baseline': h.onBaseline?.(data as BaselineWire); break
       case 'scenarios': h.onScenarios?.((data?.scenarios ?? []) as AiScenario[]); break
+      case 'book': if (data?.book) h.onBook?.(data.book as AiBook); break
       case 'brief_delta': if (typeof data?.text === 'string') h.onBriefDelta?.(data.text); break
       case 'done': h.onDone?.(); break
       case 'error': h.onError?.(data?.error || 'Forecast failed'); break

@@ -20,10 +20,15 @@ import {
   type ForecastScenarioDef,
 } from '../src/engine/forecast.js'
 import { fmtNum } from '../src/engine/engine.js'
+import {
+  DRIVER_META, DRIVER_DEFAULTS, CASES, caseDrivers, outlookRun, bridgeYear, breakEvenAdoption,
+  type DriverSet, type OutlookConfig,
+} from '../src/engine/outlook.js'
+import { buildTree } from '../src/engine/engine.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
 
-const MODEL = 'claude-opus-4-8'
+const MODEL = 'claude-fable-5'
 type Fleets = Record<CountryId, Vehicle[]>
 
 const COLORS = ['emerald', 'amber', 'violet', 'sky', 'rose', 'teal', 'orange'] as const
@@ -123,8 +128,39 @@ const SCENARIO_SCHEMA = {
       },
     },
   },
-  required: ['scenarios'],
+  required: ['scenarios', 'book'],
   additionalProperties: false,
+}
+// The AI's recommended forecast MODEL — an Assumption-Book configuration the
+// analyst can apply with one click. null when the prompt doesn't warrant
+// changing the house view.
+;(SCENARIO_SCHEMA.properties as any).book = {
+  anyOf: [
+    { type: 'null' },
+    {
+      type: 'object',
+      properties: {
+        drivers: {
+          type: 'object',
+          properties: {
+            marketGrowth: { type: 'number' }, evShareHorizon: { type: 'number' },
+            iceCo2Improve: { type: 'number' }, massDrift: { type: 'number' },
+          },
+          required: ['marketGrowth', 'evShareHorizon', 'iceCo2Improve', 'massDrift'],
+          additionalProperties: false,
+        },
+        weights: {
+          type: 'object',
+          properties: { base: { type: 'number' }, upside: { type: 'number' }, downside: { type: 'number' } },
+          required: ['base', 'upside', 'downside'],
+          additionalProperties: false,
+        },
+        narrative: { type: 'string' },
+      },
+      required: ['drivers', 'weights', 'narrative'],
+      additionalProperties: false,
+    },
+  ],
 }
 
 function generationSystem(country: CountryId, ownedNote: string): string {
@@ -150,17 +186,28 @@ Rules:
 - Use \`events\` to pin narrative moments to a year (e.g. {year:2027, label:"Diesel ban"}). Display only.
 - Set every lever key explicitly (null when unused). Emit ONLY levers this market supports.
 
+ALSO return \`book\` — your recommended forecast MODEL for this prompt: the four
+fundamentals of the Assumption Book (the analyst can apply it with one click):
+- marketGrowth (%/yr), evShareHorizon (% ZE share in the final year — an S-curve
+  is fitted from today's share; statutory mandates floor it automatically),
+- iceCo2Improve (%/yr tailpipe improvement of the combustion pool),
+- massDrift (kg/yr fleet mass creep; mass-based limits move with it),
+plus case probability weights {base, upside, downside} summing to ~1, and a one-
+or-two-sentence narrative for the board pack. Stay within each driver's plausible
+range (you are given the current book and its sourced defaults). Return book:null
+if the prompt is a pure what-if that shouldn't move the house view.
+
 ${ownedNote}
 Market: ${pack.flag} ${pack.name} — limit in ${pack.metricUnit}, fine ${pack.fineRateLabel}, years ${pack.years[0]}–${pack.years[pack.years.length - 1]}.`
 }
 
-const briefSystem = `You are the forecast analyst inside Autocred. Below are scenarios the deterministic engine has ALREADY computed. Write a tight executive brief (about 120–180 words, plain prose, no headers):
-- Lead with the single most important takeaway.
-- Explain what drives the divergence between the scenarios (which lever moved the fine).
-- Call out when each scenario first breaches the limit and the final-year exposure.
-- Name the cheapest credible hedge and, if pooling helps in this market, the pooling upside.
-- End with one recommended action.
-Every number here is engine-computed — cite the exact figures, never recompute or estimate. Use the market's units and currency. Be concise and direct.`
+const briefSystem = `You are the lead forecast analyst inside Autocred, writing the executive brief of a Big-4-grade board pack. Below are trajectories the deterministic engine has ALREADY computed, including the weighted case matrix (Base/Upside/Downside), the year-over-year fine bridge and the electrification break-even. Write 150–220 words of plain prose (no headers):
+- Verdict first: the probability-weighted expected exposure and the range across cases.
+- What drives it: use the bridge (regulation vs volume vs technology vs mix) to say WHY the number moves.
+- The break-even: what adoption level zeroes the final-year fine, and whether the base case gets there.
+- When each scenario/case first breaches, and the single cheapest credible hedge (pooling where allowed).
+- Close with one recommended action for the board.
+Every figure is engine-computed — cite them exactly, never recompute. Use the market's units and currency.`
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
@@ -195,6 +242,46 @@ export default async function handler(req: any, res: any) {
 
     const ownedNote = `The user's organisation has subscribed to these markets ONLY: ${owned.join(', ')}. Only produce scenarios for ${pack.name}.`
 
+    // ── the analyst's current Assumption Book (client-sent) + registry bounds ──
+    const clamp = (k: keyof DriverSet, v: unknown): number => {
+      const m = DRIVER_META.find((d) => d.key === k)!
+      const n = typeof v === 'number' && Number.isFinite(v) ? v : DRIVER_DEFAULTS[country][k]
+      return Math.min(m.max, Math.max(m.min, n))
+    }
+    const bookNow: DriverSet = {
+      marketGrowth: clamp('marketGrowth', context.drivers?.marketGrowth),
+      evShareHorizon: clamp('evShareHorizon', context.drivers?.evShareHorizon),
+      iceCo2Improve: clamp('iceCo2Improve', context.drivers?.iceCo2Improve),
+      massDrift: clamp('massDrift', context.drivers?.massDrift),
+    }
+    const vintageYear = new Date().getFullYear()
+    const cfg: OutlookConfig = { raw, pack, drivers: bookNow, vintageYear }
+    const mfine = (rows: Vehicle[], sc: any) => {
+      const t = buildTree(rows, pack, sc, {})
+      return (t.children ?? []).reduce((a: number, c: any) => a + c.fine, 0)
+    }
+    const caseSummaries = CASES.map((c) => {
+      const d = caseDrivers(bookNow, c)
+      const run = outlookRun({ ...cfg, drivers: d })
+      let cum = 0
+      let breach: number | null = null
+      for (const y of pack.years) {
+        const f = mfine(run.fleetForYear(y), run.scenarioFor(y))
+        cum += f
+        if (f > 0 && breach == null) breach = y
+      }
+      return { id: c.id, name: c.name, weight: c.defaultWeight, cumFine: Math.round(cum), firstBreach: breach }
+    })
+    const expectedExposure = Math.round(caseSummaries.reduce((a, c) => a + c.cumFine * c.weight, 0))
+    const finalYear = pack.years[pack.years.length - 1]
+    const breakEven = breakEvenAdoption(cfg, finalYear)
+    const bridge = bridgeYear(cfg, pack.years[Math.min(1, pack.years.length - 1)])
+    const bookContext = {
+      registry: DRIVER_META.map((m) => ({ key: m.key, label: m.label, unit: m.unit, min: m.min, max: m.max, default: DRIVER_DEFAULTS[country][m.key], rationale: m.rationale })),
+      currentBook: bookNow,
+      computed: { caseSummaries, expectedExposure, breakEven, finalYear },
+    }
+
     // ── Pass A: generate scenario definitions (structured, grounded on baseline) ──
     const genParams: any = {
       model: MODEL,
@@ -204,13 +291,33 @@ export default async function handler(req: any, res: any) {
       system: generationSystem(country, ownedNote),
       messages: [{
         role: 'user',
-        content: `The user is forecasting ${baseline.target} in ${pack.name}. Their request:\n"${String(prompt)}"\n\nEngine-computed baseline (hold today's mix):\n${JSON.stringify(baseline)}`,
+        content: `The user is forecasting ${baseline.target} in ${pack.name}. Their request:\n"${String(prompt)}"\n\nEngine-computed baseline (hold today's mix):\n${JSON.stringify(baseline)}\n\nThe Assumption Book (fundamentals) — registry, current values and engine-computed case economics:\n${JSON.stringify(bookContext)}`,
       }],
     }
     const genResp = await client.messages.create(genParams)
     const jsonText = (genResp.content.find((b: any) => b.type === 'text') as any)?.text ?? '{}'
     let defs: ForecastScenarioDef[] = []
-    try { defs = (JSON.parse(jsonText).scenarios ?? []) as ForecastScenarioDef[] } catch { defs = [] }
+    let aiBook: { drivers: DriverSet; weights: { base: number; upside: number; downside: number }; narrative: string } | null = null
+    try {
+      const parsed = JSON.parse(jsonText)
+      defs = (parsed.scenarios ?? []) as ForecastScenarioDef[]
+      if (parsed.book && parsed.book.drivers) {
+        aiBook = {
+          drivers: {
+            marketGrowth: clamp('marketGrowth', parsed.book.drivers.marketGrowth),
+            evShareHorizon: clamp('evShareHorizon', parsed.book.drivers.evShareHorizon),
+            iceCo2Improve: clamp('iceCo2Improve', parsed.book.drivers.iceCo2Improve),
+            massDrift: clamp('massDrift', parsed.book.drivers.massDrift),
+          },
+          weights: {
+            base: Math.max(0, Number(parsed.book.weights?.base) || 0.5),
+            upside: Math.max(0, Number(parsed.book.weights?.upside) || 0.25),
+            downside: Math.max(0, Number(parsed.book.weights?.downside) || 0.25),
+          },
+          narrative: String(parsed.book.narrative ?? ''),
+        }
+      }
+    } catch { defs = [] }
     if (!defs.length) { send('error', { error: 'The model did not return any scenarios — try rephrasing.' }); res.end(); return }
 
     // ── Materialise + compute each scenario on the real engine ──
@@ -234,6 +341,7 @@ export default async function handler(req: any, res: any) {
       firstBreachYear: baseline.firstBreachYear, cumExposure: baseline.cumExposureIfMixHolds,
     })
     send('scenarios', { scenarios })
+    if (aiBook) send('book', { book: aiBook })
 
     // ── Pass B: stream the executive brief from the computed outcomes ──
     const briefInput = {
@@ -241,6 +349,11 @@ export default async function handler(req: any, res: any) {
       poolingAllowed: pack.pooling.enabled,
       baseline: { firstBreachYear: baseline.firstBreachYear, cumExposureIfMixHolds: baseline.cumExposureIfMixHolds, limitTightensPct: baseline.limitTightensPct },
       scenarios: scenarios.map((s) => ({ name: s.name, description: s.description, levers: s.levers, ...s.summary })),
+      assumptionBook: bookNow,
+      caseMatrix: { cases: caseSummaries, probabilityWeightedExpected: expectedExposure },
+      breakEvenZeShareAtHorizon: breakEven,
+      fineBridge: bridge ? { year: bridge.year, from: Math.round(bridge.from), to: Math.round(bridge.to), effects: bridge.effects.map((e) => ({ label: e.label, delta: Math.round(e.delta) })) } : null,
+      aiProposedBook: aiBook,
     }
     const stream = client.messages.stream({
       model: MODEL,

@@ -13,6 +13,7 @@ import {
   DRIVER_DEFAULTS, adoptionShare, mandateFloor, outlookRun, bridgeYear,
   twoWay, breakEvenAdoption, outlookBaseYear, type OutlookConfig,
 } from '../src/engine/outlook.js'
+import { svgFanChart, svgWaterfall, svgSCurve } from '../src/lib/packcharts.js'
 import fleet from '../src/data/fleet_data.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 
@@ -116,6 +117,30 @@ for (const id of ['EU', 'IN'] as CountryId[]) {
   const errPct = Math.abs(predCo2 - actualCo2) / actualCo2 * 100
   check('IN backtest: 2025-seeded 2026 fleet CO₂ within 15% of actual', errPct <= 15, `predicted ${predCo2.toFixed(1)} vs actual ${actualCo2.toFixed(1)} g/km (${errPct.toFixed(1)}% err)`)
   check('IN backtest: base year picked = 2025', outlookBaseYear(seed, pack, 2025) === 2025)
+}
+
+// ── 7 · the deck graphics: pure-SVG builders are well-formed ─────────────────
+{
+  const years = [2025, 2026, 2027, 2028]
+  const fan = svgFanChart(years, [{ name: 'Base case', hex: '#0E9F6E', values: [96, 92, 88, 84] }, { name: 'Downside', hex: '#E0484D', values: [97, 95, 93, 91] }], [95, 93.5, 85, 80], 'g CO₂/km', 'Cases vs the line')
+  check('fan chart: svg with one polyline per series + limit', fan.startsWith('<svg') && (fan.match(/<polyline/g) ?? []).length === 3)
+  check('fan chart: legend carries case names', fan.includes('Base case') && fan.includes('Statutory limit'))
+  const wf = svgWaterfall([
+    { label: '2026 fine', value: 3_620_000_000, kind: 'total' },
+    { label: 'Regulation', value: 187_670_000, kind: 'delta' },
+    { label: 'Volume', value: 38_110_000, kind: 'delta' },
+    { label: 'Tech', value: -1_090_000_000, kind: 'delta' },
+    { label: 'ZE mix', value: -2_550_000_000, kind: 'delta' },
+    { label: '2027 fine', value: 205_780_000, kind: 'total' },
+  ], '€', 'Fine bridge')
+  check('waterfall: svg with a bar per step', wf.startsWith('<svg') && (wf.match(/<rect/g) ?? []).length === 6)
+  check('waterfall: labels money deltas', wf.includes('+€') && wf.includes('−€'))
+  const sc = svgSCurve(years, [22, 30, 45, 60], [22, 28, 33, 38], 'Adoption path')
+  check('s-curve: svg with floor shading + share labels', sc.startsWith('<svg') && sc.includes('polygon') && sc.includes('60%'))
+  const scNoFloor = svgSCurve(years, [10, 15, 22, 30], [null, null, null, null], 'Adoption path')
+  check('s-curve: no floor polygon when regime has none', !scNoFloor.includes('polygon'))
+  const bad = ['<script>', 'onerror']
+  check('svg builders emit no active content', ![fan, wf, sc].some((x) => bad.some((b) => x.includes(b))))
 }
 
 console.log(`\n${pass} passed · ${fail} failed`)

@@ -11,9 +11,10 @@
 import { useMemo, useState } from 'react'
 import type { CountryId, RulePack, Vehicle } from '../engine/types'
 import {
-  DRIVER_META, type DriverKey, type DriverSet, type OutlookConfig,
-  bridgeYear, twoWay, breakEvenAdoption, outlookBaseYear,
+  DRIVER_META, type DriverKey, type OutlookConfig,
+  bridgeYear, twoWay, breakEvenAdoption, outlookBaseYear, outlookRun, mandateFloor,
 } from '../engine/outlook'
+import { svgSCurve } from '../lib/packcharts'
 import { useDrivers, driverSetFor, type DriverStatus } from '../lib/drivers'
 import { fmtMoney, fmtNum } from '../engine/engine'
 import { Section } from './ui'
@@ -41,6 +42,12 @@ export default function OutlookPanel({ raw, pack, country, vintageYear }: {
   const finalYear = pack.years[pack.years.length - 1]
 
   const signedOff = DRIVER_META.filter((m) => (gov[m.key]?.status ?? 'draft') === 'signed-off').length
+
+  // the adoption path the base case follows (S-curve + statutory floor)
+  const sCurveSvg = useMemo(() => {
+    const run = outlookRun(cfg)
+    return svgSCurve(pack.years, pack.years.map((y) => run.shareFor(y)), pack.years.map((y) => mandateFloor(pack, y)), `Zero-emission adoption path · seeded from ${run.baseYear} actuals`)
+  }, [cfg, pack])
 
   // ── bridge ──
   const bridgeYears = pack.years.slice(1)
@@ -119,6 +126,11 @@ export default function OutlookPanel({ raw, pack, country, vintageYear }: {
             </tbody>
           </table>
         </div>
+      </Section>
+
+      {/* ── ADOPTION S-CURVE ── */}
+      <Section title="Electrification path" right={<span className="text-[11px] text-ink-500">base-case S-curve · gold = statutory floor where mandated</span>}>
+        <div className="mx-auto max-w-[820px]" dangerouslySetInnerHTML={{ __html: sCurveSvg }} />
       </Section>
 
       <div className="grid gap-5 xl:grid-cols-2">
