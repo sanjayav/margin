@@ -1,5 +1,16 @@
 # India — "Scenario Planning Tool" workbook → platform mapping
 
+> **2026-07-14 — MASTER FILE ERA.** India now sources **exclusively** from
+> `SCENARIO PLANNING TOOL Master data.xlsx` (one sheet, the proven Data-Mode
+> roll-up; 4 OEMs × 2025–26; 66 variants / 28 sales rows). Pipeline:
+> `scripts/ingest-india-master.py` → `scripts/apply-india-extract.py` (FULL
+> replace — the 2027–31 demo rows and the Ram-workbook catalog are deleted).
+> Horizon 2027–31 = the 2026 actuals replicated against each year's statutory
+> line (the platform's baseline-projection convention; Analyse badges them P;
+> the Forecast outlook evolves them from fundamentals). Everything below this
+> banner documents the original Ram-workbook analysis and mapping decisions,
+> which the master pipeline inherits.
+
 Maps `SCENARIO PLANNING TOOL UPDATE Ram.xlsx` onto the Underline data model
 (`src/engine/types.ts` `Vehicle` + the `IN` rule pack). Extractor:
 `scripts/ingest-india-scenario.py` → `.data/india_extract.json`, applied to the

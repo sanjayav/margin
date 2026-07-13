@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # ───────────────────────────────────────────────────────────────────────────
-# Apply the India extract to the bundled fleet data.
-#   1. new IN = real MY2025–26 rows (IN_fleet)  +  existing IN 2027–31 demo rows
-#   2. rewrite  src/data/fleet_data.json
-#   3. regenerate src/data/fleet_data.ts  (same auto-generated header)
-#   4. write    src/data/india_catalog.ts  (649 variant specs + a lookup)
+# Apply the India extract to the bundled fleet data — FULL REPLACE.
+# Per direction (2026-07-14): India carries ONLY the master-file data. The old
+# 2027–31 demo rows (Maruti/Tata/Mahindra dummies) and the Ram-workbook
+# catalog are gone.
 #
-# Idempotent: strips any previously-applied 2025–26 IN rows before re-adding.
-# Run:  python3 scripts/ingest-india-scenario.py && python3 scripts/apply-india-extract.py
+#   1. IN actual years  = the extract's fleet rows as-is (2025, 2026)
+#   2. IN horizon years = the LATEST actual year's rows replicated per CAFE III
+#      year (2027–31) — the platform convention (EU does the same): the as-sold
+#      fleet held against each year's tightening statutory line. Analyse badges
+#      these years "P" (projection); the Forecast outlook evolves them properly.
+#   3. rewrite src/data/fleet_data.{json,ts} (EU/AU/UK untouched)
+#   4. rewrite src/data/india_catalog.ts from the master's variant library
+#
+# Run:  python3 scripts/ingest-india-master.py && python3 scripts/apply-india-extract.py
 # ───────────────────────────────────────────────────────────────────────────
 import json, os
 
@@ -17,6 +23,10 @@ EXTRACT = os.path.join(ROOT, ".data", "india_extract.json")
 FLEET_JSON = os.path.join(ROOT, "src", "data", "fleet_data.json")
 FLEET_TS = os.path.join(ROOT, "src", "data", "fleet_data.ts")
 CATALOG_TS = os.path.join(ROOT, "src", "data", "india_catalog.ts")
+
+# The IN rule pack horizon (src/engine/rulepacks/india.ts): 2025–2031.
+HORIZON = [2027, 2028, 2029, 2030, 2031]
+FY = lambda y: f"FY {y}-{(y + 1) % 100:02d}"
 
 TS_HEADER = (
     "// AUTO-GENERATED from fleet_data.json — do not edit by hand.\n"
@@ -30,16 +40,17 @@ def main():
     extract = json.load(open(EXTRACT))
     fleet = json.load(open(FLEET_JSON))
 
-    in_new = extract["IN_fleet"]          # 2025–26 real
-    baseline_years = {v["year"] for v in in_new}
-    # keep every existing IN row NOT in the baseline years (the 2027–31 demo),
-    # so re-running never duplicates the actuals.
-    in_keep = [v for v in fleet.get("IN", []) if v.get("year") not in baseline_years]
-    fleet["IN"] = in_new + in_keep
+    actual = extract["IN_fleet"]
+    latest = max(v["year"] for v in actual)
+    base = [v for v in actual if v["year"] == latest]
+    projected = []
+    for y in HORIZON:
+        for v in base:
+            projected.append({**v, "year": y, "fyLabel": FY(y)})
+    fleet["IN"] = actual + projected  # FULL replace — nothing of the old IN survives
 
     with open(FLEET_JSON, "w") as f:
         json.dump(fleet, f, separators=(", ", ": "))
-
     with open(FLEET_TS, "w") as f:
         f.write(TS_HEADER)
         f.write("const data: Record<string, any[]> = " + json.dumps(fleet, separators=(", ", ": ")) + "\n")
@@ -47,9 +58,9 @@ def main():
 
     catalog = extract["IN_catalog"]
     with open(CATALOG_TS, "w") as f:
-        f.write("// AUTO-GENERATED from the India scenario workbook — do not edit by hand.\n")
-        f.write("// The full variant spec library (no sales): powers the 'Build a variant'\n")
-        f.write("// picker with real India models. See scripts/ingest-india-scenario.py.\n")
+        f.write("// AUTO-GENERATED from the India MASTER workbook — do not edit by hand.\n")
+        f.write("// The variant spec library (no sales): powers the 'Build a variant'\n")
+        f.write("// picker with real India models. See scripts/ingest-india-master.py.\n")
         f.write("/* eslint-disable */\n")
         f.write("import type { Vehicle } from '../engine/types'\n\n")
         f.write("export const INDIA_CATALOG: Partial<Vehicle>[] = " + json.dumps(catalog, separators=(", ", ": ")) + "\n\n")
@@ -68,11 +79,10 @@ def main():
             "export const INDIA_MODELS: string[] = [...new Set(INDIA_CATALOG.map((v) => v.model!).filter(Boolean))].sort()\n"
         )
 
-    # report
     yrs = {}
     for v in fleet["IN"]:
         yrs.setdefault(v["year"], set()).add(v["parent"])
-    print("→ merged IN fleet:", len(fleet["IN"]), "rows")
+    print("→ IN fully replaced:", len(fleet["IN"]), "rows (actuals", sorted({v['year'] for v in actual}), "+ horizon", HORIZON, "replicated from", latest, ")")
     for y in sorted(yrs):
         print(f"   {y}: {len(yrs[y])} makers, {sum(1 for v in fleet['IN'] if v['year']==y)} rows")
     print("→ wrote", os.path.relpath(FLEET_JSON, ROOT), "+", os.path.relpath(FLEET_TS, ROOT))

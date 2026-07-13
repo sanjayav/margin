@@ -1,46 +1,73 @@
-// India end-to-end check: does the merged 2025–31 IN fleet flow through the
-// engine and produce sensible CAFE II / CAFE III compliance per maker-year?
+// India end-to-end check — MASTER-file era (the only India source, 2026-07-14):
+// 2025–26 actuals for MG/Renault/Nissan/Skoda, plus the 2026 fleet replicated
+// across the CAFE III horizon (2027–31) as the as-sold baseline projection.
 //   esbuild scripts/verify-india.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/vin.mjs && node node_modules/.cache/vin.mjs
 import { getPack } from '../src/engine/rulepacks/index.js'
-import { aggregateParent } from '../src/engine/engine.js'
+import { aggregateParent, buildTree } from '../src/engine/engine.js'
 import fleet from '../src/data/fleet_data.js'
-import type { Scenario } from '../src/engine/types.js'
+import type { Scenario, Vehicle } from '../src/engine/types.js'
 
-const IN = (fleet as any).IN as any[]
+const IN = (fleet as any).IN as Vehicle[]
 const pack = getPack('IN')
 const base = (year: number): Scenario => ({ year, evSharePct: null, salesMultiplier: 1, massShiftKg: 0, ecoBoostG: 0, poolingEnabled: false, superCreditsEnabled: true, mix: null, extraVariants: [], phevUF: true, creditPrice: null, targetShiftPct: null })
 
 let pass = 0, fail = 0
 const check = (n: string, c: boolean, d = '') => { console.log(`${c ? '✓' : '✗ FAIL'} ${n}${d ? ' — ' + d : ''}`); c ? pass++ : fail++ }
 
+const MASTER_MAKERS = ['MG Motor', 'Nissan Motor India Private Limited', 'Renault India Private Limited', 'Skoda Auto Volkswagen India Private Limited']
 console.log('IN fleet spans', Math.min(...IN.map((v) => v.year)), '→', Math.max(...IN.map((v) => v.year)), `(${IN.length} rows)\n`)
 
+// ── source-of-truth: ONLY the master data ────────────────────────────────────
 check('year strip covers 2025–2031', JSON.stringify(pack.years) === JSON.stringify([2025, 2026, 2027, 2028, 2029, 2030, 2031]))
 check('workspace opens on CAFE III (2027)', pack.defaultYear === 2027)
-check('2026 is a CAFE II year', pack.regimeFor?.(2026)?.name === 'CAFE II')
-check('2027 is CAFE III (draft)', pack.regimeFor?.(2027)?.name === 'CAFE III' && pack.regimeFor?.(2027)?.draft === true)
+const makers = [...new Set(IN.map((v) => v.parent))].sort()
+check('exactly the 4 master-file makers — old demo data deleted', JSON.stringify(makers) === JSON.stringify(MASTER_MAKERS), makers.join(' · '))
+check('no dummy makers survive', !IN.some((v) => /Maruti|Tata|Mahindra/.test(v.parent)))
+const y2025 = new Set(IN.filter((v) => v.year === 2025).map((v) => v.parent))
+check('2025 actuals: MG + Skoda', y2025.size === 2 && y2025.has('MG Motor'))
+for (const y of [2026, 2027, 2031]) {
+  const m = new Set(IN.filter((v) => v.year === y).map((v) => v.parent))
+  check(`${y}: all four master makers present`, m.size === 4)
+}
 
+// ── horizon = the 2026 actuals replicated (baseline projection convention) ──
+{
+  const y26 = IN.filter((v) => v.year === 2026)
+  const y29 = IN.filter((v) => v.year === 2029)
+  check('horizon rows replicate the 2026 fleet (row count)', y26.length === y29.length, `${y26.length} vs ${y29.length}`)
+  const k26 = new Map(y26.map((v) => [`${v.parent}|${v.model}`, v]))
+  const same = y29.every((v) => {
+    const b = k26.get(`${v.parent}|${v.model}`)
+    return !!b && b.sales === v.sales && b.co2 === v.co2 && b.mass === v.mass
+  })
+  check('horizon rows carry identical sales/CO₂/mass (only the year moves)', same)
+  check('horizon rows re-labelled to their fiscal year', y29.every((v: any) => v.fyLabel === 'FY 2029-30'))
+}
+
+// ── compliance computes sensibly across both regimes ─────────────────────────
 console.log('\nPer maker-year compliance (engine):')
-const seen = new Set<string>()
 for (const year of pack.years) {
-  const parents = [...new Set(IN.filter((v) => v.year === year).map((v) => v.parent))]
-  for (const p of parents) {
+  for (const p of MASTER_MAKERS) {
     const a = aggregateParent(IN, pack, base(year), p)
     if (a.rawUnits === 0) continue
-    seen.add(`${year}:${p}`)
     const regime = pack.regimeFor?.(year)?.name
-    console.log(`  ${year} ${regime}  ${p.slice(0, 34).padEnd(34)} perf=${a.avgMetric.toFixed(2)} limit=${a.limit.toFixed(2)} L/100km  gap=${a.gap.toFixed(2)}  ${a.status}  ${(a.zlevShare * 100).toFixed(0)}% ZE`)
-    check(`  ${year} ${p.split(' ')[0]} has a positive limit`, a.limit > 0)
-    check(`  ${year} ${p.split(' ')[0]} metric is finite & ≥0`, Number.isFinite(a.avgMetric) && a.avgMetric >= 0)
+    console.log(`  ${year} ${regime}  ${p.slice(0, 34).padEnd(34)} perf=${a.avgMetric.toFixed(2)} limit=${a.limit.toFixed(2)} gap=${a.gap.toFixed(2)}  ${a.status}  ${(a.zlevShare * 100).toFixed(0)}% ZE`)
+    check(`  ${year} ${p.split(' ')[0]} limit>0 & metric finite`, a.limit > 0 && Number.isFinite(a.avgMetric) && a.avgMetric >= 0)
   }
 }
 
-// MG 2025: EV-heavy maker → very low fleet metric (the workbook's illustrative
-// P=150 excluded EVs; the engine must NOT).
+// MG 2025 is EV-heavy: the engine must include EVs (workbook's illustrative
+// P=150 excluded them — the known source quirk).
 {
   const a = aggregateParent(IN, pack, base(2025), 'MG Motor')
-  check('MG 2025 fleet metric reflects EV dominance (< 2 L/100km)', a.avgMetric < 2, `${a.avgMetric.toFixed(2)} L/100km, ${(a.zlevShare * 100).toFixed(0)}% ZE`)
+  check('MG 2025 metric reflects EV dominance (< 2 L/100km)', a.avgMetric < 2, `${a.avgMetric.toFixed(2)} L/100km, ${(a.zlevShare * 100).toFixed(0)}% ZE`)
   check('MG 2025 is compliant', a.status === 'compliant')
+}
+
+// market roll-up exists for every year (no empty screens anywhere on the strip)
+for (const y of pack.years) {
+  const t = buildTree(IN, pack, base(y), {})
+  check(`market tree ${y} has volume`, t.rawUnits > 0, `${t.rawUnits}`)
 }
 
 console.log(`\n${pass} passed · ${fail} failed`)

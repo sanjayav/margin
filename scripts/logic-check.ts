@@ -28,8 +28,8 @@ const check = (name: string, cond: boolean, detail = '') => { console.log(`${con
 // 2. India metric is NOT moved by the eco-innovation lever (unit bug fixed)
 {
   const ind = getPack('IN'); const raw = data.IN as any
-  const m0 = aggregateParent(raw, ind, base('IN'), 'Maruti Suzuki India Limited').avgMetric
-  const m5 = aggregateParent(raw, ind, { ...base('IN'), ecoBoostG: 5 }, 'Maruti Suzuki India Limited').avgMetric
+  const m0 = aggregateParent(raw, ind, base('IN'), 'MG Motor').avgMetric
+  const m5 = aggregateParent(raw, ind, { ...base('IN'), ecoBoostG: 5 }, 'MG Motor').avgMetric
   check('India ecoBoostG no longer changes the metric', Math.abs(m0 - m5) < 1e-9, `${m0.toFixed(4)} vs ${m5.toFixed(4)}`)
 }
 
