@@ -9,9 +9,9 @@ import { ScenarioRail } from './components/ScenarioRail'
 import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import PlatformShell from './components/PlatformShell'
+import CommandK, { useCmdK, CMDK_HINT } from './components/CommandK'
 import { applySharedFromHash } from './lib/share'
 import Analyze from './screens/Analyze'
-import Analytics from './screens/Analytics'
 import Data from './screens/Data'
 import Pooling from './screens/Pooling'
 import Plan from './screens/Plan'
@@ -22,7 +22,6 @@ import Login from './screens/Login'
 // `addon` items only appear in the workspace nav when the org owns that add-on.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling' }[] = [
   { id: 'analyze', label: 'Analyze', icon: 'scatter', tier: 'Core' },
-  { id: 'analytics', label: 'Analytics', icon: 'layers', tier: 'Core' },
   { id: 'data', label: 'Data', icon: 'database', tier: 'Core' },
   { id: 'plan', label: 'Scenario', icon: 'target', tier: 'Core' },
   { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
@@ -30,9 +29,10 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
   { id: 'admin', label: 'Admin', icon: 'settings', tier: 'Plus' },
 ]
 
-const PLAN_TABS: { id: 'under' | 'forecast'; label: string; icon: IconName }[] = [
+const PLAN_TABS: { id: 'under' | 'forecast' | 'compare'; label: string; icon: IconName }[] = [
   { id: 'under', label: 'Get under the line', icon: 'target' },
   { id: 'forecast', label: 'Forecast', icon: 'trending' },
+  { id: 'compare', label: 'Compare scenarios', icon: 'layers' },
 ]
 
 const CHROME = '#17140F' // warm near-black chrome (sidebar + top bar)
@@ -109,6 +109,7 @@ function TopBar() {
   const { pack, tree } = useCompliance()
   const screen = useStore((s) => s.screen)
   const year = useStore((s) => s.scenario.year)
+  const openCmdK = useCmdK((s) => s.setOpen)
   const item = NAV.find((n) => n.id === screen)
   // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
   const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
@@ -132,6 +133,13 @@ function TopBar() {
       </div>
       {/* board verdict */}
       <div className="flex items-center gap-3.5">
+        <button onClick={() => openCmdK(true)}
+          className="group flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-[#8A8174] transition hover:border-white/[0.18] hover:text-[#C9C0B2]">
+          <Icon name="search" size={14} className="text-[#7E766A] transition group-hover:text-brand-400" />
+          <span className="hidden md:inline">Search…</span>
+          <span className="kbd">{CMDK_HINT}</span>
+        </button>
+        <div className="h-10 w-px bg-white/[0.10]" />
         <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 ${under ? 'border-safe/25 bg-safe/[0.08]' : 'border-danger/25 bg-danger/[0.08]'}`}>
           <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger animate-pulse'}`} />
           <div className="leading-tight">
@@ -152,7 +160,7 @@ function TopBar() {
   )
 }
 
-const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'analytics', 'pooling', 'plan'])
+const RAIL_SCREENS = new Set<ScreenId>(['analyze', 'pooling', 'plan'])
 
 function PoolingLocked() {
   const goto = useStore((s) => s.exitToPlatform)
@@ -168,10 +176,14 @@ function PoolingLocked() {
 
 function ModuleShell() {
   const screen = useStore((s) => s.screen)
+  const planTab = useStore((s) => s.planTab)
   const aiEnabled = useStore((s) => s.aiEnabled)
   const poolingAddon = useStore((s) => s.poolingAddon)
-  const Screen = { analyze: Analyze, analytics: Analytics, data: Data, pooling: Pooling, plan: Plan, intel: Intelligence, admin: Admin }[screen]
+  const Screen = { analyze: Analyze, data: Data, pooling: Pooling, plan: Plan, intel: Intelligence, admin: Admin }[screen]
   const gated = screen === 'pooling' && !poolingAddon
+  // The Forecast Studio owns its own scenarios + lever editor, so the global
+  // Assumptions rail would be a redundant, conflicting second control surface there.
+  const railHidden = screen === 'plan' && planTab === 'forecast'
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
@@ -179,9 +191,11 @@ function ModuleShell() {
         <TopBar />
         <div className="flex min-h-0 flex-1">
           <main className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
-            {gated ? <PoolingLocked /> : <Screen />}
+            <div key={gated ? 'locked' : screen} className="screen-in">
+              {gated ? <PoolingLocked /> : <Screen />}
+            </div>
           </main>
-          {RAIL_SCREENS.has(screen) && !gated && <ScenarioRail />}
+          {RAIL_SCREENS.has(screen) && !gated && !railHidden && <ScenarioRail />}
         </div>
       </div>
       {aiEnabled && <Assistant />}
@@ -198,5 +212,10 @@ export default function App() {
   useEffect(() => { applySharedFromHash() }, []) // hydrate a deep-link if present
 
   if (!authed) return <Login />
-  return view === 'platform' ? <PlatformShell /> : <ModuleShell />
+  return (
+    <>
+      {view === 'platform' ? <PlatformShell /> : <ModuleShell />}
+      <CommandK />
+    </>
+  )
 }

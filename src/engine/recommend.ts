@@ -27,6 +27,8 @@ export interface Plan {
   fineBefore: number
   fineAfter: number
   cleared: boolean
+  /** Gap (metric units) covered by purchased credits rather than fleet change. */
+  creditsCovered: number
 }
 
 // Illustrative incentive cost to convert one buyer to a zero-emission car.
@@ -182,6 +184,27 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
   }
 
   const after = cur
+
+  // Fallback: where a credit market exists, buying credits for the residual gap
+  // beats paying the penalty whenever the credit price is below the fine rate
+  // (UK CRTS ≈£4k vs £12k; AU units). The fleet position doesn't move — the
+  // obligation is met commercially — so we track it as creditsCovered.
+  let fineAfter = after.fine
+  let creditsCovered = 0
+  if (after.gap > 0.001 && after.fine > 0 && pack.creditPrice != null && pack.creditPrice < pack.fineRate) {
+    const cost = Math.round(after.gap * pack.creditPrice * after.rawUnits)
+    creditsCovered = after.gap
+    actions.push({
+      id: 'credits', lever: 'credits', difficulty: diff('credits'),
+      title: 'Buy compliance credits for the rest',
+      detail: `Cover the remaining ${after.gap.toFixed(1)} ${pack.metricUnit} by purchasing credits (${pack.creditPriceLabel ?? 'at market price'}) instead of paying the penalty.`,
+      cost,
+      gramsCleared: after.gap,
+      fineAvoided: after.fine,
+    })
+    fineAfter = 0
+  }
+
   return {
     parent,
     before,
@@ -189,8 +212,9 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
     actions,
     totalCost: actions.reduce((a, x) => a + x.cost, 0),
     fineBefore,
-    fineAfter: after.fine,
+    fineAfter,
     cleared: after.gap <= 0.001,
+    creditsCovered,
   }
 }
 

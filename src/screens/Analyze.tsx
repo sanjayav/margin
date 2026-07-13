@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { getMeta } from '../data/fleet'
-import type { Aggregate } from '../engine/types'
-import { fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
+import type { Aggregate, Scenario, Vehicle } from '../engine/types'
+import { aggregate, applyScenario, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
 import LimitChart, { type ChartPoint } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
+import { GapHeatmap, Mekko } from '../components/Charts'
+import { makerYearGap, makerMekko } from '../lib/analytics'
+import { parentPoolMap } from '../engine/pooling'
 import { Section, Stat, Bar } from '../components/ui'
 import Icon from '../components/Icon'
 import { makeLimitAt } from '../lib/chart'
@@ -33,6 +36,7 @@ export default function Analyze() {
   const setDrill = useStore((s) => s.setDrill)
   const setParent = useStore((s) => s.setParent)
   const setScreen = useStore((s) => s.setScreen)
+  const patchScenario = useStore((s) => s.patchScenario)
   const showProv = useProvenance((s) => s.show)
   const meta = getMeta(country)
 
@@ -58,7 +62,7 @@ export default function Analyze() {
       key: c.label,
       label: c.label,
       sub: c.level === 'variant' || c.level === 'model' ? (c.vehicles[0]?.powertrain ?? '') : '',
-      mass: c.avgMass, metric: c.avgMetric, units: c.rawUnits, gap: c.gap,
+      mass: c.avgMass, metric: c.avgMetric, units: c.rawUnits, gap: c.gap, fine: c.fine,
       powertrain: c.level === 'variant' ? c.vehicles[0]?.powertrain : undefined,
       status: c.status,
       drillable: level < 4,
@@ -100,6 +104,67 @@ export default function Analyze() {
     [country, drill, raw, pack, scenario, overrides],
   )
 
+  // ── the analysis layer: verdict inputs computed from the same engine ───────
+  // Re-aggregate the CURRENT drill node under any probe scenario (other years,
+  // forced ZE shares) by re-applying the scenario and re-filtering the path.
+  const matchPath = (x: Vehicle) => {
+    if (drill.length >= 1 && (x.pool || x.parent) !== drill[0]) return false
+    if (drill.length >= 2 && x.parent !== drill[1]) return false
+    if (drill.length >= 3 && x.model !== drill[2]) return false
+    if (drill.length >= 4 && variantKey(x) !== drill[3]) return false
+    return true
+  }
+  const aggFor = (sc: Scenario) => aggregate(applyScenario(raw, sc, pack, overrides).filter(matchPath), pack, sc, node.label, node.level, 'probe')
+
+  // Trajectory: this node's gap across every compliance year (the ICCT framing —
+  // "are we on track", not just "where are we this year").
+  const glide = useMemo(
+    () => pack.years.map((y) => { const a = aggFor({ ...scenario, year: y }); return { year: y, gap: a.gap, units: a.rawUnits } }),
+    [raw, pack, scenario, overrides, drill], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // The most actionable number when over: the zero-emission mix that just clears
+  // the line (coarse 5pp sweep, then 1pp refine). Manufacturer level ONLY — at
+  // market/pool level a uniform forced share is a redistribution assumption, not
+  // an answer, and inside a model/variant the lever has no meaning.
+  const requiredZE = useMemo(() => {
+    if (node.gap <= 0 || level !== 2) return null
+    const start = Math.max(1, Math.ceil(node.zlevShare * 100))
+    for (let t = start; t <= 95; t += 5) {
+      if (aggFor({ ...scenario, evSharePct: t }).gap <= 0) {
+        for (let u = Math.max(start, t - 4); u <= t; u++) if (aggFor({ ...scenario, evSharePct: u }).gap <= 0) return u
+        return t
+      }
+    }
+    return null
+  }, [raw, pack, scenario, overrides, drill, node, level]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Biggest drag: the child costing the most weighted distance to the line.
+  const worstChild = useMemo(
+    () => items.filter((i) => i.gap > 0).sort((a, b) => b.gap * b.units - a.gap * a.units)[0] ?? null,
+    [items],
+  )
+
+  // Explore views (heat × year, volume × mix) follow the drill: market shows
+  // makers, a drilled maker shows its models.
+  const exploreFocus = drill.length >= 2 ? drill[1] : null
+  const heat = useMemo(() => makerYearGap(raw, pack, scenario, overrides, exploreFocus), [raw, pack, scenario, overrides, exploreFocus])
+  const mekko = useMemo(() => makerMekko(raw, pack, scenario, overrides, exploreFocus), [raw, pack, scenario, overrides, exploreFocus])
+  const pmap = useMemo(() => parentPoolMap(raw, scenario.year), [raw, scenario.year])
+  const openExplore = (m: string) => {
+    if (exploreFocus) setDrill([drill[0], exploreFocus, m])
+    else { setParent(m); setDrill([pmap[m] ?? m, m]) }
+  }
+
+  // Chart measure control (S&P cube convention: the analyst picks the encoding).
+  const [colorMode, setColorMode] = useState<'auto' | 'status' | 'powertrain'>('auto')
+  const colorByEff = colorMode === 'auto' ? colorBy : colorMode
+  // Scoreboard sort. The fine column only exists while the rows are legal
+  // entities (pools/manufacturers) — a model's standalone "fine" is a what-if.
+  const [sortBy, setSortBy] = useState<'gap' | 'units' | 'fine'>('gap')
+  const showFineCol = level <= 1
+  const sortByEff = sortBy === 'fine' && !showFineCol ? 'gap' : sortBy
+
   const gapA = useCountUp(node.gap), avgA = useCountUp(node.avgMetric), fineA = useCountUp(fineValue)
   const regA = useCountUp(node.rawUnits), unitsA = useCountUp(node.units), massA = useCountUp(node.avgMass)
   const crumbs = [drillTree.label, ...drill]
@@ -127,9 +192,68 @@ export default function Analyze() {
         ))}
         {drill.length > 0 && <button onClick={() => setDrill(drill.slice(0, -1))} className="ml-1 flex items-center gap-1 rounded-lg border border-black/[0.08] px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100"><Icon name="reset" size={12} /> Up</button>}
         <div className="ml-auto flex items-center gap-2">
+          {pack.regimeFor && (() => {
+            const r = pack.regimeFor(scenario.year)
+            return (
+              <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${r.draft ? 'border-warn/30 bg-warn/10 text-warn' : 'border-safe/30 bg-safe/10 text-safe'}`}
+                title={r.draft ? `${r.name} is a draft — final notification pending; stress it with the Draft stringency lever` : `${r.name} is in force`}>
+                <Icon name="scale" size={12} /> {r.name}{r.draft ? ' · draft' : ''}
+              </span>
+            )
+          })()}
           <button onClick={copyLink} className="btn-ghost px-3 py-1.5 text-xs"><Icon name={copied ? 'check' : 'link'} size={14} /> {copied ? 'Copied' : 'Copy link'}</button>
           <button onClick={() => showProv({ agg: node, pack, scenario, meta })} className="btn-ghost px-3 py-1.5 text-xs"><Icon name="shield" size={14} /> Show the working</button>
           <button onClick={exportReport} className="btn-ghost px-3 py-1.5 text-xs"><Icon name="section" size={14} /> Export</button>
+        </div>
+      </div>
+
+      {/* THE VERDICT — the answer in words, plus where this scope is heading */}
+      <div className="rise card relative flex flex-wrap items-start justify-between gap-x-8 gap-y-4 overflow-hidden p-5">
+        <span className="absolute inset-y-0 left-0 w-1" style={{ background: node.status === 'exempt' ? '#D98005' : over ? '#E0484D' : '#0E9F6E' }} />
+        <div className="min-w-[280px] flex-1">
+          <div className="label">The verdict · {scenario.year}</div>
+          <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-300">
+            <b className="text-ink-100">{node.label}</b>{' '}
+            {node.status === 'exempt' ? (
+              <>is <b className="text-warn">out of scope</b> at {fmtInt(node.rawUnits)} units (threshold {fmtInt(pack.smallVolumeThreshold)}) — no penalty applies.</>
+            ) : over ? (
+              <>is <b className="text-danger">{fmtNum(node.gap, 1)} {pack.metricUnit} over</b> its {fmtNum(node.limit, 1)} target —{' '}
+                <b className="num text-danger">{fmtMoney(fineValue, pack.currency)}</b> at risk across {fmtInt(node.rawUnits)} units.</>
+            ) : (
+              <>is <b className="text-safe">{fmtNum(Math.abs(node.gap), 1)} {pack.metricUnit} under</b> its {fmtNum(node.limit, 1)} target
+                {pack.creditPrice != null && node.rawUnits > 0 && (
+                  <> — headroom worth ≈ <b className="num text-safe">{fmtMoney(Math.abs(node.gap) * pack.creditPrice * node.rawUnits, pack.currency)}</b> at current credit prices</>
+                )}.</>
+            )}
+          </p>
+          {(over || worstChild) && node.status !== 'exempt' && (
+            <p className="mt-1.5 text-[12.5px] text-ink-400">
+              {over && requiredZE != null && (
+                <>Clearing it needs ≈ <b className="num text-ink-100">{requiredZE}%</b> zero-emission mix (now {Math.round(node.zlevShare * 100)}%).{' '}</>
+              )}
+              {worstChild && (
+                <>Biggest drag: <button onClick={() => worstChild.drillable && drillInto(worstChild.key)} className="font-semibold text-ink-100 underline decoration-dotted underline-offset-2 hover:text-brand">{worstChild.label}</button> (+{fmtNum(worstChild.gap, 1)} · {fmtInt(worstChild.units)}u).{' '}</>
+              )}
+              {over && <button onClick={() => setScreen('under')} className="font-semibold text-brand hover:underline">Cheapest path out →</button>}
+            </p>
+          )}
+        </div>
+        {/* trajectory — click a year to move the whole workspace there */}
+        <div className="shrink-0">
+          <div className="label mb-1.5">Trajectory · gap by year</div>
+          <div className="flex gap-1">
+            {glide.map((g) => {
+              const active = g.year === scenario.year
+              const tone = g.units === 0 ? 'text-ink-500 bg-black/[0.04]' : g.gap > 0 ? 'text-danger bg-danger/10' : 'text-safe bg-safe/10'
+              return (
+                <button key={g.year} onClick={() => patchScenario({ year: g.year })} title={`${g.year}: ${g.gap > 0 ? '+' : ''}${fmtNum(g.gap, 1)} ${pack.metricUnit}`}
+                  className={`flex min-w-[46px] flex-col items-center rounded-lg px-1.5 py-1.5 transition ${tone} ${active ? 'ring-2 ring-ink-100/70' : 'hover:ring-1 hover:ring-black/20'}`}>
+                  <span className="num text-[9.5px] font-semibold opacity-70">{`'${String(g.year).slice(2)}`}</span>
+                  <span className="num text-[11.5px] font-bold leading-tight">{g.units === 0 ? '—' : `${g.gap > 0 ? '+' : ''}${fmtNum(g.gap, 1)}`}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -148,7 +272,10 @@ export default function Analyze() {
         <div className="card rise p-4 [animation-delay:120ms]">
           <div className="flex items-center justify-between"><div className="label">Fine</div><button onClick={() => showProv({ agg: node, pack, scenario, meta })} className="text-[10px] font-semibold text-ink-500 transition hover:text-brand">working</button></div>
           <div className={`dnum mt-2 text-[27px] font-bold leading-none ${fineValue > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(fineA, pack.currency)}</div>
-          <div className="mt-2 text-[11px] text-ink-500">{fineSub}</div>
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-500">
+            {fineSub}
+            {pack.illustrativeRates && <span className="rounded-full border border-warn/30 bg-warn/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-warn" title={`${pack.fineRateLabel} — rate pending primary-source confirmation`}>illustrative rate</span>}
+          </div>
         </div>
         <Stat className="rise [animation-delay:180ms]" label="Registrations" value={fmtInt(regA)} sub={`${fmtInt(unitsA)} effective`} />
         <Stat className="rise [animation-delay:240ms]" label={pack.massLabel} value={`${fmtInt(massA)}`} sub="kg average" />
@@ -156,9 +283,19 @@ export default function Analyze() {
 
       {/* Bubble chart with drill */}
       <Section className="rise [animation-delay:300ms]" title={`${sectionLabel} vs the limit`} right={
-        <span className="flex items-center gap-2 text-[11px] text-ink-500"><Icon name="scatter" size={12} /> {hint}</span>
+        <span className="flex items-center gap-3">
+          <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
+            {(['auto', 'status', 'powertrain'] as const).map((m) => (
+              <button key={m} onClick={() => setColorMode(m)}
+                className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize transition ${colorMode === m ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
+                {m === 'auto' ? 'Auto' : m}
+              </button>
+            ))}
+          </span>
+          <span className="hidden items-center gap-2 text-[11px] text-ink-500 md:flex"><Icon name="scatter" size={12} /> {hint}</span>
+        </span>
       }>
-        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorBy} height={360} onPick={drillInto} unitRef={unitRef} />
+        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} />
       </Section>
 
       {/* Breakdown + children list */}
@@ -166,21 +303,42 @@ export default function Analyze() {
         <Section className="rise [animation-delay:360ms]" title="How the average is built" right={<span className="text-[11px] text-ink-500">sums to {fmtNum(node.avgMetric, 1)} {pack.metricUnit}</span>}>
           <PowertrainBreakdown agg={node} pack={pack} scenario={scenario} />
         </Section>
-        <Section className="rise [animation-delay:420ms]" title={sectionLabel} right={<span className="text-[11px] text-ink-500">gap to limit{level < 4 ? ' · click to drill' : ''}</span>}>
+        <Section className="rise [animation-delay:420ms]" title={`${sectionLabel} · scoreboard`} right={
+          <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
+            {(showFineCol ? (['gap', 'units', 'fine'] as const) : (['gap', 'units'] as const)).map((k) => (
+              <button key={k} onClick={() => setSortBy(k)}
+                className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize transition ${sortByEff === k ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
+                {k === 'gap' ? 'By gap' : k === 'units' ? 'By volume' : 'By fine'}
+              </button>
+            ))}
+          </span>
+        }>
           <div className="space-y-2">
-            {items.map((it) => (
+            {[...items].sort((a, b) => (sortByEff === 'gap' ? b.gap - a.gap : sortByEff === 'units' ? b.units - a.units : b.fine - a.fine)).map((it) => (
               <div key={it.key} onClick={() => it.drillable && drillInto(it.key)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${it.selected ? 'border-brand/40 bg-brand/[0.06]' : 'border-black/[0.04] bg-black/[0.02]'} ${it.drillable ? 'cursor-pointer hover:border-black/15' : ''}`}>
-                <span className="w-28 shrink-0 truncate text-sm text-ink-100">{it.label}</span>
-                {it.sub && <span className="w-16 shrink-0 truncate text-[11px] text-ink-500" title={it.sub}>{it.sub}</span>}
+                className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${it.selected ? 'border-brand/40 bg-brand/[0.06]' : 'border-black/[0.04] bg-black/[0.02]'} ${it.drillable ? 'cursor-pointer hover:border-black/15 hover:bg-black/[0.035]' : ''}`}>
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${it.status === 'fine' ? 'bg-danger' : it.status === 'exempt' ? 'bg-warn' : it.status === 'no-sales' ? 'bg-ink-600' : 'bg-safe'}`} />
+                <span className="w-24 shrink-0 truncate text-sm text-ink-100" title={it.label}>{it.label}</span>
+                {it.sub && <span className="hidden w-14 shrink-0 truncate text-[11px] text-ink-500 lg:block" title={it.sub}>{it.sub}</span>}
                 <div className="flex-1"><Bar value={it.gap > 0 ? it.gap : 0} max={maxGap} color={it.gap > 0 ? 'bg-danger' : 'bg-safe'} /></div>
-                <span className={`num w-16 shrink-0 text-right text-sm font-semibold ${it.gap > 0 ? 'text-danger' : 'text-safe'}`}>{it.gap > 0 ? '+' : ''}{fmtNum(it.gap, 1)}</span>
-                <span className="num w-16 shrink-0 text-right text-[11px] text-ink-500">{fmtInt(it.units)}u</span>
-                {it.drillable && <Icon name="chevron" size={13} className="text-ink-600" />}
+                <span className={`num w-14 shrink-0 text-right text-sm font-semibold ${it.gap > 0 ? 'text-danger' : 'text-safe'}`}>{it.gap > 0 ? '+' : ''}{fmtNum(it.gap, 1)}</span>
+                <span className="num w-14 shrink-0 text-right text-[11px] text-ink-500">{fmtInt(it.units)}u</span>
+                {showFineCol && <span className={`num w-16 shrink-0 text-right text-[11px] font-semibold ${it.fine > 0 ? 'text-danger' : 'text-ink-500'}`}>{it.fine > 0 ? fmtMoney(it.fine, pack.currency) : '—'}</span>}
+                {it.drillable && <Icon name="chevron" size={13} className="shrink-0 text-ink-600" />}
               </div>
             ))}
             {items.length === 0 && <div className="py-6 text-center text-sm text-ink-500">No further breakdown at this level.</div>}
           </div>
+        </Section>
+      </div>
+
+      {/* Explore — the heat and mix views, scoped to the current drill */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <Section className="rise [animation-delay:480ms]" title={`Gap heatmap · ${exploreFocus ? 'models' : 'makers'} × year`} right={<span className="text-[11px] text-ink-500">click → drill</span>}>
+          <GapHeatmap data={heat} unit={pack.metricUnit} onPick={openExplore} />
+        </Section>
+        <Section className="rise [animation-delay:540ms]" title="Volume × mix" right={<span className="text-[11px] text-ink-500">width = units · colour = powertrain</span>}>
+          <Mekko cols={mekko} onPick={openExplore} />
         </Section>
       </div>
 

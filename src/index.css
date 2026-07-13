@@ -26,6 +26,13 @@ body {
 
 h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -0.022em; }
 
+/* Keyboard-visible focus — brand ring, no ring on mouse click. Text fields keep
+   their own focus-within border treatment instead of a second ring. */
+:focus-visible { outline: 2px solid rgba(242, 81, 14, 0.55); outline-offset: 2px; border-radius: 6px; }
+input:not([type='range']):not([type='checkbox']):not([type='radio']):focus-visible,
+textarea:focus-visible, select:focus-visible { outline: none; }
+::-moz-focus-inner { border: 0; }
+
 /* hero numbers: geometric display face, tabular, tight */
 .dnum { font-family: 'Space Grotesk', 'Inter', sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; letter-spacing: -0.02em; }
 .text-gradient {
@@ -39,7 +46,10 @@ h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 
     box-shadow: 0 1px 1px rgba(40, 30, 15, 0.03), 0 2px 4px rgba(120, 90, 50, 0.04), 0 10px 24px -16px rgba(120, 90, 50, 0.16);
     transition: box-shadow .28s ease, transform .28s cubic-bezier(.2,.7,.2,1), border-color .2s ease;
   }
-  .card:hover {
+  /* Only clickable cards lift — a transform on hover makes the card a CSS
+     containing block, which re-anchors any position:fixed child (facet
+     backdrops, palettes). Static container cards must never transform. */
+  .card-lift:hover {
     transform: translateY(-2px);
     box-shadow: 0 1px 1px rgba(40, 30, 15, 0.04), 0 4px 8px rgba(120, 90, 50, 0.05), 0 20px 40px -20px rgba(120, 90, 50, 0.26);
   }
@@ -51,17 +61,53 @@ h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: 
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.985] disabled:opacity-40;
   }
   .btn-primary {
-    @apply btn text-white;
+    @apply btn relative overflow-hidden text-white;
     background: linear-gradient(180deg, #FF6A2A, #ED4709);
     box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 10px 22px -10px rgba(242,81,14,0.55);
   }
-  .btn-primary:hover { filter: brightness(1.05); }
+  .btn-primary::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,0.35) 50%, transparent 65%);
+    background-size: 250% 100%; background-position: 200% 0;
+    opacity: 0; transition: opacity .2s;
+    pointer-events: none;
+  }
+  .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 14px 28px -12px rgba(242,81,14,0.65); }
+  .btn-primary:hover::after { opacity: 1; animation: sheen .9s ease forwards; }
   .btn-ghost { @apply btn border border-black/[0.1] bg-black/[0.015] text-ink-300 hover:text-ink-100 hover:border-black/20 hover:bg-black/[0.04]; }
   .label { @apply text-[10.5px] font-semibold uppercase tracking-[0.13em] text-ink-500; }
   .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
   .mono { @apply font-mono; font-variant-numeric: tabular-nums; }
   .hairline { @apply border-black/[0.07]; }
+  .kbd {
+    @apply inline-grid min-w-[20px] place-items-center rounded-[5px] border px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none;
+    border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.06); color: #B8AE9C;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  }
+  .kbd-light {
+    @apply inline-grid min-w-[20px] place-items-center rounded-[5px] border border-black/[0.12] bg-black/[0.03] px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none text-ink-400;
+    box-shadow: 0 1px 0 rgba(60,45,20,0.10);
+  }
+  .skeleton {
+    @apply rounded-lg;
+    background: linear-gradient(90deg, rgba(0,0,0,0.045) 25%, rgba(0,0,0,0.09) 50%, rgba(0,0,0,0.045) 75%);
+    background-size: 200% 100%;
+    animation: sheen 1.4s linear infinite;
+  }
 }
+
+/* CSS tooltip — <span data-tip="…"> */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(3px);
+  white-space: nowrap; padding: 5px 9px; border-radius: 8px;
+  background: #17140F; color: #F5F0E6; font-size: 11px; font-weight: 500; letter-spacing: 0;
+  border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 8px 24px -8px rgba(0,0,0,0.5);
+  opacity: 0; pointer-events: none; transition: opacity .15s ease, transform .15s ease; z-index: 60;
+}
+[data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* Range slider */
 input[type="range"] {
@@ -95,6 +141,16 @@ input[type="range"]::-moz-range-thumb {
 .rise { animation: rise .55s cubic-bezier(.2,.7,.2,1) backwards; }
 .lc-bubble { animation: popIn .42s cubic-bezier(.2,.8,.25,1.3) backwards; transform-box: fill-box; transform-origin: center; }
 .lc-draw { stroke-dasharray: 1; animation: drawLine .9s ease-out backwards; }
+
+/* screen-to-screen transition (keyed wrapper re-mounts on nav) */
+@keyframes screenIn { from { opacity: 0; transform: translateY(10px) scale(0.995); } to { opacity: 1; transform: none; } }
+.screen-in { animation: screenIn .38s cubic-bezier(.2,.7,.2,1) backwards; }
+
+/* command palette + overlays */
+@keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalPop { from { opacity: 0; transform: translateY(14px) scale(0.97); } to { opacity: 1; transform: none; } }
+.overlay-in { animation: overlayIn .18s ease-out backwards; }
+.modal-pop { animation: modalPop .26s cubic-bezier(.2,.8,.25,1.05) backwards; }
 
 @keyframes float1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(40px,-30px) scale(1.15); } }
 @keyframes float2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-50px,40px) scale(1.1); } }

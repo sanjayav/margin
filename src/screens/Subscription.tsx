@@ -4,8 +4,10 @@ import Icon from '../components/Icon'
 
 function Switch({ on, onClick }: { on: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? 'bg-brand' : 'bg-black/15'}`}>
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
+    <button onClick={onClick} role="switch" aria-checked={on}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-all duration-200 active:scale-95 ${on ? 'shadow-[0_2px_8px_-2px_rgba(242,81,14,0.5)]' : ''}`}
+      style={{ background: on ? 'linear-gradient(180deg,#FF6A2A,#ED4709)' : 'rgba(0,0,0,0.15)', boxShadow: on ? undefined : 'inset 0 1px 2px rgba(0,0,0,0.12)' }}>
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200 ${on ? 'left-[22px] shadow-[0_1px_3px_rgba(120,40,0,0.4)]' : 'left-0.5 shadow'}`} />
     </button>
   )
 }
@@ -106,7 +108,7 @@ export default function Subscription() {
               </div>
             )}
           </div>
-          <button disabled className="btn-ghost mt-5 w-full cursor-not-allowed opacity-60"><Icon name="card" size={15} /> Manage billing (Stripe — soon)</button>
+          <a href="mailto:sales@marklytics.co.uk?subject=Autocred%20AI%20subscription" className="btn-ghost mt-5 w-full"><Icon name="card" size={15} /> Talk to sales</a>
           {owned.length > 0 && (
             <button onClick={() => enter(owned[0])} className="btn-primary mt-2 w-full"><Icon name="scatter" size={15} /> Open {MODULE_META[owned[0]].name}</button>
           )}

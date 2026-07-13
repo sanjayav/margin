@@ -28,12 +28,17 @@ export default function Home() {
   const totalUnits = owned.reduce((a, c) => a + summaries[c].units, 0)
   const totalMakers = owned.reduce((a, c) => a + summaries[c].makers, 0)
   const totalOver = owned.reduce((a, c) => a + summaries[c].over, 0)
+  // Portfolio exposure — the number a group compliance lead opens the app for.
+  // Currencies differ per market, so list per-module rather than fake a total.
+  const atRisk = owned.map((c) => ({ c, fine: summaries[c].fine, currency: summaries[c].currency })).filter((x) => x.fine > 0)
 
   return (
     <div className="space-y-6">
       {/* hero */}
       <div className="rise card relative overflow-hidden p-6">
-        <div className="absolute -right-10 -top-16 h-48 w-48 rounded-full bg-brand/[0.07] blur-2xl" />
+        <div className="aurora-1 absolute -right-10 -top-16 h-48 w-48 rounded-full bg-brand/[0.09] blur-2xl" />
+        <div className="aurora-2 absolute -bottom-20 left-1/3 h-44 w-44 rounded-full bg-warn/[0.07] blur-3xl" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27120%27 height=%27120%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.85%27 numOctaves=%273%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E")' }} />
         <div className="relative">
           <div className="label text-ink-500">Welcome back</div>
           <h1 className="font-display mt-1 text-[28px] font-bold tracking-tight text-ink-100">Vijay</h1>
@@ -52,7 +57,10 @@ export default function Home() {
       {/* portfolio KPIs */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat className="rise [animation-delay:60ms]" label="Active modules" value={`${owned.length} / ${ALL_MODULES.length}`} sub={owned.map((c) => MODULE_META[c].flag).join(' · ') || 'none'} />
-        <Stat className="rise [animation-delay:120ms]" label="AI Analyst" value={ai ? 'Active' : 'Off'} sub={ai ? 'across all modules' : 'add-on available'} accent={ai ? 'text-safe' : 'text-ink-400'} />
+        <Stat className="rise [animation-delay:120ms]" label="At risk across portfolio"
+          value={atRisk.length === 0 ? 'None' : atRisk.map((x) => fmtMoney(x.fine, x.currency)).join(' · ')}
+          sub={atRisk.length === 0 ? 'all owned modules under the line' : atRisk.map((x) => MODULE_META[x.c].flag).join(' · ')}
+          accent={atRisk.length > 0 ? 'text-danger' : 'text-safe'} />
         <Stat className="rise [animation-delay:180ms]" label="Registrations" value={fmtInt(totalUnits)} sub={`${totalMakers} makers tracked`} />
         <Stat className="rise [animation-delay:240ms]" label="Makers over the line" value={fmtInt(totalOver)} sub="across owned modules" accent={totalOver > 0 ? 'text-danger' : 'text-safe'} />
       </div>
@@ -78,7 +86,7 @@ export default function Home() {
             const m = MODULE_META[c], s = summaries[c]
             const over = s.fleet > s.limit
             return (
-              <button key={c} onClick={() => enter(c)} style={{ animationDelay: `${300 + i * 60}ms` }} className="card rise card-hover group p-5 text-left">
+              <button key={c} onClick={() => enter(c)} style={{ animationDelay: `${300 + i * 60}ms` }} className="card card-lift rise card-hover group p-5 text-left">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <span className="grid h-10 w-11 place-items-center rounded-xl text-[12px] font-bold text-white" style={{ background: m.accent }}>{m.flag}</span>
@@ -118,7 +126,7 @@ export default function Home() {
             {locked.map((c) => {
               const m = MODULE_META[c]
               return (
-                <button key={c} onClick={() => goto('subscription')} className="card card-hover flex items-center gap-3 p-4 text-left">
+                <button key={c} onClick={() => goto('subscription')} className="card card-lift card-hover flex items-center gap-3 p-4 text-left">
                   <span className="grid h-9 w-10 place-items-center rounded-lg text-[11px] font-bold text-white opacity-60" style={{ background: m.accent }}>{m.flag}</span>
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-semibold text-ink-200">{m.name}</div>

@@ -23,6 +23,14 @@ export default function Intelligence() {
 
   return (
     <div className="space-y-5 animate-slidein">
+      {/* honesty banner: this feed is curated sample content until a live source is wired */}
+      <div className="flex items-start gap-3 rounded-xl border border-warn/25 bg-warn/[0.06] px-4 py-3">
+        <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-warn" />
+        <p className="text-[12.5px] leading-relaxed text-ink-400">
+          <b className="text-warn">Illustrative sample.</b> These are curated example events styled after real regulatory
+          signals — a live monitored feed ships with the data partnership. Formats, sourcing and filters shown are final.
+        </p>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1.5">
           {(['all', 'rule', 'fine', 'alliance', 'dispute', 'data'] as const).map((k) => (
@@ -36,11 +44,11 @@ export default function Intelligence() {
       </div>
 
       <div className="relative space-y-3 before:absolute before:left-[19px] before:top-2 before:h-full before:w-px before:bg-black/[0.06]">
-        {events.map((e) => {
+        {events.map((e, i) => {
           const meta = KIND_META[e.kind]
           return (
-            <div key={e.id} className="relative flex gap-4">
-              <div className={`z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border bg-ink-900 ${meta.c}`}><Icon name={meta.icon} size={17} /></div>
+            <div key={e.id} style={{ animationDelay: `${Math.min(i, 8) * 60}ms` }} className="rise relative flex gap-4">
+              <div className={`z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border bg-ink-900 ${meta.c} ${e.impact === 'high' ? 'shadow-[0_0_0_4px_rgba(224,72,77,0.10)]' : ''}`}><Icon name={meta.icon} size={17} /></div>
               <div className="card flex-1 p-4">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.c}`}>{meta.label}</span>

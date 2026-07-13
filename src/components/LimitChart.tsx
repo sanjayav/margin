@@ -144,13 +144,20 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
               {p.isFleet && <line x1={cx} y1={cy} x2={cx} y2={sy(limitAt(p.mass))} stroke={color} strokeWidth="1.5" strokeDasharray="3 3" opacity="0.55" />}
               <circle cx={cx} cy={cy} r={r + (active ? 3 : 0)} fill={color} fillOpacity={p.isFleet ? 0.95 : 0.5} stroke={p.isFleet ? '#FBF7EF' : color} strokeWidth={p.isFleet ? 2.5 : 1.5} className={p.isFleet ? 'animate-flip' : 'lc-bubble'} style={p.isFleet ? { filter: 'url(#glow)' } : { transition: 'r .25s ease, cx .25s ease, cy .25s ease, fill .25s ease' }} />
               {p.isFleet && <circle cx={cx} cy={cy} r={r + 6} fill="none" stroke={color} strokeWidth="1" opacity="0.35" />}
-              {(active || p.isFleet) && (
-                <g>
-                  <rect x={cx + 12} y={cy - 26} width={Math.max(96, p.label.length * 6.5)} height={36} rx="6" fill="#FFFDF9" stroke="#DBD2BF" />
-                  <text x={cx + 20} y={cy - 12} fontSize="11" fill="#1C1812" fontWeight="600">{p.label}</text>
-                  <text x={cx + 20} y={cy + 2} fontSize="10" fill="#8C8273" className="num">{fmtNum(p.metric, 1)} {pack.metricUnit} · {fmtInt(p.units)} u</text>
-                </g>
-              )}
+              {(active || p.isFleet) && (() => {
+                // flip the tooltip to the left near the right edge so it never clips
+                const tw = Math.max(96, p.label.length * 6.5)
+                const flip = cx + 12 + tw > W - m.r
+                const tx = flip ? cx - 12 - tw : cx + 12
+                const ty = Math.max(m.t + 2, cy - 26)
+                return (
+                  <g>
+                    <rect x={tx} y={ty} width={tw} height={36} rx="6" fill="#FFFDF9" stroke="#DBD2BF" style={{ filter: 'drop-shadow(0 3px 8px rgba(60,45,20,0.14))' }} />
+                    <text x={tx + 8} y={ty + 14} fontSize="11" fill="#1C1812" fontWeight="600">{p.label}</text>
+                    <text x={tx + 8} y={ty + 28} fontSize="10" fill="#8C8273" className="num">{fmtNum(p.metric, 1)} {pack.metricUnit} · {fmtInt(p.units)} u</text>
+                  </g>
+                )
+              })()}
             </g>
           )
         })}

@@ -160,6 +160,15 @@ export function applyScenario(
     }
   }
 
+  // 4. Eco-innovation is certified per manufacturer (Art 11 certificates belong
+  //    to the OEM, not the market) — a scoped ecoBoostG is baked into the
+  //    vehicle's ecoBenefit so vehicleMetric, which only sees the global
+  //    scenario, still applies exactly the scoped credit for that scope.
+  for (const x of v) {
+    const e = effFor(x).ecoBoostG
+    if (e !== s.ecoBoostG) x.ecoBenefit = (x.ecoBenefit ?? 0) + (e - s.ecoBoostG)
+  }
+
   return v
 }
 
@@ -218,7 +227,10 @@ export function aggregate(
   // Small-volume makers are exempt from fines.
   const exempt = rawUnits > 0 && rawUnits < pack.smallVolumeThreshold && level === 'parent'
   const excess = Math.max(0, gap)
-  const fine = exempt || gap <= 0 ? 0 : excess * pack.fineRate * rawUnits
+  // Stepped statutory schedules (pack.fineFor) replace the linear formula.
+  const fine = exempt || gap <= 0 ? 0
+    : pack.fineFor ? pack.fineFor(excess, rawUnits, s)
+    : excess * pack.fineRate * rawUnits
 
   const fineMath: FineMath = {
     excess,
@@ -228,7 +240,9 @@ export function aggregate(
     expression:
       excess <= 0
         ? 'Under the limit — no fine'
-        : `${fmtNum(excess, 2)} ${pack.metricUnit} over × ${pack.currency}${pack.fineRate} × ${fmtInt(rawUnits)} units`,
+        : pack.fineFor
+          ? `${fmtNum(excess, 2)} ${pack.metricUnit} over × statutory schedule (${pack.fineRateLabel}) × ${fmtInt(rawUnits)} units`
+          : `${fmtNum(excess, 2)} ${pack.metricUnit} over × ${pack.currency}${pack.fineRate} × ${fmtInt(rawUnits)} units`,
   }
 
   const status: Aggregate['status'] =

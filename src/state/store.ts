@@ -3,14 +3,15 @@ import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
 import { parentsFor, setLiveFleet } from '../data/fleet'
 
-export type ScreenId = 'analyze' | 'analytics' | 'data' | 'pooling' | 'plan' | 'intel' | 'admin'
-export type PlanTab = 'under' | 'forecast'
+export type ScreenId = 'analyze' | 'data' | 'pooling' | 'plan' | 'intel' | 'admin'
+export type PlanTab = 'under' | 'forecast' | 'compare'
 // The two-level shell: 'platform' = global launcher (home/modules/subscription);
-// 'module' = a single country workspace (the analyze/analytics/… sidebar).
+// 'module' = a single country workspace (the analyze/data/… sidebar).
 export type AppView = 'platform' | 'module'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // legacy ids still accepted by setScreen and mapped to the new structure
-type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | 'pool' | PlanTab
+// ('analytics' folded into Analyze's Explore section)
+type AnyScreen = ScreenId | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | PlanTab
 
 interface UIState {
   country: CountryId
@@ -145,7 +146,7 @@ const isAuthed = () => { try { return localStorage.getItem('ul_auth') === '1' } 
 export function defaultScenario(country: CountryId): Scenario {
   const pack = getPack(country)
   return {
-    year: pack.years[0],
+    year: pack.defaultYear ?? pack.years[0],
     evSharePct: null,
     salesMultiplier: 1,
     massShiftKg: 0,
@@ -158,6 +159,7 @@ export function defaultScenario(country: CountryId): Scenario {
     // then never sees a "missing" key vs an explicit false/null).
     phevUF: true,
     creditPrice: null,
+    targetShiftPct: null,
   }
 }
 
@@ -236,13 +238,15 @@ export const useStore = create<UIState>((set, get) => ({
     const makers = parentsFor(country)
     const dp = Array.isArray(sh.drillPath) ? sh.drillPath : []
     const sharedParent = dp[1]
+    // Old deep-links may carry retired screen ids — sanitise before applying.
+    const shScreen = (sh.screen as string) === 'analytics' ? 'analyze' : sh.screen
     set({
       country,
       scenario,
       makerOverrides,
       drillPath: dp,
       selectedParent: sharedParent && makers.includes(sharedParent) ? sharedParent : makers[0],
-      screen: sh.screen ?? 'analyze',
+      screen: shScreen ?? 'analyze',
       planTab: sh.planTab ?? 'under',
       view: 'module',
     })
@@ -261,8 +265,8 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setScreen: (s) => {
     if (s === 'pool') set({ screen: 'pooling' })
-    else if (s === 'under' || s === 'forecast') set({ screen: 'plan', planTab: s })
-    else if (s === 'cockpit' || s === 'chart' || s === 'maker') set({ screen: 'analyze' })
+    else if (s === 'under' || s === 'forecast' || s === 'compare') set({ screen: 'plan', planTab: s })
+    else if (s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'analyze' })
     else set({ screen: s })
   },
   setParent: (p) => set({ selectedParent: p }),
@@ -273,10 +277,12 @@ export const useStore = create<UIState>((set, get) => ({
       const next = { ...scenario, ...p }
       set({ scenario: next }); persistAssumptions(country, next, makerOverrides); return
     }
-    // Drilled in, mix/mass/sales/EV edits scope to the current node (brand at
-    // "Maker", model at "Maker/Model"); the rest (year, eco, pooling, super-
-    // credits, variants, PHEV UF, credit price) stay global.
-    const SCOPED = new Set(['mix', 'massShiftKg', 'salesMultiplier', 'evSharePct'])
+    // Drilled in, mix/mass/sales/EV/eco edits scope to the current node (brand
+    // at "Maker", model at "Maker/Model") — eco-innovation certificates belong
+    // to the manufacturer, so the eco lever scopes too. The rest (year, pooling,
+    // super-credits, variants, PHEV UF, credit price) are regulator-side and
+    // stay global.
+    const SCOPED = new Set(['mix', 'massShiftKg', 'salesMultiplier', 'evSharePct', 'ecoBoostG'])
     const globalPart: any = {}, scopedPart: any = {}
     for (const k of Object.keys(p)) (SCOPED.has(k) ? scopedPart : globalPart)[k] = (p as any)[k]
     const nextScenario = { ...scenario, ...globalPart }
@@ -316,7 +322,10 @@ export const useStore = create<UIState>((set, get) => ({
     await Promise.all(
       PACK_LIST.map(async (pack) => {
         try {
-          const res = await fetch(`/api/fleet?country=${pack.id}`)
+          // no-store: the response carries CDN cache headers (s-maxage) that some
+          // browsers also honour heuristically — after a user import, a reload
+          // must show the imported dataset, not the boot-time cached one.
+          const res = await fetch(`/api/fleet?country=${pack.id}`, { cache: 'no-store' })
           if (!res.ok) return
           const data = await res.json()
           if (data?.fallback || !Array.isArray(data?.vehicles) || data.vehicles.length === 0) return

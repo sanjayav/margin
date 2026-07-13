@@ -1,5 +1,6 @@
 import { useStore, type PlatformScreen } from '../state/store'
 import Icon, { type IconName } from './Icon'
+import { useCmdK, CMDK_HINT } from './CommandK'
 import Home from '../screens/Home'
 import Modules from '../screens/Modules'
 import Subscription from '../screens/Subscription'
@@ -22,6 +23,7 @@ export default function PlatformShell() {
   const logout = useStore((s) => s.logout)
   const ai = useStore((s) => s.aiEnabled)
   const owned = useStore((s) => s.subscribedModules)
+  const openCmdK = useCmdK((s) => s.setOpen)
   const Screen = { home: Home, modules: Modules, subscription: Subscription }[ps]
   const t = TITLES[ps]
 
@@ -76,12 +78,22 @@ export default function PlatformShell() {
             <div className="label text-[#8A8174]">Autocred AI platform</div>
             <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-white">{t.title}</h1>
           </div>
-          <div className="hidden text-right sm:block">
-            <div className="label text-[#8A8174]">{t.sub}</div>
+          <div className="flex items-center gap-4">
+            <div className="hidden text-right lg:block">
+              <div className="label text-[#8A8174]">{t.sub}</div>
+            </div>
+            <button onClick={() => openCmdK(true)}
+              className="group flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-[#8A8174] transition hover:border-white/[0.18] hover:text-[#C9C0B2]">
+              <Icon name="search" size={14} className="text-[#7E766A] transition group-hover:text-brand-400" />
+              <span className="hidden md:inline">Search…</span>
+              <span className="kbd">{CMDK_HINT}</span>
+            </button>
           </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto px-8 py-7">
-          <Screen />
+          <div key={ps} className="screen-in">
+            <Screen />
+          </div>
         </main>
       </div>
     </div>

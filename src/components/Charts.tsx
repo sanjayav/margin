@@ -19,7 +19,11 @@ export function TrendChart({ series, unit, currency }: { series: YearPoint[]; un
   const overArea = `M${x(0)},${y(series[0].limit)} ` + series.map((s, i) => `L${x(i).toFixed(1)},${y(Math.max(s.fleet, s.limit)).toFixed(1)}`).join(' ') + ' ' + series.map((_, i) => i).reverse().map((i) => `L${x(i).toFixed(1)},${y(series[i].limit).toFixed(1)}`).join(' ') + ' Z'
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-      <defs><linearGradient id="trgap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#E0484D" stopOpacity="0.22" /><stop offset="100%" stopColor="#E0484D" stopOpacity="0.03" /></linearGradient></defs>
+      <defs>
+        <linearGradient id="trgap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#E0484D" stopOpacity="0.22" /><stop offset="100%" stopColor="#E0484D" stopOpacity="0.03" /></linearGradient>
+        <linearGradient id="trfleet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#F2510E" stopOpacity="0.10" /><stop offset="100%" stopColor="#F2510E" stopOpacity="0" /></linearGradient>
+      </defs>
+      <path d={`${line('fleet')} L${x(series.length - 1).toFixed(1)},${(m.t + ih).toFixed(1)} L${x(0).toFixed(1)},${(m.t + ih).toFixed(1)} Z`} fill="url(#trfleet)" />
       {[0, 1, 2, 3].map((i) => { const v = (yMax * i) / 3, yy = y(v); return <g key={i}><line x1={m.l} y1={yy} x2={W - m.r} y2={yy} stroke={GRID} strokeOpacity="0.06" /><text x={m.l - 6} y={yy + 3} textAnchor="end" fontSize="9" fill={AXIS} className="num">{fmtNum(v, 0)}</text></g> })}
       <path d={overArea} fill="url(#trgap)" />
       <path className="lc-draw" pathLength={1} d={line('limit')} fill="none" stroke="#E0A100" strokeWidth="2.5" />
@@ -116,7 +120,7 @@ export function FineRanking({ rows, currency, unit, onPick }: { rows: MakerRow[]
         const val = useFine ? r.fine : r.gap
         const over = useFine ? r.fine > 0 : r.gap > 0
         return (
-          <button key={r.maker} onClick={() => onPick?.(r.maker)} className="flex w-full items-center gap-3 text-left">
+          <button key={r.maker} onClick={() => onPick?.(r.maker)} className="group flex w-full items-center gap-3 rounded-lg px-1.5 py-0.5 text-left transition-colors hover:bg-black/[0.03]">
             <span className="w-24 shrink-0 truncate text-xs font-medium text-ink-200">{short(r.maker)}</span>
             <div className="h-6 flex-1 overflow-hidden rounded-md bg-black/[0.04]">
               <div className="h-full rounded-md transition-all duration-500" style={{ width: `${(Math.abs(val) / max) * 100}%`, background: over ? '#E0484D' : '#0E9F6E' }} />

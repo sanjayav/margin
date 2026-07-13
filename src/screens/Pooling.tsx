@@ -52,8 +52,30 @@ export default function Pooling() {
     )
   }
 
+  const topReceiver = opt.split.find((m) => m.finalCost < -0.5)
   return (
     <div className="space-y-5 animate-slidein">
+      {/* THE VERDICT — what pooling is worth this year, in one sentence */}
+      <div className="rise card relative overflow-hidden p-5">
+        <span className="absolute inset-y-0 left-0 w-1" style={{ background: opt.savings > 0 ? '#F2510E' : '#0E9F6E' }} />
+        <div className="label">The verdict · {scenario.year}</div>
+        <p className="mt-1.5 max-w-3xl text-[15px] leading-relaxed text-ink-300">
+          {opt.savings > 0 ? (
+            <>Pooling can remove <b className="num text-brand">{fmtMoney(opt.savings, pack.currency)}</b> of the{' '}
+              <b className="num text-danger">{fmtMoney(standaloneTotal, pack.currency)}</b> standalone fines in {pack.name} — the
+              value-maximising pool has <b className="text-ink-100">{opt.members.length} makers</b> and leaves{' '}
+              <b className="num">{fmtMoney(opt.pooledFine, pack.currency)}</b> unavoidable.
+              {topReceiver && <> Fair settlement pays <b className="text-ink-100">{topReceiver.parent}</b> ≈ <b className="num text-safe">{fmtMoney(Math.abs(topReceiver.finalCost), pack.currency)}</b> for lending its headroom.</>}
+            </>
+          ) : standaloneTotal > 0 ? (
+            <>Pooling removes nothing this year — the shortfalls are larger than the available surplus. The{' '}
+              <b className="num text-danger">{fmtMoney(standaloneTotal, pack.currency)}</b> exposure needs fleet change or credits, not partners.</>
+          ) : (
+            <>Every maker is under the line in {scenario.year} — there is no fine to pool away. Surplus holders can still bank or sell headroom below.</>
+          )}
+        </p>
+      </div>
+
       {/* Market summary */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label="Standalone fines" value={fmtMoney(standaloneTotal, pack.currency)} sub="if no one cooperates" accent={standaloneTotal > 0 ? 'text-danger' : 'text-safe'} />

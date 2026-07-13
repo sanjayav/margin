@@ -4,8 +4,11 @@
 import { getCurrent } from './_store.js'
 import type { CountryId } from '../src/engine/types.js'
 
+const MARKETS = new Set(['EU', 'IN', 'AU', 'UK'])
+
 export default async function handler(req: any, res: any) {
   const country = String(req.query?.country ?? 'EU').toUpperCase() as CountryId
+  if (!MARKETS.has(country)) { res.status(400).json({ error: `unknown market "${country}" — expected one of ${[...MARKETS].join(', ')}` }); return }
   try {
     const data = await getCurrent(country)
     if (!data) { res.status(200).json({ fallback: true, reason: 'no dataset loaded' }); return }

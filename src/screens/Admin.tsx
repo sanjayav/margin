@@ -120,19 +120,6 @@ export default function Admin() {
         </p>
       </Section>
 
-      <Section title="Users & roles">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {[['Compliance lead', 'sanjay.v@marklytics.co.uk', 'Owner'], ['Fleet planner', 'planner@oem.example', 'Editor'], ['Auditor', 'audit@oem.example', 'Viewer']].map(([n, e, r]) => (
-            <div key={e} className="card p-4">
-              <div className="flex items-center gap-3">
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-accent/20 font-bold text-accent">{n[0]}</div>
-                <div className="min-w-0"><div className="truncate text-sm font-semibold text-ink-100">{n}</div><div className="truncate text-[11px] text-ink-500">{e}</div></div>
-              </div>
-              <div className="mt-3 chip">{r}</div>
-            </div>
-          ))}
-        </div>
-      </Section>
     </div>
   )
 }

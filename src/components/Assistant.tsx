@@ -49,7 +49,7 @@ export default function Assistant() {
       {!open && (
         <button onClick={() => setOpen(true)}
           className="btn-primary fixed bottom-6 right-6 z-40 shadow-glow"
-          style={{ boxShadow: '0 1px 0 0 rgba(255,255,255,.35) inset, 0 14px 40px -10px rgba(61,220,151,.55)' }}>
+          style={{ boxShadow: '0 1px 0 0 rgba(255,255,255,.35) inset, 0 14px 40px -10px rgba(242,81,14,.55)' }}>
           <Icon name="spark" size={17} /> Ask Autocred AI
         </button>
       )}
