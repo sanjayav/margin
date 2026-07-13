@@ -64,3 +64,60 @@ export function openPrintReport(title: string, bodyHtml: string) {
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${CSS}</style></head><body>${bodyHtml}<script>window.onload=function(){setTimeout(function(){window.print()},350)}<\/script></body></html>`)
   w.document.close()
 }
+
+// ── the Forecast board pack — the Big-4-style deliverable, engine-computed ───
+export interface PackCaseRow { name: string; blurb: string; weight: number; cum: number; breachYear: number | null; lastGap: number }
+export interface PackDriverRow { label: string; value: number; unit: string; status: string; rationale: string; source: string; owner: string }
+export interface PackBridge { year: number; from: number; to: number; effects: { label: string; delta: number }[] }
+export interface ForecastPackInput {
+  pack: RulePack
+  meta: FleetMeta
+  dateISO: string
+  targetLabel: string
+  horizon: [number, number]
+  baseYear: number
+  cases: PackCaseRow[]
+  expected: number
+  drivers: PackDriverRow[]
+  bridge: PackBridge | null
+  breakEven: number | null
+  finalYear: number
+}
+
+export function buildForecastPack(i: ForecastPackInput): string {
+  const { pack } = i
+  const refreshed = i.meta.lastRefreshed ? new Date(i.meta.lastRefreshed).toISOString().slice(0, 10) : '—'
+  const caseRows = i.cases.map((c) => `<tr><td><b>${c.name}</b><div class="sub">${c.blurb}</div></td><td style="text-align:right">${Math.round(c.weight * 100)}%</td><td style="text-align:right">${fmtMoney(c.cum, pack.currency)}</td><td style="text-align:right">${c.breachYear ?? 'clears'}</td><td style="text-align:right">${c.lastGap > 0 ? '+' : ''}${fmtNum(c.lastGap, 1)} ${pack.metricUnit}</td></tr>`).join('')
+  const driverRows = i.drivers.map((d) => `<tr><td><b>${d.label}</b></td><td style="text-align:right">${fmtNum(d.value, 2)} ${d.unit}</td><td>${d.status}</td><td>${d.owner}</td><td class="sub">${d.rationale}<br/><i>${d.source}</i></td></tr>`).join('')
+  const bridgeRows = i.bridge ? i.bridge.effects.map((e) => `<tr><td>${e.label}</td><td style="text-align:right;color:${e.delta > 0 ? '#B3261E' : '#0E7A4E'}">${e.delta >= 0 ? '+' : '−'}${fmtMoney(Math.abs(e.delta), pack.currency)}</td></tr>`).join('') : ''
+  const worst = [...i.cases].sort((a, b) => b.cum - a.cum)[0]
+  const best = [...i.cases].sort((a, b) => a.cum - b.cum)[0]
+
+  return `
+  <div class="head"><span class="brand">A</span><div><h1>Autocred AI — Forecast Board Pack</h1>
+    <div class="sub">${pack.name} · ${i.targetLabel} · horizon ${i.horizon[0]}–${i.horizon[1]} · generated ${i.dateISO}</div></div></div>
+
+  <h2>Executive summary</h2>
+  <div class="row"><span class="k">Probability-weighted expected exposure (${i.horizon[0]}–${i.horizon[1]})</span><span class="v"><b>${fmtMoney(i.expected, pack.currency)}</b></span></div>
+  <div class="row"><span class="k">Range across cases</span><span class="v">${fmtMoney(best.cum, pack.currency)} (${best.name}) → ${fmtMoney(worst.cum, pack.currency)} (${worst.name})</span></div>
+  ${i.breakEven != null ? `<div class="row"><span class="k">Break-even electrification</span><span class="v">${fmtNum(i.breakEven, 1)}% ZE share at horizon zeroes the ${i.finalYear} fine</span></div>` : `<div class="row"><span class="k">Break-even electrification</span><span class="v">electrification alone cannot zero the ${i.finalYear} fine</span></div>`}
+  <div class="row"><span class="k">Seeded from</span><span class="v">${i.baseYear} actuals · dataset v${i.meta.datasetVersion} · refreshed ${refreshed}</span></div>
+
+  <h2>Case matrix</h2>
+  <table><thead><tr><th>Case</th><th style="text-align:right">Weight</th><th style="text-align:right">Cumulative fine</th><th style="text-align:right">First breach</th><th style="text-align:right">Final-year gap</th></tr></thead><tbody>${caseRows}</tbody></table>
+
+  ${i.bridge ? `<h2>Fine bridge · ${i.bridge.year - 1} → ${i.bridge.year} (base case, market)</h2>
+  <div class="row"><span class="k">${i.bridge.year - 1} market fine</span><span class="v">${fmtMoney(i.bridge.from, pack.currency)}</span></div>
+  <table><thead><tr><th>Effect</th><th style="text-align:right">Δ fine</th></tr></thead><tbody>${bridgeRows}</tbody></table>
+  <div class="row"><span class="k">${i.bridge.year} market fine</span><span class="v">${fmtMoney(i.bridge.to, pack.currency)}</span></div>
+  <p class="sub">Sequential attribution: regulation → volume → technology → zero-emission mix. Effects sum to the total.</p>` : ''}
+
+  <h2>Assumption Book (appendix)</h2>
+  <table><thead><tr><th>Driver</th><th style="text-align:right">Value</th><th>Status</th><th>Owner</th><th>Rationale · source</th></tr></thead><tbody>${driverRows}</tbody></table>
+  <p class="sub">Makers hold share in the outlook; the statutory target path comes from the rule pack (${pack.source}) and is not an assumption.</p>
+
+  <h2>Methodology & limitations</h2>
+  <p class="sub">The outlook projects the ${i.baseYear} as-sold fleet: volumes grow at the market-growth driver, combustion CO₂ improves at the technology driver, mass drifts per the mass driver, and zero-emission share follows an S-curve to the horizon driver (floored by any statutory mandate). Compliance, credits and fines are computed by the same deterministic engine as every live screen — nothing in this pack is estimated outside the stated drivers. Cases are driver-sets; the Management case applies the named saved scenario on the base fundamentals. Limitations: makers hold market share; no new-entrant modelling; model-level launches enter via imported plans, not assumptions.</p>
+
+  <div class="foot">Autocred AI · forecast board pack. Pinned to dataset version ${i.meta.datasetVersion}; regenerate after each data refresh. Illustrative where noted in the rule pack.</div>`
+}

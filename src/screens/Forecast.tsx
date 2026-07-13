@@ -7,12 +7,18 @@ import {
   buildForecast, baselineScenario, materializeSpec, summariseForecast, MARKET_TARGET,
   type ForecastResult, type ForecastScenarioDef, type Ramp,
 } from '../engine/forecast'
+import type { Scenario } from '../engine/types'
 import { streamForecast, colorHex, BASELINE_HEX, LIMIT_HEX, SCEN_COLORS } from '../lib/forecast'
+import { CASES, caseDrivers, outlookRun, bridgeYear, breakEvenAdoption, type CaseId, type OutlookConfig } from '../engine/outlook'
+import { useDrivers, driverSetFor, weightsFor } from '../lib/drivers'
+import OutlookPanel from '../components/OutlookPanel'
+import { buildForecastPack, openPrintReport } from '../lib/report'
+import { DRIVER_META } from '../engine/outlook'
 import { Section, StatusPill } from '../components/ui'
 import TornadoChart, { type TornadoDriver } from '../components/TornadoChart'
 import Icon, { type IconName } from '../components/Icon'
 
-type ScenKind = 'baseline' | 'ai' | 'user' | 'live'
+type ScenKind = 'baseline' | 'ai' | 'user' | 'live' | 'case'
 type Levers = ForecastScenarioDef['levers']
 
 interface StudioScenario {
@@ -24,6 +30,8 @@ interface StudioScenario {
   def: ForecastScenarioDef
   events?: { year: number; label: string }[]
   pinned: boolean
+  /** For kind='case': which case of the matrix this line is. */
+  caseId?: CaseId | 'mgmt'
 }
 
 const EMPTY_LEVERS: Levers = {
@@ -39,12 +47,26 @@ const baselineStudio = (): StudioScenario => ({
 
 const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`
 
+const CASE_HEX: Record<CaseId | 'mgmt', string> = { base: SCEN_COLORS.emerald, upside: SCEN_COLORS.teal, downside: SCEN_COLORS.rose, mgmt: SCEN_COLORS.violet }
+
 export default function Forecast() {
-  const { pack, raw, scenario: liveScenario, selectedParent, country } = useCompliance()
+  const { pack, raw, scenario: liveScenario, selectedParent, country, meta } = useCompliance()
   const setParent = useStore((s) => s.setParent)
   const subscribedModules = useStore((s) => s.subscribedModules)
   const liveOverrides = useStore((s) => s.makerOverrides)
+  const savedScenarios = useStore((s) => s.savedScenarios)
   const parents = parentsFor(country)
+
+  // ── the Assumption Book state (drivers, weights, management pick) ──
+  const drvOverrides = useDrivers((s) => s.overrides)
+  const drvWeights = useDrivers((s) => s.weights)
+  const mgmtIds = useDrivers((s) => s.mgmtScenarioId)
+  const setWeights = useDrivers((s) => s.setWeights)
+  const setMgmtScenario = useDrivers((s) => s.setMgmtScenario)
+  const driverSet = useMemo(() => driverSetFor(country, drvOverrides), [country, drvOverrides])
+  const vintageYear = meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear()
+  const mgmtScenario = savedScenarios.find((x) => x.id === (mgmtIds[country] ?? '') && x.country === country) ?? null
+  const weights = weightsFor(country, drvWeights, !!mgmtScenario)
 
   const [targetSel, setTargetSel] = useState<string>(selectedParent)
   const isMarket = targetSel === MARKET_TARGET
@@ -52,6 +74,18 @@ export default function Forecast() {
   const target = isMarket ? MARKET_TARGET : parent
 
   const base = useMemo(() => baselineScenario(pack), [pack])
+
+  // ── the case matrix as chart lines (Base / Upside / Downside / Management) ──
+  const [casePinned, setCasePinned] = useState<Record<string, boolean>>({ 'case-base': true, 'case-upside': true, 'case-downside': true, 'case-mgmt': true })
+  const caseScenarios = useMemo<StudioScenario[]>(() => {
+    const mk = (id: CaseId | 'mgmt', name: string, blurb: string): StudioScenario => ({
+      id: `case-${id}`, name, description: blurb, hex: CASE_HEX[id], kind: 'case', caseId: id,
+      def: { id: `case-${id}`, name, description: '', levers: EMPTY_LEVERS }, pinned: casePinned[`case-${id}`] !== false,
+    })
+    const out = CASES.map((c) => mk(c.id, c.name, c.blurb))
+    if (mgmtScenario) out.push(mk('mgmt', `Management · ${mgmtScenario.label}`, 'their plan on the house fundamentals'))
+    return out
+  }, [casePinned, mgmtScenario])
 
   // ── studio state ──
   const [scenarios, setScenarios] = useState<StudioScenario[]>([baselineStudio()])
@@ -72,28 +106,45 @@ export default function Forecast() {
   }, [liveScenario, liveOverrides, country])
 
   // ── compute every shown scenario through the shared engine (deferred for smoothness) ──
-  const defScenarios = useDeferredValue(scenarios)
+  const allScenarios = useMemo(() => [scenarios[0], ...caseScenarios, ...scenarios.slice(1)], [scenarios, caseScenarios])
+  const defScenarios = useDeferredValue(allScenarios)
   const defFocus = useDeferredValue(focusId)
   const defLive = useDeferredValue(liveScenario)
   const defLiveOv = useDeferredValue(liveOverrides)
+  const defDrivers = useDeferredValue(driverSet)
   const fcById = useMemo(() => {
     const m = new Map<string, ForecastResult>()
     for (const s of defScenarios) {
       if (!s.pinned && s.id !== defFocus) continue
       const glide = s.id === defFocus
+      if (s.kind === 'case') {
+        // outlook fundamentals: driver-built fleet per year + the adoption path.
+        const cd = s.caseId === 'mgmt' ? defDrivers : caseDrivers(defDrivers, CASES.find((c) => c.id === s.caseId)!)
+        const cfg: OutlookConfig = { raw, pack, drivers: cd, vintageYear }
+        const run = outlookRun(cfg)
+        const perYear: Record<number, Partial<Scenario>> = {}
+        for (const y of pack.years) perYear[y] = { evSharePct: run.shareFor(y) }
+        const planBase = s.caseId === 'mgmt' && mgmtScenario ? { ...base, ...mgmtScenario.scenario } : base
+        if (s.caseId === 'mgmt' && mgmtScenario?.scenario.evSharePct != null) {
+          for (const y of pack.years) perYear[y] = { evSharePct: mgmtScenario.scenario.evSharePct }
+        }
+        const overrides = s.caseId === 'mgmt' && mgmtScenario ? mgmtScenario.overrides : {}
+        m.set(s.id, buildForecast({ raw, pack, target, baseline: base, plan: { base: planBase, perYear }, overrides, glide, bandN: 0, fleetForYear: run.fleetForYear }))
+        continue
+      }
       const bandN = s.id === defFocus && !isMarket ? 140 : 0
       const plan = s.kind === 'live' ? { base: defLive } : s.kind === 'baseline' ? base : materializeSpec(s.def, base, pack.years)
       const overrides = s.kind === 'live' ? defLiveOv : {}
       m.set(s.id, buildForecast({ raw, pack, target, baseline: base, plan, overrides, glide, bandN }))
     }
     return m
-  }, [defScenarios, defFocus, isMarket, raw, pack, target, base, defLive, defLiveOv])
+  }, [defScenarios, defFocus, isMarket, raw, pack, target, base, defLive, defLiveOv, defDrivers, vintageYear, mgmtScenario])
 
   const baseFc = fcById.get('baseline')!
-  const focusScen = scenarios.find((s) => s.id === focusId) ?? scenarios[0]
+  const focusScen = allScenarios.find((s) => s.id === focusId) ?? allScenarios[0]
   const focusFc = fcById.get(focusId) ?? baseFc
   const overlay = focusId !== 'baseline'
-  const shown = scenarios.filter((s) => (s.pinned || s.id === focusId) && fcById.has(s.id))
+  const shown = allScenarios.filter((s) => (s.pinned || s.id === focusId) && fcById.has(s.id))
 
   // ── sensitivity: how much each lever swings the focused scenario's exposure ──
   // (the classic tornado — every value is engine-computed, one buildForecast per extreme)
@@ -120,8 +171,15 @@ export default function Forecast() {
 
   // ── actions ──
   const hasLive = scenarios.some((s) => s.kind === 'live')
-  const focusAndPin = (id: string) => { setFocusId(id); setScenarios((p) => p.map((s) => (s.id === id ? { ...s, pinned: true } : s))) }
-  const togglePin = (id: string) => setScenarios((p) => p.map((s) => (s.id === id ? { ...s, pinned: !s.pinned } : s)))
+  const focusAndPin = (id: string) => {
+    setFocusId(id)
+    if (id.startsWith('case-')) setCasePinned((p) => ({ ...p, [id]: true }))
+    else setScenarios((p) => p.map((s) => (s.id === id ? { ...s, pinned: true } : s)))
+  }
+  const togglePin = (id: string) => {
+    if (id.startsWith('case-')) setCasePinned((p) => ({ ...p, [id]: p[id] === false }))
+    else setScenarios((p) => p.map((s) => (s.id === id ? { ...s, pinned: !s.pinned } : s)))
+  }
   const remove = (id: string) => {
     setScenarios((p) => p.filter((s) => s.id !== id))
     if (focusId === id) setFocusId('baseline')
@@ -167,6 +225,29 @@ export default function Forecast() {
     ? ['Diesel banned by 2027 vs. an aggressive electrification push', 'A demand slump: sales fall 15% and BEV supply stays tight', 'What if the limit lands 10% tighter than drafted?']
     : [`Get ${parent.split(' ')[0]} under the line by 2030`, `${parent.split(' ')[0]} with a slow EV ramp vs. a fast one`, 'Heavier SUV-led mix vs. a lightweighting drive']
 
+  // ── the board pack: every table in the deliverable is the one on screen ──
+  const exportPack = () => {
+    const cases = caseScenarios.map((s) => {
+      const fc = fcById.get(s.id)
+      const wKey = (s.caseId === 'mgmt' ? 'mgmt' : s.caseId) as 'base' | 'upside' | 'downside' | 'mgmt'
+      return fc ? { name: s.name, blurb: s.description ?? '', weight: weights[wKey], cum: fc.cumPlan, breachYear: fc.years.find((y) => y.lGap > 0)?.year ?? null, lastGap: fc.last.lGap } : null
+    }).filter((x): x is NonNullable<typeof x> => x != null)
+    const expected = cases.reduce((a, c) => a + c.cum * c.weight, 0)
+    const cfg = { raw, pack, drivers: driverSet, vintageYear }
+    const run = outlookRun(cfg)
+    const gov = useDrivers.getState().governance[country] ?? {}
+    const finalYear = pack.years[pack.years.length - 1]
+    const by = pack.years[Math.min(1, pack.years.length - 1)]
+    openPrintReport(`Autocred AI · Forecast board pack · ${pack.name}`, buildForecastPack({
+      pack, meta, dateISO: new Date().toISOString().slice(0, 10),
+      targetLabel: isMarket ? 'Whole market' : parent,
+      horizon: [pack.years[0], finalYear], baseYear: run.baseYear,
+      cases, expected,
+      drivers: DRIVER_META.map((m) => ({ label: m.label, value: driverSet[m.key], unit: m.unit, status: gov[m.key]?.status ?? 'draft', rationale: m.rationale, source: m.source, owner: m.owner })),
+      bridge: bridgeYear(cfg, by), breakEven: breakEvenAdoption(cfg, finalYear), finalYear,
+    }))
+  }
+
   return (
     <div className="space-y-5 animate-slidein">
       {/* target + prompt */}
@@ -175,6 +256,7 @@ export default function Forecast() {
         {parents.map((p) => (
           <button key={p} onClick={() => { setTargetSel(p); setParent(p) }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!isMarket && parent === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{p}</button>
         ))}
+        <button onClick={exportPack} className="btn-ghost ml-auto px-3 py-1.5 text-xs"><Icon name="section" size={14} /> Board pack</button>
       </div>
 
       <Section
@@ -207,7 +289,7 @@ export default function Forecast() {
 
       {/* scenario rail */}
       <div className="flex flex-wrap items-center gap-2">
-        {scenarios.map((s) => (
+        {allScenarios.map((s) => (
           <ScenarioChip key={s.id} s={s} focused={s.id === focusId} summary={fcById.has(s.id) ? summariseForecast(fcById.get(s.id)!) : null} currency={pack.currency}
             onFocus={() => focusAndPin(s.id)} onPin={() => togglePin(s.id)} onEdit={() => setEditingId(editingId === s.id ? null : s.id)} onRemove={() => remove(s.id)} />
         ))}
@@ -240,6 +322,79 @@ export default function Forecast() {
           <CompareMatrix shown={shown} fcById={fcById} baseFc={baseFc} pack={pack} focusId={focusId} onFocus={focusAndPin} />
         </Section>
       )}
+
+      {/* ── THE CASE MATRIX — Base / Upside / Downside / Management, weighted ── */}
+      <Section
+        title={<span className="flex items-center gap-2"><Icon name="scale" size={15} className="text-brand" /> Case matrix · {isMarket ? 'whole market' : parent.split(' ')[0]}</span>}
+        right={
+          <span className="flex items-center gap-2 text-[11px] text-ink-500">
+            Management case:
+            <select value={mgmtScenario?.id ?? ''} onChange={(e) => setMgmtScenario(country, e.target.value || null)}
+              className="rounded-lg border border-black/10 bg-white px-2 py-1 text-[11px] font-semibold text-ink-100 outline-none">
+              <option value="">— none —</option>
+              {savedScenarios.filter((x) => x.country === country).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </span>
+        }>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead>
+              <tr className="border-b border-black/[0.08] text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+                <th className="py-2 pr-3">Case</th>
+                <th className="py-2 pr-3">Weight</th>
+                <th className="py-2 pr-3 text-right">Cumulative fine</th>
+                <th className="py-2 pr-3 text-right">First breach</th>
+                <th className="py-2 pr-3 text-right">Final-year gap</th>
+                <th className="py-2 text-right">Final ZE share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {caseScenarios.map((s) => {
+                const fc = fcById.get(s.id)
+                if (!fc) return null
+                const wKey = (s.caseId === 'mgmt' ? 'mgmt' : s.caseId) as 'base' | 'upside' | 'downside' | 'mgmt'
+                const wRaw = drvWeights[country]?.[wKey] ?? (wKey === 'mgmt' ? 0.2 : CASES.find((c) => c.id === wKey)?.defaultWeight ?? 0.25)
+                const breach = fc.years.find((y) => y.lGap > 0)
+                const last = fc.last
+                return (
+                  <tr key={s.id} onClick={() => focusAndPin(s.id)} className={`cursor-pointer border-b border-black/[0.04] transition-colors ${focusId === s.id ? 'bg-brand/[0.05]' : 'hover:bg-black/[0.02]'}`}>
+                    <td className="whitespace-nowrap py-2.5 pr-3"><span className="flex items-center gap-2 font-semibold text-ink-100"><i className="h-2.5 w-2.5 rounded-full" style={{ background: s.hex }} />{s.name}</span><span className="block pl-[18px] text-[10px] text-ink-500">{s.description}</span></td>
+                    <td className="py-2.5 pr-3" onClick={(e) => e.stopPropagation()}>
+                      <span className="flex items-center gap-1">
+                        <input type="number" min={0} max={1} step={0.05} value={wRaw}
+                          onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) setWeights(country, { [wKey]: Math.max(0, Math.min(1, v)) }) }}
+                          className="num w-14 rounded-md border border-black/10 bg-white px-1.5 py-0.5 text-right text-[11px] font-bold text-ink-100 outline-none" />
+                        <span className="num text-[10px] text-ink-500">→ {(weights[wKey] * 100).toFixed(0)}%</span>
+                      </span>
+                    </td>
+                    <td className={`num py-2.5 pr-3 text-right font-bold ${fc.cumPlan > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(fc.cumPlan, pack.currency)}</td>
+                    <td className={`num py-2.5 pr-3 text-right font-semibold ${breach ? 'text-danger' : 'text-safe'}`}>{breach ? breach.year : 'clears'}</td>
+                    <td className={`num py-2.5 pr-3 text-right ${last.lGap > 0 ? 'text-danger' : 'text-safe'}`}>{last.lGap > 0 ? '+' : ''}{fmtNum(last.lGap, 1)} {pack.metricUnit}</td>
+                    <td className="num py-2.5 text-right text-ink-300">{s.caseId === 'mgmt' ? '—' : `${Math.round(caseDrivers(driverSet, CASES.find((c) => c.id === s.caseId)!).evShareHorizon)}%`}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-black/10">
+                <td className="py-2.5 pr-3 font-bold text-ink-100">Probability-weighted expected</td>
+                <td className="num py-2.5 pr-3 text-[10px] text-ink-500">Σ w = 100%</td>
+                <td className="num py-2.5 pr-3 text-right text-[13px] font-black text-ink-100">
+                  {fmtMoney(caseScenarios.reduce((a, s) => {
+                    const fc = fcById.get(s.id); if (!fc) return a
+                    const wKey = (s.caseId === 'mgmt' ? 'mgmt' : s.caseId) as 'base' | 'upside' | 'downside' | 'mgmt'
+                    return a + fc.cumPlan * weights[wKey]
+                  }, 0), pack.currency)}
+                </td>
+                <td colSpan={3} className="py-2.5 text-[10.5px] text-ink-500">expected cumulative exposure over {pack.years[0]}–{pack.years[pack.years.length - 1]}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Section>
+
+      {/* ── THE ASSUMPTION BOOK + BRIDGE + SENSITIVITIES (market-level) ── */}
+      <OutlookPanel raw={raw} pack={pack} country={country} vintageYear={vintageYear} />
 
       {/* sensitivity — what moves the exposure most */}
       <Section title="What moves the exposure"
@@ -327,7 +482,7 @@ function ScenarioChip({ s, focused, summary, currency, onFocus, onPin, onEdit, o
   onFocus: () => void; onPin: () => void; onEdit: () => void; onRemove: () => void
 }) {
   const editable = s.kind === 'ai' || s.kind === 'user'
-  const removable = s.kind !== 'baseline'
+  const removable = s.kind !== 'baseline' && s.kind !== 'case' // cases live in the matrix; unpin to hide
   const breach = summary?.firstBreachYear
   return (
     <div className={`group flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition ${focused ? 'border-black/20 bg-white shadow-card' : s.pinned ? 'border-black/[0.08] bg-white/60' : 'border-dashed border-black/15 bg-transparent opacity-70'}`}>

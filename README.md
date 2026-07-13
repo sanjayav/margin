@@ -39,7 +39,7 @@ Scenario/Forecast model on the working assumptions and lead with Δ vs actuals.
 | Module | What it does |
 | --- | --- |
 | **Analyse** | The actuals monitoring surface — drill market → pool → maker → model → variant on the book of record. Facts rail: reporting period, dataset provenance & vintage, fleet profile. No levers can reach it. |
-| **Forecast** | Multi-year scenario studio: materialised scenario specs, ramp levers, Monte-Carlo P10–P90 bands, breach-year detection. |
+| **Forecast** | Big-4-grade, driver-based: an **Assumption Book** (sourced fundamentals with draft→reviewed→signed-off governance), an outlook that projects the latest actuals (volumes, S-curve ZE adoption mandate-floored, CO₂/mass drift), a weighted **case matrix** (Base/Upside/Downside/Management) with probability-weighted expected exposure, a YoY **fine bridge** (regulation+volume+tech+mix, sums exactly), two-way sensitivities & break-even, Monte-Carlo bands, and a one-click **board pack**. Backtested: the 2025-seeded India outlook lands within 5% of 2026 actuals. |
 | **Scenario** | The modelling home — *Model* (the drill workbench under working assumptions, variance-vs-actuals first), *Get under the line* (ranked, costed path) and *Compare scenarios*. Saved scenarios pin the dataset vintage they were seeded from. |
 | **Credit book** | The position ledger: surplus/deficit by maker and year, banked cumulative positions, buyer↔seller trade planner priced at the market credit price (shadow-priced at the fine rate where the regime only pools, e.g. EU). |
 | **Pricing** | Compliance cost per car, model-level price ladder (which nameplates carry the burden, which earn credit value), pass-through and point-of-sale tax levers (GST/cess, VAT, VED, LCT). |

@@ -120,6 +120,11 @@ export interface ForecastInput {
   glide?: boolean
   /** Monte-Carlo draws for the per-maker ribbon; 0 disables. Default 140. */
   bandN?: number
+  /** Outlook hook: a synthetic fleet per projected year (fundamentals-driven
+   *  volumes/CO₂/mass). When present, the PLAN computes on this fleet while the
+   *  as-sold baseline keeps `raw` — so a case line is always measured against
+   *  the same hold-today's-mix reference. */
+  fleetForYear?: (year: number) => Vehicle[]
 }
 
 // ── Serializable scenario descriptors (the AI ⇄ client ⇄ engine wire format) ──
@@ -229,17 +234,18 @@ export function buildForecast(input: ForecastInput): ForecastResult {
   // The whole-market fine is the SUM of per-maker fines — a clean maker cannot
   // offset a dirty one, exactly as the board verdict assesses it.
   const marketFine = (t: Aggregate) => (t.children ?? []).reduce((a, c) => a + c.fine, 0)
-  const nodeFor = (sc: Scenario, ov: Record<string, Partial<Scenario>>): Aggregate => {
+  const nodeFor = (sc: Scenario, ov: Record<string, Partial<Scenario>>, fleet: Vehicle[] = raw): Aggregate => {
     if (isMarket) {
-      const t = buildTree(raw, pack, sc, ov)
+      const t = buildTree(fleet, pack, sc, ov)
       return { ...t, fine: marketFine(t), status: t.rawUnits === 0 ? 'no-sales' : t.gap > 0 ? 'fine' : 'compliant' }
     }
-    return aggregateParent(raw, pack, sc, parent, ov)
+    return aggregateParent(fleet, pack, sc, parent, ov)
   }
 
   const rows: ForecastYear[] = years.map((y, i) => {
+    const planFleet = input.fleetForYear ? input.fleetForYear(y) : raw
     const b = nodeFor({ ...baseline, year: y }, {})
-    const l = nodeFor(scenarioForYear(plan, y, i, years), overrides)
+    const l = nodeFor(scenarioForYear(plan, y, i, years), overrides, planFleet)
     let req: number | null = null
     if (glide) {
       for (let s = 0; s <= 95; s += 1) {
