@@ -42,28 +42,6 @@ export function applyScenario(
 ): Vehicle[] {
   let v = raw.filter((x) => x.year === s.year).map((x) => ({ ...x }))
 
-  // 0. Hypothetical variants the user added (attached to the current year). A
-  //    variant carrying `share` takes that fraction of its scope and shrinks the
-  //    existing scope volume proportionately (constant total); otherwise its
-  //    `sales` are added on top.
-  for (const raw0 of s.extraVariants ?? []) {
-    const ev: Vehicle = { ...raw0, year: s.year }
-    // Inherit the manufacturer's real pool so the variant nests under the same
-    // pool node in the hierarchy (not a stray "" pool).
-    if (!ev.pool) { const sib = v.find((x) => x.parent === ev.parent); if (sib) ev.pool = sib.pool }
-    if (ev.share != null && ev.share > 0) {
-      const scope = ev.shareScope ?? 'model'
-      const inScope = v.filter((x) =>
-        scope === 'market' ? true : scope === 'manufacturer' ? x.parent === ev.parent : x.parent === ev.parent && x.model === ev.model)
-      const total = inScope.reduce((a, x) => a + x.sales, 0)
-      const sh = Math.min(0.95, Math.max(0, ev.share))
-      ev.sales = Math.round(total * sh)
-      for (const x of inScope) x.sales *= 1 - sh // proportional give-up
-    }
-    v.push(ev)
-  }
-  if (v.length === 0) return v
-
   // Overrides are keyed by scope, most-specific wins, layering base < pool <
   // manufacturer < model < variant — so edits at any level coexist on one fleet.
   //   pool:NAME · MAKER · MAKER/MODEL · MAKER/MODEL/VARIANTKEY
@@ -80,8 +58,36 @@ export function applyScenario(
     return e
   }
 
-  // 1. Sales multiplier (per vehicle, deepest scope wins).
+  // 1. Sales multiplier (per vehicle, deepest scope wins). Runs BEFORE the
+  //    hypothetical variants so a typed unit count is never multiplied, and a
+  //    share-mode variant takes its share of the post-multiplier market.
   for (const x of v) { const m = effFor(x).salesMultiplier; if (m !== 1) x.sales *= m }
+
+  // 1b. Hypothetical variants the user added (attached to the current year). A
+  //    variant carrying `share` takes that fraction of its scope and shrinks the
+  //    existing scope volume proportionately (constant total); otherwise its
+  //    `sales` are added on top. Either way the row is PINNED: its spec and
+  //    volume are the user's explicit assumption — the fleet-level levers below
+  //    (mix reweighting, EV-share reallocation, mass shift, eco) never rescale
+  //    it. Without the pin, a 5,000-unit variant under a 25% BEV mix lever
+  //    could silently land as 25,000 units.
+  for (const raw0 of s.extraVariants ?? []) {
+    const ev: Vehicle = { ...raw0, year: s.year, pinned: true }
+    // Inherit the manufacturer's real pool so the variant nests under the same
+    // pool node in the hierarchy (not a stray "" pool).
+    if (!ev.pool) { const sib = v.find((x) => x.parent === ev.parent); if (sib) ev.pool = sib.pool }
+    if (ev.share != null && ev.share > 0) {
+      const scope = ev.shareScope ?? 'model'
+      const inScope = v.filter((x) =>
+        scope === 'market' ? true : scope === 'manufacturer' ? x.parent === ev.parent : x.parent === ev.parent && x.model === ev.model)
+      const total = inScope.reduce((a, x) => a + x.sales, 0)
+      const sh = Math.min(0.95, Math.max(0, ev.share))
+      ev.sales = Math.round(total * sh)
+      for (const x of inScope) x.sales *= 1 - sh // proportional give-up
+    }
+    v.push(ev)
+  }
+  if (v.length === 0) return v
 
   // 2. Powertrain mix — reweight within the DEEPEST scope that defines a mix
   //    (model > maker > market), preserving that scope's total volume. A model
@@ -90,6 +96,7 @@ export function applyScenario(
   // each manufacturer (preserving per-maker totals) using the deepest scope's mix.
   const groups = new Map<string, { weights: Record<string, number>; items: Vehicle[] }>()
   for (const x of v) {
+    if (x.pinned) continue // hypothetical variants keep their typed volume
     const md = modelOv(x.parent, x.model)
     const mk = makerOv(x.parent)
     const pl = poolOv(x.pool || x.parent)
@@ -118,8 +125,10 @@ export function applyScenario(
   }
 
   // 2b. EV-share lever (brand/market scope, only when no mix set) — per maker.
+  //     Pinned hypothetical rows sit outside the reallocation: the lever moves
+  //     the EXISTING fleet; the variant adds on top exactly as entered.
   const byMaker = new Map<string, Vehicle[]>()
-  for (const x of v) (byMaker.get(x.parent) ?? byMaker.set(x.parent, []).get(x.parent)!).push(x)
+  for (const x of v) { if (!x.pinned) (byMaker.get(x.parent) ?? byMaker.set(x.parent, []).get(x.parent)!).push(x) }
   const synthesised: Vehicle[] = []
   for (const [parent, group] of byMaker) {
     const e = { ...s, ...(poolOv(group[0].pool || parent) ?? {}), ...(makerOv(parent) ?? {}) }
@@ -153,6 +162,7 @@ export function applyScenario(
 
   // 3. Mass shift (per vehicle, deepest scope wins) — moves fleet & the limit together.
   for (const x of v) {
+    if (x.pinned) continue // a hypothetical's typed spec is not re-engineered
     const ms = effFor(x).massShiftKg
     if (ms !== 0) {
       x.mass = Math.max(800, x.mass + ms)
@@ -165,6 +175,7 @@ export function applyScenario(
   //    vehicle's ecoBenefit so vehicleMetric, which only sees the global
   //    scenario, still applies exactly the scoped credit for that scope.
   for (const x of v) {
+    if (x.pinned) continue
     const e = effFor(x).ecoBoostG
     if (e !== s.ecoBoostG) x.ecoBenefit = (x.ecoBenefit ?? 0) + (e - s.ecoBoostG)
   }

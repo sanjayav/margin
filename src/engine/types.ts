@@ -25,6 +25,11 @@ export interface Vehicle {
   engineCC?: number
   zev?: number
   scenario?: string
+  /** Set by the engine on user-added hypothetical variants: the row's typed
+   *  spec/volume is an explicit assumption — fleet-level levers (volume
+   *  multiplier, mix reweighting, EV-share reallocation, mass shift, eco)
+   *  never rescale it. */
+  pinned?: boolean
   // ── richer per-variant spec (populated from the official workbooks where
   //    available; all optional so the engine never depends on them) ──
   variant?: string         // human variant/spec descriptor (e.g. "Auto · FWD · 61 kWh")

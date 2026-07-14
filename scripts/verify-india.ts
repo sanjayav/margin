@@ -102,5 +102,31 @@ for (const y of pack.years) {
   check('MG 2025 ledger P ≈ 23 g/km (EVs included, engine truth)', P > 15 && P < 30, P.toFixed(1))
 }
 
+// ── hypothetical variants are PINNED: typed units land exactly — no fleet
+//    lever rescales them (regression: 5,000 typed units read as 25,000 when
+//    extras joined the mix/volume reallocation) ─────────────────────────────
+{
+  const { applyScenario, aggregate } = await import('../src/engine/engine.js')
+  const baseUnits = IN.filter((v) => v.year === 2027).reduce((a, v) => a + v.sales, 0)
+  const ev: Vehicle = { parent: 'MG Motor', pool: '', brand: 'MG Motor', make: 'MG Motor', model: 'Pin Probe EV', year: 2027, powertrain: 'BEV', fuel: 'Electric', co2: 0, mass: 1500, sales: 5000, vclass: 'Passenger car' }
+  const vSales = (s: Scenario) => applyScenario(IN, s, pack, {}).filter((x) => x.model === 'Pin Probe EV').reduce((a, x) => a + x.sales, 0)
+  const s0: Scenario = { ...base(2027), extraVariants: [ev] }
+  check('variant lands at exactly its typed units', vSales(s0) === 5000, String(vSales(s0)))
+  check('…under a ×5 sales multiplier', vSales({ ...s0, salesMultiplier: 5 }) === 5000, String(vSales({ ...s0, salesMultiplier: 5 })))
+  check('…under a market mix (BEV 25%)', vSales({ ...s0, mix: { ICE: 75, BEV: 25 } }) === 5000)
+  check('…under the EV-share lever (40%)', vSales({ ...s0, evSharePct: 40 }) === 5000)
+  const shifted = applyScenario(IN, { ...s0, massShiftKg: 200 }, pack, {}).find((x) => x.model === 'Pin Probe EV')
+  check('…mass shift never re-engineers the typed spec', shifted?.mass === 1500, String(shifted?.mass))
+  const scaled = aggregate(applyScenario(IN, { ...s0, salesMultiplier: 5 }, pack, {}), pack, { ...s0, salesMultiplier: 5 }, 'IN', 0, 'p')
+  check('the surrounding fleet still answers the lever (×5 + 5,000)', scaled.rawUnits === baseUnits * 5 + 5000, `${scaled.rawUnits} vs ${baseUnits * 5 + 5000}`)
+  // share-mode: takes its share of the post-multiplier market, total preserved
+  const sh: Vehicle = { ...ev, model: 'Pin Probe Share', sales: 0, share: 0.1, shareScope: 'market' } as Vehicle
+  const out = applyScenario(IN, { ...base(2027), salesMultiplier: 2, extraVariants: [sh] }, pack, {})
+  const shRow = out.find((x) => x.model === 'Pin Probe Share')!
+  const total = out.reduce((a, x) => a + x.sales, 0)
+  check('share-mode variant = 10% of the ×2 market', Math.abs(shRow.sales - baseUnits * 2 * 0.1) < 2, String(shRow.sales))
+  check('share-mode preserves the scope total', Math.abs(total - baseUnits * 2) < 2, `${total.toFixed(0)} vs ${baseUnits * 2}`)
+}
+
 console.log(`\n${pass} passed · ${fail} failed`)
 if (fail) process.exit(1)
