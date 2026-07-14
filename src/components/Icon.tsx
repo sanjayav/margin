@@ -7,6 +7,7 @@ export type IconName =
   | 'alert' | 'link' | 'scale' | 'section' | 'database'
   | 'search' | 'arrow-right' | 'arrow-up' | 'check' | 'close' | 'reset' | 'chevron'
   | 'shield' | 'layers' | 'sliders' | 'user' | 'clock' | 'spark' | 'dot' | 'upload' | 'table'
+  | 'plus' | 'pencil' | 'trash'
 
 const P: Record<IconName, string> = {
   gauge: 'M12 14l3-3M5 19a9 9 0 1 1 14 0M12 14a1 1 0 1 0 0 0',
@@ -43,6 +44,9 @@ const P: Record<IconName, string> = {
   dot: 'M12 12a1 1 0 1 0 0 .01',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14M15 5v14',
+  plus: 'M12 5v14M5 12h14',
+  pencil: 'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5zM15 5l4 4',
+  trash: 'M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6M10 11v6M14 11v6',
 }
 
 const FILLED: Partial<Record<IconName, boolean>> = { dot: true }

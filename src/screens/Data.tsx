@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
-import { getFleet, getMeta } from '../data/fleet'
+import { getFleet, getMeta, setLiveFleet } from '../data/fleet'
 import { getPack } from '../engine/rulepacks'
 import type { Vehicle } from '../engine/types'
 import { fmtInt, fmtNum, applyScenario } from '../engine/engine'
@@ -116,6 +116,11 @@ export default function Data() {
   // replays its assumptions through the engine and shows the resulting fleet.
   const [view, setView] = useState<string>('ACTUAL')
   const [importing, setImporting] = useState(false)
+  // row-level maintenance of the record (ACTUAL view only — scenario rows are
+  // engine output, there is nothing to edit). Every save writes a new dataset
+  // version through the same store the imports use, so edits are auditable.
+  const [editor, setEditor] = useState<{ row: Partial<Vehicle>; original: Vehicle | null } | null>(null)
+  const [armDel, setArmDel] = useState<Vehicle | null>(null)
 
   // expert filters — facets + numeric ranges + grouping
   const [fMaker, setFMaker] = useState<Set<string>>(new Set())
@@ -298,6 +303,33 @@ export default function Data() {
     URL.revokeObjectURL(url)
   }
 
+  // Apply a modified fleet: live in-session immediately, durable best-effort —
+  // the exact path imports take, so a manual edit and a file import age the
+  // dataset the same way (new version, source gains a "manual edits" marker).
+  const commitRows = async (next: Vehicle[], action: string) => {
+    const baseSrc = meta.source ?? pack.source
+    const src = /manual edits/.test(baseSrc) ? baseSrc : `${baseSrc} · manual edits`
+    setLiveFleet(country, next, { source: src, lastRefreshed: new Date().toISOString(), datasetVersion: `edit-${Date.now()}`, live: true })
+    useStore.setState((s) => {
+      const parents = [...new Set(next.map((v) => v.parent))].sort()
+      return { dataVersion: s.dataVersion + 1, ...(parents.includes(s.selectedParent) ? {} : { selectedParent: parents[0] }) }
+    })
+    try {
+      const res = await fetch('/api/import', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ market: country, source: src, rows: next }),
+      })
+      if (!res.ok) throw new Error(`server responded ${res.status}`)
+    } catch (e: any) {
+      console.warn(`row ${action} persisted for this session only:`, e?.message ?? e)
+    }
+  }
+  const deleteRow = (r: Vehicle) => { setArmDel(null); void commitRows(all.filter((x) => x !== r), 'delete') }
+  const saveRow = (built: Vehicle, original: Vehicle | null) => {
+    setEditor(null)
+    void commitRows(original ? all.map((x) => (x === original ? built : x)) : [...all, built], original ? 'edit' : 'add')
+  }
+
   return (
     <div className="space-y-5">
       {/* KPI band */}
@@ -339,6 +371,10 @@ export default function Data() {
             {q && <button onClick={() => setQ('')}><Icon name="close" size={14} className="text-ink-500 hover:text-ink-100" /></button>}
           </div>
           <button onClick={() => setImporting(true)} className="btn-primary px-3 py-2 text-xs"><Icon name="upload" size={14} /> Import data</button>
+          {!scenarioMode && (
+            <button data-testid="add-row" onClick={() => setEditor({ row: { year: Number([...fYear][0]) || pack.years[0], vclass: pack.classes[0], powertrain: 'ICE', parent: fMaker.size === 1 ? [...fMaker][0] : '' }, original: null })}
+              className="btn-ghost px-3 py-2 text-xs"><Icon name="plus" size={14} /> Add row</button>
+          )}
           <button onClick={exportCsv} className="btn-ghost px-3 py-2 text-xs"><Icon name="section" size={14} /> Export {groups ? 'pivot' : 'CSV'}</button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -431,6 +467,7 @@ export default function Data() {
                       <span className="inline-flex items-center gap-1">{c.label}{sortKey === c.k && <span className="text-brand">{sortDir === 'asc' ? '▲' : '▼'}</span>}</span>
                     </th>
                   ))}
+                  {!scenarioMode && <th className="w-16 px-2 py-2.5" aria-label="Row actions" />}
                 </tr>
               </thead>
               <tbody>
@@ -467,13 +504,24 @@ export default function Data() {
                     }
                   }
                   return (
-                    <tr key={i} className="border-b border-black/[0.04] transition-colors odd:bg-black/[0.012] hover:bg-brand/[0.04]">
+                    <tr key={i} className="group border-b border-black/[0.04] transition-colors odd:bg-black/[0.012] hover:bg-brand/[0.04]">
                       {cols.map(td)}
+                      {!scenarioMode && (
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right">
+                          <span className="inline-flex items-center gap-0.5 opacity-25 transition-opacity group-hover:opacity-100" onMouseLeave={() => armDel === r && setArmDel(null)}>
+                            <button title="Edit row" onClick={() => setEditor({ row: { ...r }, original: r })}
+                              className="grid h-6 w-6 place-items-center rounded-md text-ink-500 transition hover:bg-black/[0.06] hover:text-ink-100"><Icon name="pencil" size={12} /></button>
+                            {armDel === r
+                              ? <button title="Confirm delete" onClick={() => deleteRow(r)} className="rounded-md bg-danger px-1.5 py-1 text-[9px] font-bold text-white">SURE?</button>
+                              : <button title="Delete row" onClick={() => setArmDel(r)} className="grid h-6 w-6 place-items-center rounded-md text-ink-500 transition hover:bg-danger/10 hover:text-danger"><Icon name="trash" size={12} /></button>}
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   )
                 })}
                 {rows.length === 0 && (
-                  <tr><td colSpan={cols.length} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
+                  <tr><td colSpan={cols.length + (scenarioMode ? 0 : 1)} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
                 )}
               </tbody>
             </table>
@@ -482,6 +530,118 @@ export default function Data() {
       </div>
 
       {importing && <ImportStudio country={country} pack={pack} onClose={() => setImporting(false)} />}
+      {editor && (
+        <RowEditor initial={editor.row} isNew={!editor.original} pack={pack}
+          makers={optMakers} powertrains={optPts} fuels={[...new Set(all.map((r) => r.fuel))].sort()}
+          onSave={(v) => saveRow(v, editor.original)} onClose={() => setEditor(null)} />
+      )}
+    </div>
+  )
+}
+
+// ── Row editor — add or correct one record of the market database ───────────
+// Kept deliberately schema-first: the core engine fields up top, the master
+// structure below. Saving writes a NEW dataset version (audit trail), exactly
+// like an import — the record is versioned, never silently mutated.
+function RowEditor({ initial, isNew, pack, makers, powertrains, fuels, onSave, onClose }: {
+  initial: Partial<Vehicle>; isNew: boolean; pack: ReturnType<typeof getPack>
+  makers: string[]; powertrains: string[]; fuels: string[]
+  onSave: (v: Vehicle) => void; onClose: () => void
+}) {
+  const [f, setF] = useState<Record<string, string>>(() => {
+    const s: Record<string, string> = {}
+    const put = (k: string, v: unknown) => { s[k] = v == null ? '' : String(v) }
+    put('parent', initial.parent); put('brand', initial.brand); put('model', initial.model); put('variant', initial.variant)
+    put('powertrain', initial.powertrain); put('fuel', initial.fuel); put('vclass', initial.vclass ?? pack.classes[0]); put('year', initial.year)
+    put('co2', initial.co2); put('mass', initial.mass); put('sales', initial.sales)
+    put('segment', initial.segment); put('bodyStyle', initial.bodyStyle)
+    put('fuelKmpl', initial.fuelKmpl); put('range', initial.range); put('otrPrice', initial.otrPrice); put('tax', initial.tax)
+    return s
+  })
+  const set = (k: string) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }))
+  const num = (k: string) => (f[k].trim() === '' ? null : Number(f[k].replace(/[^\d.-]/g, '')))
+  const problems: string[] = []
+  if (!f.parent.trim()) problems.push('Manufacturer is required')
+  if (!f.model.trim()) problems.push('Model is required')
+  if (!f.powertrain.trim()) problems.push('Powertrain is required')
+  const yr = num('year'); if (yr == null || yr < 1990 || yr > 2100) problems.push('Year must be 1990–2100')
+  const co2 = num('co2'); if (co2 == null || co2 < 0 || co2 > 600) problems.push('CO₂ must be 0–600 g/km')
+  const mass = num('mass'); if (mass == null || mass < 300 || mass > 4500) problems.push(`${pack.massLabel} must be 300–4,500 kg`)
+  const sales = num('sales'); if (sales == null || sales < 0) problems.push('Units must be ≥ 0')
+  const build = (): Vehicle => ({
+    ...(initial as Vehicle),
+    parent: f.parent.trim(), pool: f.parent.trim(), brand: f.brand.trim() || f.parent.trim(), make: f.brand.trim() || f.parent.trim(),
+    model: f.model.trim(), variant: f.variant.trim() || undefined,
+    powertrain: f.powertrain.trim(), fuel: f.fuel.trim() || f.powertrain.trim(), vclass: f.vclass,
+    year: yr!, co2: co2!, mass: mass!, sales: Math.round(sales!),
+    segment: f.segment.trim() || undefined, bodyStyle: f.bodyStyle.trim() || undefined,
+    fuelKmpl: num('fuelKmpl') ?? undefined, range: num('range') ?? undefined,
+    otrPrice: num('otrPrice') ?? undefined, tax: num('tax') ?? undefined,
+  })
+  // plain render helper (NOT a component): a nested component type would
+  // remount on every parent render and drop input focus per keystroke
+  const field = ({ k, label, type = 'text', list, span, unit, options }: { k: string; label: string; type?: string; list?: string; span?: boolean; unit?: string; options?: string[] }) => (
+    <label className={`block ${span ? 'col-span-2' : ''}`}>
+      <span className="label mb-1 block text-ink-400">{label}</span>
+      {options ? (
+        <select value={f[k]} onChange={set(k)} className="w-full rounded-lg border border-black/[0.1] bg-white px-2.5 py-2 text-xs text-ink-100 outline-none transition focus:border-brand/50">
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <span className="flex items-center gap-1.5 rounded-lg border border-black/[0.1] bg-white px-2.5 py-2 transition focus-within:border-brand/50">
+          <input value={f[k]} onChange={set(k)} list={list} inputMode={type === 'num' ? 'decimal' : undefined}
+            className="w-full bg-transparent text-xs text-ink-100 outline-none placeholder:text-ink-600" />
+          {unit && <span className="shrink-0 text-[9px] font-semibold text-ink-500">{unit}</span>}
+        </span>
+      )}
+    </label>
+  )
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={onClose} />
+      <div data-testid="row-editor" className="modal-pop relative flex max-h-[92vh] w-[min(680px,95vw)] flex-col overflow-hidden rounded-2xl border border-black/10 bg-[#FBF7EF] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-black/[0.07] bg-[#FFFEFB] px-5 py-3.5">
+          <div>
+            <div className="text-sm font-bold text-ink-100">{isNew ? 'Add a record row' : 'Edit record row'}</div>
+            <div className="text-[11px] text-ink-500">{pack.name} database · saving writes a new dataset version — the record is versioned, never silently changed</div>
+          </div>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-ink-500 transition hover:bg-black/5 hover:text-ink-100"><Icon name="close" size={16} /></button>
+        </div>
+        <div className="grid grid-cols-2 gap-3 overflow-y-auto px-5 py-4 sm:grid-cols-4">
+          {field({ k: 'parent', label: 'Manufacturer *', list: 're-makers', span: true })}
+          {field({ k: 'brand', label: 'Brand', span: true })}
+          {field({ k: 'model', label: 'Model *', span: true })}
+          {field({ k: 'variant', label: 'Variant', span: true })}
+          {field({ k: 'powertrain', label: 'Powertrain *', list: 're-pts' })}
+          {field({ k: 'fuel', label: 'Fuel', list: 're-fuels' })}
+          {field({ k: 'vclass', label: 'Class', options: pack.classes as unknown as string[] })}
+          {field({ k: 'year', label: 'Year *', type: 'num' })}
+          {field({ k: 'co2', label: 'CO₂ *', type: 'num', unit: 'g/km' })}
+          {field({ k: 'mass', label: `${pack.massLabel} *`, type: 'num', unit: 'kg' })}
+          {field({ k: 'sales', label: 'Units *', type: 'num' })}
+          {field({ k: 'segment', label: 'Segment' })}
+          {field({ k: 'bodyStyle', label: 'Body style' })}
+          {pack.id === 'IN' && (<>
+            {field({ k: 'fuelKmpl', label: 'Fuel economy', type: 'num', unit: 'km/l' })}
+            {field({ k: 'range', label: 'E-Range', type: 'num', unit: 'km' })}
+            {field({ k: 'otrPrice', label: 'OTR price', type: 'num', unit: '₹' })}
+            {field({ k: 'tax', label: 'Tax', type: 'num', unit: '₹' })}
+          </>)}
+          <datalist id="re-makers">{makers.map((m) => <option key={m} value={m} />)}</datalist>
+          <datalist id="re-pts">{[...new Set([...powertrains, 'ICE', 'BEV', 'PHEV', 'Strong Hybrid', 'MHEV'])].map((p) => <option key={p} value={p} />)}</datalist>
+          <datalist id="re-fuels">{[...new Set([...fuels, 'Petrol', 'Diesel', 'Electric', 'CNG'])].map((p) => <option key={p} value={p} />)}</datalist>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-black/[0.07] bg-[#FFFEFB] px-5 py-3">
+          <span className="min-h-[14px] text-[10.5px] font-semibold text-danger">{problems[0] ?? ''}</span>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="btn-ghost px-3 py-2 text-xs">Cancel</button>
+            <button data-testid="row-save" disabled={problems.length > 0} onClick={() => onSave(build())}
+              className="btn-primary px-4 py-2 text-xs disabled:cursor-not-allowed disabled:opacity-40">
+              <Icon name="check" size={14} /> {isNew ? 'Add row' : 'Save changes'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

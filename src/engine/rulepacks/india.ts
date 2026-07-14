@@ -80,7 +80,16 @@ export const IN: RulePack = {
   source: 'BEE — Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
   coverageNote: 'Reporting manufacturers only — not all-India volume. Add the remaining OEMs via the master file or the Import Studio.',
 
-  regimeFor: (year) => (year < CAFE3_FROM ? { name: 'CAFE II' } : { name: 'CAFE III', draft: true }),
+  regimeFor: (year) =>
+    year < CAFE3_FROM
+      ? {
+          name: 'CAFE II', cycle: 'MIDC · NEDC-based',
+          cycleNote: 'CAFE II is assessed on the Modified Indian Driving Cycle (NEDC-derived). Makers dual-declare MIDC + WLTP from 2026.',
+        }
+      : {
+          name: 'CAFE III', draft: true, cycle: 'MIDC → WLTP',
+          cycleNote: 'Draft CAFE III starts on MIDC and transitions to WLTP once MoRTH adopts it — the MIDC→WLTP conversion factor is to be notified separately (Ministry of Power).',
+        },
 
   vehicleMetric: (v: Vehicle, s) => {
     if (/electric|bev/i.test(v.fuel) || v.co2 === 0) return 0

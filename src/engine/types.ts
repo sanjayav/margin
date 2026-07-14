@@ -152,8 +152,10 @@ export interface RulePack {
   massBasedLimit?: boolean
   /** Which regulatory regime governs a given year — lets one pack model a
    *  market in transition (India: CAFE II → draft CAFE III) and lets the UI
-   *  badge draft years honestly. */
-  regimeFor?: (year: number) => { name: string; draft?: boolean }
+   *  badge draft years honestly. cycle = the homologation test cycle of that
+   *  era (MIDC/NEDC vs WLTP), cycleNote = the one-line source caveat; both
+   *  drive the era bands on the Plan trajectory and the in-chart year badge. */
+  regimeFor?: (year: number) => { name: string; draft?: boolean; cycle?: string; cycleNote?: string }
   /** Legal eco-innovation credit cap (g/km) for a year, where the regime has one.
    *  Undefined ⇒ no eco-innovation mechanism (the eco lever has no effect and the
    *  optimiser won't propose it). Drives the ScenarioRail cap and recommend.ts. */

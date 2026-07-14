@@ -47,7 +47,7 @@ function VarianceStrip() {
       ) : (
         <span className="text-[11.5px] text-ink-500">No assumptions applied yet — this workbench currently matches the actuals book. Move a lever on the right.</span>
       )}
-      <span className="ml-auto hidden text-[10.5px] text-ink-500 md:inline">every number here is modelled · the book of record lives in Analyse</span>
+      <span className="ml-auto hidden text-[10.5px] text-ink-500 md:inline">every number here is modelled · the book of record lives in Plan</span>
     </div>
   )
 }

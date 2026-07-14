@@ -266,8 +266,8 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             const r = pack.regimeFor(scenario.year)
             return (
               <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${r.draft ? 'border-warn/30 bg-warn/10 text-warn' : 'border-safe/30 bg-safe/10 text-safe'}`}
-                title={r.draft ? `${r.name} is a draft — final notification pending; stress it with the Draft stringency lever` : `${r.name} is in force`}>
-                <Icon name="scale" size={12} /> {r.name}{r.draft ? ' · draft' : ''}
+                title={`${r.draft ? `${r.name} is a draft — final notification pending; stress it with the Draft stringency lever` : `${r.name} is in force`}${r.cycleNote ? ` · ${r.cycleNote}` : ''}`}>
+                <Icon name="scale" size={12} /> {r.name}{r.draft ? ' · draft' : ''}{r.cycle ? ` · ${r.cycle}` : ''}
               </span>
             )
           })()}
@@ -311,6 +311,28 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         {/* trajectory — click a year to move the whole workspace there */}
         <div className="shrink-0">
           <div className="label mb-1.5">Trajectory · gap by year</div>
+          {/* regime era bands — which rulebook and test cycle governs each year,
+              exactly (India: CAFE II·MIDC/NEDC through FY26-27, CAFE III·WLTP
+              transition from FY27-28). Only drawn when the market transitions. */}
+          {pack.regimeFor && (() => {
+            const eras: { name: string; draft?: boolean; cycle?: string; cycleNote?: string; n: number }[] = []
+            for (const y of pack.years) {
+              const r = pack.regimeFor(y)
+              const last = eras[eras.length - 1]
+              if (last && last.name === r.name) last.n += 1
+              else eras.push({ ...r, n: 1 })
+            }
+            return eras.length > 1 ? (
+              <div className="mb-1 flex gap-1" data-testid="regime-eras">
+                {eras.map((e) => (
+                  <div key={e.name} style={{ flex: e.n }} title={e.cycleNote ?? e.name}
+                    className={`whitespace-nowrap rounded-t-md border-x border-t px-1 pt-0.5 text-center text-[8.5px] font-bold uppercase tracking-wide ${e.draft ? 'border-warn/25 bg-warn/[0.07] text-warn' : 'border-safe/25 bg-safe/[0.07] text-safe'}`}>
+                    {e.name}{e.draft ? ' draft' : ''}{e.cycle ? ` · ${e.cycle}` : ''}
+                  </div>
+                ))}
+              </div>
+            ) : null
+          })()}
           <div className="flex gap-1">
             {glide.map((g) => {
               const active = g.year === scenario.year
@@ -381,7 +403,24 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
           </div>
         )}
-        <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1} />
+        <div className="relative">
+          <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1} />
+          {/* which year the chart is showing — always in the chart itself, with
+              the governing regime + test cycle when the pack knows them */}
+          <div data-testid="chart-year-badge" className="pointer-events-none absolute right-3 top-1.5 select-none text-right">
+            <div className="dnum text-[26px] font-bold leading-none text-ink-100/85">
+              {pack.id === 'IN' ? `FY ${scenario.year}-${(scenario.year + 1) % 100}` : scenario.year}
+            </div>
+            {pack.regimeFor && (() => {
+              const r = pack.regimeFor(scenario.year)
+              return (
+                <div className={`mt-0.5 text-[9.5px] font-bold uppercase tracking-wide ${r.draft ? 'text-warn' : 'text-safe'}`}>
+                  {r.name}{r.draft ? ' · draft' : ''}{r.cycle ? ` · ${r.cycle}` : ''}
+                </div>
+              )
+            })()}
+          </div>
+        </div>
       </Section>
 
       {/* Breakdown + children list */}

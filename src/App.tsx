@@ -31,7 +31,7 @@ import Login from './screens/Login'
 // book of record; levers live in Scenario); Pooling is the add-on (only some
 // regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling' }[] = [
-  { id: 'analyse', label: 'Analyse', icon: 'scatter', tier: 'Core' },
+  { id: 'analyse', label: 'Plan', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
   { id: 'scenario', label: 'Scenario', icon: 'target', tier: 'Core' },
   { id: 'creditbook', label: 'Credit book', icon: 'scale', tier: 'Core' },

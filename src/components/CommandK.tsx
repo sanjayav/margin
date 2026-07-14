@@ -77,7 +77,7 @@ export default function CommandK() {
 
     if (inModule) {
       const screens: { label: string; icon: IconName; go: () => void; sub?: string }[] = [
-        { label: 'Analyse', icon: 'scatter', go: () => setScreen('analyse'), sub: 'actuals — the book of record, market → variant' },
+        { label: 'Plan', icon: 'scatter', go: () => setScreen('analyse'), sub: 'actuals — the book of record, market → variant' },
         { label: 'Forecast', icon: 'trending', go: () => setScreen('forecast'), sub: 'multi-year scenario studio' },
         { label: 'Scenario · Model', icon: 'sliders' as IconName, go: () => setScreen('model'), sub: 'the workbench — levers on the live drill' },
         { label: 'Scenario · Get under the line', icon: 'target', go: () => setScreen('under'), sub: 'cheapest path to compliance' },
@@ -93,7 +93,7 @@ export default function CommandK() {
 
       parentsFor(country).forEach((m) =>
         list.push({
-          id: `mk-${m}`, group: 'Manufacturers', label: m, sub: 'open in Analyse', icon: 'building',
+          id: `mk-${m}`, group: 'Manufacturers', label: m, sub: 'open in Plan', icon: 'building',
           run: done(() => {
             const pmap = parentPoolMap(getFleet(country), scenario.year)
             setParent(m); setDrill([pmap[m] ?? m, m]); setScreen('analyse')
