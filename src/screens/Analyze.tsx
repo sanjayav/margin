@@ -12,7 +12,7 @@ import { Section, Stat, Bar } from '../components/ui'
 import CafeLedger from '../components/CafeLedger'
 import { INDIA_CATALOG } from '../data/india_catalog'
 import Icon from '../components/Icon'
-import { makeLimitAt } from '../lib/chart'
+import { makeLimitAt, makeLimitAtWith } from '../lib/chart'
 import { useCountUp } from '../lib/useCountUp'
 import { useProvenance } from '../lib/provenance'
 import { recommend } from '../engine/recommend'
@@ -53,6 +53,43 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   const selectedVariant = level === 4 ? drill[3] : null
   const limitAt = useMemo(() => makeLimitAt(pack, scenario, chartNode), [pack, scenario, chartNode])
   const colorBy = level >= 3 ? 'powertrain' : 'status'
+
+  // ── the line, made honest ──────────────────────────────────────────────────
+  // L1 ghosts: every other year's statutory line behind the current one (the
+  // walls close in). L2 corridor: while the regime is a DRAFT, the line is not
+  // law — show the band the final rules can land in (±10% stringency, the same
+  // range as the rail lever) with fan-chart shading, and on the Model workbench
+  // let the analyst DRAG the line itself to set that lever. L3: Line/Gap view.
+  const [chartView, setChartView] = useState<'line' | 'gap'>('line')
+  const draftLine = !!pack.regimeFor?.(scenario.year)?.draft
+  const ghostLines = useMemo(
+    () => pack.years.filter((y) => y !== scenario.year).map((y) => ({
+      year: y, draft: !!pack.regimeFor?.(y)?.draft,
+      limitAt: makeLimitAtWith(pack, scenario, chartNode, { year: y }),
+    })),
+    [pack, scenario, chartNode],
+  )
+  const corridor = useMemo(() => (draftLine ? {
+    lo: makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: -10 }),
+    hi: makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: 10 }),
+    note: `${pack.regimeFor!(scenario.year).name} is a draft — the final notification can land anywhere in this corridor (stringency −10% … +10%). The centre line is the draft as published${(scenario.targetShiftPct ?? 0) !== 0 ? `, currently stressed ${scenario.targetShiftPct! > 0 ? '+' : ''}${scenario.targetShiftPct}%` : ''}.`,
+  } : undefined), [draftLine, pack, scenario, chartNode])
+  // dragging the line is a LEVER (regulator-side) — Model workbench only;
+  // Plan is the book of record, where the line is the draft as published.
+  const stringency = useMemo(() => (draftLine && mode === 'model' ? {
+    value: scenario.targetShiftPct ?? 0, min: -10, max: 10,
+    lineAt: (pct: number) => makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: pct === 0 ? null : pct }),
+    solve: (mass: number, targetLimit: number) => {
+      let lo = -10, hi = 10
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2
+        if (makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: mid })(mass) < targetLimit) lo = mid
+        else hi = mid
+      }
+      return (lo + hi) / 2
+    },
+    commit: (pct: number) => patchScenario({ targetShiftPct: pct === 0 ? null : pct }),
+  } : undefined), [draftLine, mode, pack, scenario, chartNode, patchScenario])
 
   // stable bubble-size denominator: manufacturer total when drilled into a maker,
   // pool total at pool level — so a lone variant still scales with volume.
@@ -383,8 +420,16 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       </div>
 
       {/* Bubble chart with drill */}
-      <Section className="rise [animation-delay:300ms]" title={`${sectionLabel} vs the limit`} right={
+      <Section className="rise [animation-delay:300ms]" title={chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`} right={
         <span className="flex items-center gap-3">
+          <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5" title="Line = the classic mass-indexed chart. Gap = distance to the line as the axis — under the line is literally below zero, and gaps compare across masses.">
+            {(['line', 'gap'] as const).map((v) => (
+              <button key={v} data-testid={`chart-view-${v}`} onClick={() => setChartView(v)}
+                className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize transition ${chartView === v ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
+                {v === 'line' ? 'Line' : 'Gap'}
+              </button>
+            ))}
+          </span>
           <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
             {(['auto', 'status', 'powertrain'] as const).map((m) => (
               <button key={m} onClick={() => setColorMode(m)}
@@ -404,7 +449,8 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           </div>
         )}
         <div className="relative">
-          <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1} />
+          <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1}
+            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} />
           {/* which year the chart is showing — always in the chart itself, with
               the governing regime + test cycle when the pack knows them */}
           <div data-testid="chart-year-badge" className="pointer-events-none absolute right-3 top-1.5 select-none text-right">

@@ -31,6 +31,14 @@ export function makeLimitAt(pack: RulePack, scenario: Scenario, agg: Aggregate) 
   return (mass: number) => pack.limit({ year: scenario.year, avgMass: mass, zlevShare: agg.zlevShare, vclass, scenario })
 }
 
+/** Same, with a scenario patch — powers the chart's ghost year lines
+ *  ({ year: y }) and the draft corridor / stringency drag ({ targetShiftPct }). */
+export function makeLimitAtWith(pack: RulePack, scenario: Scenario, agg: Aggregate, patch: Partial<Scenario>) {
+  const s = { ...scenario, ...patch }
+  const vclass = dominantClass(agg)
+  return (mass: number) => pack.limit({ year: s.year, avgMass: mass, zlevShare: agg.zlevShare, vclass, scenario: s })
+}
+
 export function dominantClass(agg: Aggregate): string {
   const counts = new Map<string, number>()
   for (const v of agg.vehicles) counts.set(v.vclass, (counts.get(v.vclass) ?? 0) + v.sales)
