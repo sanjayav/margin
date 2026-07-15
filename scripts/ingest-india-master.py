@@ -137,6 +137,10 @@ def main():
             "segment": txt(d.get("K")),
             "bodyStyle": next((txt(s.get("J")) for s in specs if s.get("J")), None),
             "footprint": next((num(s.get("Z")) for s in specs if num(s.get("Z"))), None),
+            # homologation cycle joined from the model's variant specs (uniform
+            # in the master: ARAI→MIDC) — powers the Drive cycle column and
+            # squares with the CAFE II·MIDC / CAFE III·WLTP era bands.
+            "driveCycle": next((DRIVECYCLE.get(s.get("AI"), txt(s.get("AI"))) for s in specs if s.get("AI")), None),
             "vclass": "Passenger car", "scenario": "Base",
         }
         fleet.append({k: v for k, v in rec.items() if v is not None})

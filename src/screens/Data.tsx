@@ -7,6 +7,8 @@ import { fmtInt, fmtNum, applyScenario } from '../engine/engine'
 import Icon from '../components/Icon'
 import ImportStudio from '../components/ImportStudio'
 import { Stat } from '../components/ui'
+import { OPTIONAL_STRUCTURE, structureCoverage } from '../lib/masterColumns'
+import { INDIA_CATALOG } from '../data/india_catalog'
 
 /** A human variant/spec descriptor — the finest sellable configuration of a
  *  model. Uses the explicit field from the source when present, else composes
@@ -121,6 +123,14 @@ export default function Data() {
   // version through the same store the imports use, so edits are auditable.
   const [editor, setEditor] = useState<{ row: Partial<Vehicle>; original: Vehicle | null } | null>(null)
   const [armDel, setArmDel] = useState<Vehicle | null>(null)
+  // Two row sources share the master structure: FLEET (Model rows — volumes,
+  // the compliance base) and the VARIANT LIBRARY (Variant rows — full specs,
+  // no volumes). Most master headings live at Variant level, so the library is
+  // where the whole structure is visible today.
+  const hasLibrary = country === 'IN' && INDIA_CATALOG.length > 0
+  const [source, setSource] = useState<'fleet' | 'library'>('fleet')
+  const library = hasLibrary && source === 'library'
+  const [covOpen, setCovOpen] = useState(false)
 
   // expert filters — facets + numeric ranges + grouping
   const [fMaker, setFMaker] = useState<Set<string>>(new Set())
@@ -138,13 +148,22 @@ export default function Data() {
   const scenarioMode = !!activeScenario
 
   const all = useMemo<Vehicle[]>(() => getFleet(country), [country, dataVersion])
+  const libraryRows = useMemo<Vehicle[]>(
+    // kerb weight IS the mass basis for these specs — feed the core mass column
+    // (and drop the then-duplicate optional Kerb weight column) so the table
+    // never renders a NaN
+    () => (hasLibrary ? INDIA_CATALOG.map(({ kerbMass, ...v }) => ({ sales: 0, pool: v.parent ?? '', make: v.brand ?? v.parent ?? '', ...v, mass: (v as Vehicle).mass ?? kerbMass ?? 0 } as Vehicle)) : []),
+    [hasLibrary],
+  )
 
   // In scenario mode the rows are the engine's output for that scenario's year
   // (levers, mix, added variants and all). In actuals mode it's the raw fleet.
+  // The variant library is a spec catalog — scenarios don't apply to it.
   const base = useMemo<Vehicle[]>(() => {
+    if (library) return libraryRows
     if (!activeScenario) return all
     return applyScenario(all, activeScenario.scenario, pack, activeScenario.overrides)
-  }, [all, activeScenario, pack])
+  }, [all, activeScenario, pack, library, libraryRows])
 
   const metricOf = (r: Vehicle) => (activeScenario ? pack.vehicleMetric(r, activeScenario.scenario) : r.co2)
 
@@ -170,27 +189,27 @@ export default function Data() {
     { k: 'vclass', label: 'Class' },
   ], [pack])
 
-  // The master-file structure: these headings appear as columns the moment the
-  // market's data carries them (hidden when empty, never dropped from the schema).
-  const OPT_COLS: Col[] = useMemo(() => [
-    { k: 'segment' as ColKey, label: 'Segment' },
-    { k: 'bodyStyle' as ColKey, label: 'Body style' },
-    { k: 'fuelKmpl' as ColKey, label: 'km/l', num: true },
-    { k: 'range' as ColKey, label: 'E-Range km', num: true },
-    { k: 'otrPrice' as ColKey, label: 'OTR price', num: true },
-    { k: 'tax' as ColKey, label: 'Tax', num: true },
-  ], [])
+  // The master-file structure: EVERY optional heading of the master is in the
+  // registry (lib/masterColumns.ts) and appears as a column the moment the
+  // rows in view carry it — hidden when empty, never dropped from the schema.
+  // The coverage panel explains the hidden ones.
+  const OPT_COLS: Col[] = useMemo(
+    () => OPTIONAL_STRUCTURE.map((c) => ({ k: c.k as ColKey, label: c.label, num: c.num })),
+    [],
+  )
+  const coverage = useMemo(() => structureCoverage(base), [base])
   const cols = useMemo(() => {
     const present = OPT_COLS.filter((c) => base.some((r) => (r as any)[c.k] != null && (r as any)[c.k] !== ''))
     // projected horizon rows must be tellable from record rows — in the table
     // AND in any CSV export of it
     if (base.some((r) => r.scenario === 'Baseline projection'))
       present.push({ k: 'scenario' as ColKey, label: 'Basis' })
-    const out = COLS.filter((c) => !c.scenarioOnly || scenarioMode)
+    // the library is a spec catalog: no volumes, so no Units column
+    const out = COLS.filter((c) => (!c.scenarioOnly || scenarioMode) && !(library && c.k === 'sales'))
     // slot the structure columns before Class so the table reads like the master
     const at = out.findIndex((c) => c.k === 'vclass')
     return [...out.slice(0, at), ...present, ...out.slice(at)]
-  }, [COLS, OPT_COLS, scenarioMode, base])
+  }, [COLS, OPT_COLS, scenarioMode, base, library])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -225,7 +244,7 @@ export default function Data() {
 
   // ── grouped/pivot view: aggregate the FILTERED rows by one dimension ───────
   const groups = useMemo<GroupRow[] | null>(() => {
-    if (groupBy === 'none') return null
+    if (groupBy === 'none' || library) return null // library rows carry no volumes to weight
     if (!groupOptions.some((g) => g.k === groupBy)) return null // dimension absent in this market
     const m = new Map<string, { rows: number; units: number; co2U: number; metU: number; massU: number; bevU: number }>()
     for (const r of rows) {
@@ -335,24 +354,36 @@ export default function Data() {
       {/* KPI band */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat className="rise" label="Rows in view" value={fmtInt(rows.length)} sub={scenarioMode ? `${activeScenario!.scenario.year} only · scenario` : `of ${fmtInt(all.length)} in ${pack.flag}`} accent={scenarioMode ? 'text-brand' : undefined} />
-        <Stat className="rise [animation-delay:50ms]" label="Registrations" value={fmtInt(totalUnits)} sub={scenarioMode ? 'scenario units' : 'sum of units'} accent={scenarioMode ? 'text-brand' : undefined} />
-        <Stat className="rise [animation-delay:100ms]" label="Sales-wtd CO₂" value={fmtNum(wCo2, 1)} sub={scenarioMode ? `${fmtNum(wMetric, 1)} after credits` : 'g/km · of the current view'} />
+        <Stat className="rise [animation-delay:50ms]" label={library ? 'Models covered' : 'Registrations'} value={fmtInt(library ? new Set(rows.map((r) => r.model)).size : totalUnits)} sub={library ? 'spec library — no volumes' : scenarioMode ? 'scenario units' : 'sum of units'} accent={scenarioMode ? 'text-brand' : undefined} />
+        <Stat className="rise [animation-delay:100ms]" label={library ? 'Avg CO₂ (specs)' : 'Sales-wtd CO₂'} value={fmtNum(library ? rows.reduce((a, r) => a + r.co2, 0) / Math.max(1, rows.length) : wCo2, 1)} sub={library ? 'unweighted — no volumes' : scenarioMode ? `${fmtNum(wMetric, 1)} after credits` : 'g/km · of the current view'} />
         <Stat className="rise [animation-delay:150ms]" label="Manufacturers" value={fmtInt(makers)} sub={`${optPts.length} powertrains`} />
-        <Stat className="rise [animation-delay:200ms]" label="View" value={scenarioMode ? 'Scenario' : 'Actuals'} sub={scenarioMode ? activeScenario!.label : meta.live ? 'Live dataset' : 'Bundled extract'} accent={scenarioMode ? 'text-brand' : meta.live ? 'text-safe' : 'text-ink-400'} />
+        <Stat className="rise [animation-delay:200ms]" label="View" value={library ? 'Library' : scenarioMode ? 'Scenario' : 'Actuals'} sub={library ? 'master Variant rows' : scenarioMode ? activeScenario!.label : meta.live ? 'Live dataset' : 'Bundled extract'} accent={scenarioMode ? 'text-brand' : meta.live ? 'text-safe' : 'text-ink-400'} />
       </div>
 
       {/* View selector — actuals vs a saved scenario */}
       <div className="rise card flex flex-wrap items-center justify-between gap-3 p-4 [animation-delay:200ms]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="label flex items-center gap-1.5 text-ink-400"><Icon name="layers" size={13} /> Data view</span>
-          <button onClick={() => setView('ACTUAL')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!scenarioMode ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>Actuals</button>
-          {myScenarios.length === 0
-            ? <span className="text-[11px] text-ink-500">— save a scenario in the Scenario module to view scenario-based data here</span>
-            : myScenarios.map((s) => (
-              <button key={s.id} onClick={() => setView(s.id)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === s.id ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{s.label}</button>
-            ))}
+          {hasLibrary && (
+            <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
+              <button data-testid="source-fleet" onClick={() => setSource('fleet')}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${!library ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>Fleet · sales rows</button>
+              <button data-testid="source-library" onClick={() => { setSource('library'); setView('ACTUAL') }}
+                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition ${library ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>Variant library · {INDIA_CATALOG.length} specs</button>
+            </span>
+          )}
+          {library ? (
+            <span className="text-[11px] text-ink-500">— the master's Variant rows: full spec structure, no volumes (scenarios don't apply)</span>
+          ) : (<>
+            <button onClick={() => setView('ACTUAL')}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!scenarioMode ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>Actuals</button>
+            {myScenarios.length === 0
+              ? <span className="text-[11px] text-ink-500">— save a scenario in the Scenario module to view scenario-based data here</span>
+              : myScenarios.map((s) => (
+                <button key={s.id} onClick={() => setView(s.id)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${view === s.id ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{s.label}</button>
+              ))}
+          </>)}
         </div>
         <div className="flex items-center gap-2 text-xs text-ink-500">
           {scenarioMode && <span className="chip"><Icon name="sliders" size={12} /> scenario year {activeScenario!.scenario.year}</span>}
@@ -371,11 +402,38 @@ export default function Data() {
             {q && <button onClick={() => setQ('')}><Icon name="close" size={14} className="text-ink-500 hover:text-ink-100" /></button>}
           </div>
           <button onClick={() => setImporting(true)} className="btn-primary px-3 py-2 text-xs"><Icon name="upload" size={14} /> Import data</button>
-          {!scenarioMode && (
+          {!scenarioMode && !library && (
             <button data-testid="add-row" onClick={() => setEditor({ row: { year: Number([...fYear][0]) || pack.years[0], vclass: pack.classes[0], powertrain: 'ICE', parent: fMaker.size === 1 ? [...fMaker][0] : '' }, original: null })}
               className="btn-ghost px-3 py-2 text-xs"><Icon name="plus" size={14} /> Add row</button>
           )}
           <button onClick={exportCsv} className="btn-ghost px-3 py-2 text-xs"><Icon name="section" size={14} /> Export {groups ? 'pivot' : 'CSV'}</button>
+          {/* structure coverage — every master heading, and WHY it is (not) a column */}
+          <div className="relative">
+            <button data-testid="structure-coverage" onClick={() => setCovOpen((o) => !o)}
+              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${covOpen ? 'border-brand/40 bg-brand/[0.07] text-brand' : 'border-black/[0.08] bg-white/60 text-ink-400 hover:text-ink-100'}`}>
+              <Icon name="table" size={13} /> Structure {coverage.carrying}/{coverage.total}
+            </button>
+            {covOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setCovOpen(false)} />
+                <div data-testid="coverage-panel" className="absolute right-0 z-40 mt-1.5 max-h-[420px] w-[420px] overflow-y-auto rounded-xl border border-black/10 bg-[#FFFEFB] p-3 shadow-xl">
+                  <div className="mb-1 text-[11px] font-bold text-ink-100">The master structure — all {coverage.items.length} headings</div>
+                  <p className="mb-2 text-[10px] leading-snug text-ink-500">
+                    Columns appear the moment rows carry data. Spec headings live on the master's <b>Variant</b> rows (the Variant library); volumes live on <b>Model</b> rows (the Fleet). Empty headings light up when the master file or an import fills them.
+                  </p>
+                  {coverage.items.map((h) => (
+                    <div key={h.label} className="flex items-center gap-2 border-t border-black/[0.04] py-1 text-[10.5px]">
+                      <i className={`h-1.5 w-1.5 shrink-0 rounded-full ${h.state === 'core' || h.state === 'populated' ? 'bg-safe' : h.state === 'empty' ? 'border border-ink-600 bg-transparent' : 'bg-brand/60'}`} />
+                      <span className="flex-1 truncate text-ink-200">{h.label}</span>
+                      <span className={`shrink-0 font-semibold ${h.state === 'empty' ? 'text-ink-500' : h.state === 'populated' || h.state === 'core' ? 'text-safe' : 'text-brand'}`}>
+                        {h.state === 'core' ? 'core column' : h.state === 'populated' ? 'shown · has data' : h.state === 'empty' ? 'empty at source' : h.state === 'computed' ? 'CAFE ledger · live' : h.implicit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Facet label="Manufacturer" options={optMakers} sel={fMaker} onChange={setFMaker} />
@@ -392,16 +450,18 @@ export default function Data() {
           )}
         </div>
         {chips.length > 0 && <div className="flex flex-wrap items-center gap-1.5">{chips}</div>}
-        <div className="flex flex-wrap items-center gap-1 border-t border-black/[0.05] pt-3">
-          <span className="label mr-1 text-ink-400">View as</span>
-          {groupOptions.map((g) => (
-            <button key={g.k} onClick={() => setGroupBy(g.k)}
-              className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${groupBy === g.k ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>
-              {g.k === 'none' ? g.label : `By ${g.label.toLowerCase()}`}
-            </button>
-          ))}
-          {groups && <span className="ml-auto text-[11px] text-ink-500">{groups.length} groups · sales-weighted averages</span>}
-        </div>
+        {!library && (
+          <div className="flex flex-wrap items-center gap-1 border-t border-black/[0.05] pt-3">
+            <span className="label mr-1 text-ink-400">View as</span>
+            {groupOptions.map((g) => (
+              <button key={g.k} onClick={() => setGroupBy(g.k)}
+                className={`rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${groupBy === g.k ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>
+                {g.k === 'none' ? g.label : `By ${g.label.toLowerCase()}`}
+              </button>
+            ))}
+            {groups && <span className="ml-auto text-[11px] text-ink-500">{groups.length} groups · sales-weighted averages</span>}
+          </div>
+        )}
       </div>
 
       {/* Table — detail rows or the grouped pivot */}
@@ -467,7 +527,7 @@ export default function Data() {
                       <span className="inline-flex items-center gap-1">{c.label}{sortKey === c.k && <span className="text-brand">{sortDir === 'asc' ? '▲' : '▼'}</span>}</span>
                     </th>
                   ))}
-                  {!scenarioMode && <th className="w-16 px-2 py-2.5" aria-label="Row actions" />}
+                  {!scenarioMode && !library && <th className="w-16 px-2 py-2.5" aria-label="Row actions" />}
                 </tr>
               </thead>
               <tbody>
@@ -506,7 +566,7 @@ export default function Data() {
                   return (
                     <tr key={i} className="group border-b border-black/[0.04] transition-colors odd:bg-black/[0.012] hover:bg-brand/[0.04]">
                       {cols.map(td)}
-                      {!scenarioMode && (
+                      {!scenarioMode && !library && (
                         <td className="whitespace-nowrap px-2 py-1.5 text-right">
                           <span className="inline-flex items-center gap-0.5 opacity-25 transition-opacity group-hover:opacity-100" onMouseLeave={() => armDel === r && setArmDel(null)}>
                             <button title="Edit row" onClick={() => setEditor({ row: { ...r }, original: r })}
@@ -521,7 +581,7 @@ export default function Data() {
                   )
                 })}
                 {rows.length === 0 && (
-                  <tr><td colSpan={cols.length + (scenarioMode ? 0 : 1)} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
+                  <tr><td colSpan={cols.length + (scenarioMode || library ? 0 : 1)} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
                 )}
               </tbody>
             </table>

@@ -128,5 +128,19 @@ for (const y of pack.years) {
   check('share-mode preserves the scope total', Math.abs(total - baseUnits * 2) < 2, `${total.toFixed(0)} vs ${baseUnits * 2}`)
 }
 
+// ── the master structure is fully addressable ───────────────────────────────
+{
+  const { INDIA_CATALOG } = await import('../src/data/india_catalog.js')
+  const { OPTIONAL_STRUCTURE, MASTER_HEADINGS, structureCoverage } = await import('../src/lib/masterColumns.js')
+  check('fleet rows carry the joined drive cycle (MIDC)', IN.every((v) => v.driveCycle === 'MIDC'))
+  check('registry addresses every optional master heading', MASTER_HEADINGS.filter((h) => h.k).every((h) => OPTIONAL_STRUCTURE.some((c) => c.k === h.k)))
+  const lib = INDIA_CATALOG.map((v: any) => ({ sales: 0, ...v }))
+  const cov = structureCoverage(lib as any)
+  const populated = cov.items.filter((i: any) => i.state === 'populated').map((i: any) => i.label)
+  check('variant library populates the spec headings', ['Engine Capacity', 'FT Code', 'Gear Box', 'Driveline', 'Kerb Weight', 'Drive Cycle', 'Length'].every((l) => populated.includes(l)), populated.length + ' populated')
+  const empty = cov.items.filter((i: any) => i.state === 'empty').map((i: any) => i.label)
+  check('empty-at-source headings identified (OTR Price, Test Mass, Tax…)', ['OTR Price', 'Test Mass', 'Tax', 'Energy consumption'].every((l) => empty.includes(l)), empty.join(' · '))
+}
+
 console.log(`\n${pass} passed · ${fail} failed`)
 if (fail) process.exit(1)
