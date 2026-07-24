@@ -23,7 +23,7 @@ type Fleets = Record<CountryId, Vehicle[]>
 /** Live fleet from the store (Neon or local), else the bundled extract — so the
  *  analyst's numbers match what the screens show. */
 async function loadFleets(): Promise<Fleets> {
-  const out: Fleets = { EU: FLEET.EU, IN: FLEET.IN, AU: FLEET.AU, UK: FLEET.UK }
+  const out: Fleets = { EU: FLEET.EU, IN: FLEET.IN, AU: FLEET.AU, UK: FLEET.UK, CN: FLEET.CN }
   await Promise.all(
     PACK_LIST.map(async (p) => {
       try {
