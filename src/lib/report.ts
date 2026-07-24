@@ -17,7 +17,7 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { text-align: left; color: #6b7280; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #e5e7eb; padding: 6px 8px; }
 td { padding: 6px 8px; border-bottom: 1px solid #f1f3f5; font-variant-numeric: tabular-nums; }
-.brand { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #ED4709; color: #fff; font-weight: 900; }
+.brand { display: inline-flex; align-items: center; gap: 7px; font-weight: 900; font-size: 22px; letter-spacing: -0.02em; color: #E8223B; }
 .head { display: flex; align-items: center; gap: 12px; }
 .foot { margin-top: 36px; color: #9ca3af; font-size: 11px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
 @media print { body { padding: 24px; } }
@@ -30,7 +30,7 @@ export function buildMakerReport(agg: Aggregate, pack: RulePack, s: Scenario, me
     .map((a, i) => `<tr><td>${i + 1}</td><td>${a.title}</td><td>${a.difficulty}</td><td style="text-align:right">${fmtMoney(a.cost, pack.currency)}</td><td style="text-align:right">${fmtMoney(a.fineAvoided, pack.currency)}</td></tr>`)
     .join('')
   return `
-  <div class="head"><span class="brand">A</span><div><h1>Autocred AI — Compliance Report</h1>
+  <div class="head"><span class="brand">&#9650; AiRE</span><div><h1>AiRE — Compliance Report</h1>
     <div class="sub">${pack.name} · ${agg.label} · compliance year ${s.year} · generated ${dateISO}</div></div></div>
 
   <h2>Position</h2>
@@ -55,7 +55,7 @@ export function buildMakerReport(agg: Aggregate, pack: RulePack, s: Scenario, me
   <div class="row"><span class="k">Rule pack</span><span class="v">${pack.limitNote}</span></div>
   <div class="row"><span class="k">Fine rate</span><span class="v">${pack.fineRateLabel}</span></div>
 
-  <div class="foot">Autocred AI · figures computed by the shared compliance engine from official-source data. Pinned to dataset version ${meta.datasetVersion}. Illustrative where noted in the rule pack.</div>`
+  <div class="foot">AiRE · figures computed by the shared compliance engine from official-source data. Pinned to dataset version ${meta.datasetVersion}. Illustrative where noted in the rule pack.</div>`
 }
 
 export function openPrintReport(title: string, bodyHtml: string) {
@@ -96,7 +96,7 @@ export function buildForecastPack(i: ForecastPackInput): string {
   const best = [...i.cases].sort((a, b) => a.cum - b.cum)[0]
 
   return `
-  <div class="head"><span class="brand">A</span><div><h1>Autocred AI — Forecast Board Pack</h1>
+  <div class="head"><span class="brand">&#9650; AiRE</span><div><h1>AiRE — Forecast Board Pack</h1>
     <div class="sub">${pack.name} · ${i.targetLabel} · horizon ${i.horizon[0]}–${i.horizon[1]} · generated ${i.dateISO}</div></div></div>
 
   <h2>Executive summary</h2>
@@ -126,5 +126,5 @@ export function buildForecastPack(i: ForecastPackInput): string {
   <h2>Methodology & limitations</h2>
   <p class="sub">The outlook projects the ${i.baseYear} as-sold fleet: volumes grow at the market-growth driver, combustion CO₂ improves at the technology driver, mass drifts per the mass driver, and zero-emission share follows an S-curve to the horizon driver (floored by any statutory mandate). Compliance, credits and fines are computed by the same deterministic engine as every live screen — nothing in this pack is estimated outside the stated drivers. Cases are driver-sets; the Management case applies the named saved scenario on the base fundamentals. Limitations: makers hold market share; no new-entrant modelling; model-level launches enter via imported plans, not assumptions.</p>
 
-  <div class="foot">Autocred AI · forecast board pack. Pinned to dataset version ${i.meta.datasetVersion}; regenerate after each data refresh. Illustrative where noted in the rule pack.</div>`
+  <div class="foot">AiRE · forecast board pack. Pinned to dataset version ${i.meta.datasetVersion}; regenerate after each data refresh. Illustrative where noted in the rule pack.</div>`
 }

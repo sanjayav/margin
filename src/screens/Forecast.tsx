@@ -65,7 +65,7 @@ export default function Forecast() {
   const setWeights = useDrivers((s) => s.setWeights)
   const setMgmtScenario = useDrivers((s) => s.setMgmtScenario)
   const driverSet = useMemo(() => driverSetFor(country, drvOverrides), [country, drvOverrides])
-  const vintageYear = meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear()
+  const vintageYear = pack.actualsThroughYear ?? (meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear())
   const mgmtScenario = savedScenarios.find((x) => x.id === (mgmtIds[country] ?? '') && x.country === country) ?? null
   const weights = weightsFor(country, drvWeights, !!mgmtScenario)
 
@@ -258,7 +258,7 @@ export default function Forecast() {
       ], pack.currency, `Fine bridge ${packBridge.year - 1} → ${packBridge.year} (base case, market)`) : undefined,
       sCurve: svgSCurve(pack.years, pack.years.map((y) => run.shareFor(y)), pack.years.map((y) => mandateFloor(pack, y)), `Zero-emission adoption path · seeded from ${run.baseYear} actuals`),
     }
-    openPrintReport(`Autocred AI · Forecast board pack · ${pack.name}`, buildForecastPack({
+    openPrintReport(`AiRE · Forecast board pack · ${pack.name}`, buildForecastPack({
       pack, meta, dateISO: new Date().toISOString().slice(0, 10),
       targetLabel: isMarket ? 'Whole market' : parent,
       horizon: [pack.years[0], finalYear], baseYear: run.baseYear,
@@ -898,8 +898,8 @@ function ImpactHeader({ scen, fc, baseFc, overlay, pack }: { scen: StudioScenari
         <div className="grid grid-cols-2 gap-3 lg:col-span-3">
           <ImpactChip icon="alert" label="First over the line" value={firstBreach ? String(firstBreach.year) : 'Clears'} sub={firstBreach ? `+${fmtNum(firstBreach.lGap, 1)} ${pack.metricUnit} that year` : 'compliant every year'} tone={firstBreach ? 'text-warn' : 'text-safe'} />
           <ImpactChip icon="trending" label="Peak annual fine" value={peakYear.lFine > 0 ? fmtMoney(peakYear.lFine, pack.currency) : '—'} sub={peakYear.lFine > 0 ? `worst single year · ${peakYear.year}` : 'no fine in any year'} tone={peakYear.lFine > 0 ? 'text-ink-100' : 'text-ink-400'} />
-          <ImpactChip icon="bolt" label="Clear the line" value={req != null ? `${req}% ZE` : firstBreach ? 'EV alone can’t' : 'On track'} sub={req != null ? `zero-emission share needed by ${fc.last.year}` : firstBreach ? `needs mass, credits or pooling by ${fc.last.year}` : `compliant through ${fc.last.year}`} tone={req != null ? 'text-accent' : firstBreach ? 'text-warn' : 'text-safe'} />
-          <ImpactChip icon="scale" label="The limit tightens" value={`−${baseFc.limitDropPct}%`} sub={`${fmtNum(baseFc.first.bLimit, 1)} → ${fmtNum(baseFc.last.bLimit, 1)} ${pack.metricUnit} by ${fc.last.year}`} tone="text-accent" />
+          <ImpactChip icon="bolt" label="Clear the line" value={req != null ? `${req}% ZE` : firstBreach ? 'EV alone can’t' : 'On track'} sub={req != null ? `zero-emission share needed by ${fc.last.year}` : firstBreach ? `needs mass, credits or pooling by ${fc.last.year}` : `compliant through ${fc.last.year}`} tone={req != null ? 'text-accentblue' : firstBreach ? 'text-warn' : 'text-safe'} />
+          <ImpactChip icon="scale" label="The limit tightens" value={`−${baseFc.limitDropPct}%`} sub={`${fmtNum(baseFc.first.bLimit, 1)} → ${fmtNum(baseFc.last.bLimit, 1)} ${pack.metricUnit} by ${fc.last.year}`} tone="text-accentblue" />
         </div>
       </div>
     </div>
@@ -937,17 +937,17 @@ function GlidePath({ series }: { series: ForecastResult['years'] }) {
           <div key={s.year} className="flex items-center gap-3">
             <div className="w-10 shrink-0 num text-xs text-ink-400">{s.year}</div>
             <div className="relative h-5 flex-1 overflow-hidden rounded bg-black/[0.03]">
-              <div className={`h-full rounded transition-all duration-300 ${infeasible ? 'bg-warn/40' : closed ? 'bg-safe/30' : 'bg-accent/30'}`} style={{ width: `${reqW}%` }} />
+              <div className={`h-full rounded transition-all duration-300 ${infeasible ? 'bg-warn/40' : closed ? 'bg-safe/30' : 'bg-accentblue/30'}`} style={{ width: `${reqW}%` }} />
               <div className="absolute top-0 h-5 w-[2px] bg-white" style={{ left: `${s.bShare}%` }} title={`now ${s.bShare}%`} />
             </div>
             <div className="w-24 shrink-0 text-right text-xs num">
-              {infeasible ? <span className="text-warn">EV not enough</span> : closed ? <span className="text-safe">{s.bShare}% ≥ {req}%</span> : <span className="text-accent">need {req}%</span>}
+              {infeasible ? <span className="text-warn">EV not enough</span> : closed ? <span className="text-safe">{s.bShare}% ≥ {req}%</span> : <span className="text-accentblue">need {req}%</span>}
             </div>
           </div>
         )
       })}
       <div className="flex items-center gap-3 pt-1 text-[10px] text-ink-500">
-        <span className="flex items-center gap-1"><i className="inline-block h-2 w-3 rounded bg-accent/40" />required share</span>
+        <span className="flex items-center gap-1"><i className="inline-block h-2 w-3 rounded bg-accentblue/40" />required share</span>
         <span className="flex items-center gap-1"><i className="inline-block h-3 w-[2px] bg-white" />where you are now</span>
       </div>
     </div>

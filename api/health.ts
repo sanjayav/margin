@@ -4,7 +4,7 @@
 import { getCurrent, backend } from './_store.js'
 import type { CountryId } from '../src/engine/types.js'
 
-const MARKETS: CountryId[] = ['EU', 'IN', 'AU', 'UK']
+const MARKETS: CountryId[] = ['EU', 'IN', 'AU', 'UK', 'CN']
 
 export default async function handler(_req: any, res: any) {
   const markets: Record<string, { rows: number; live: boolean; refreshed: string | null } | { error: string }> = {}

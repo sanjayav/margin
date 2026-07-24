@@ -4,7 +4,8 @@ import { useStore } from '../state/store'
 import { parentsFor } from '../data/fleet'
 import { recommend } from '../engine/recommend'
 import type { Scenario } from '../engine/types'
-import { aggregateParent, fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { aggregateParent, buildTree, fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { buildDualCredit } from '../engine/china/dualcredit'
 import { Section, StatusPill, difficultyColor } from '../components/ui'
 import GapWaterfall from '../components/GapWaterfall'
 import MaccChart from '../components/MaccChart'
@@ -65,6 +66,10 @@ export default function GetUnderLine() {
     const top = [...ds].sort((x, y) => Math.abs(y.a.value - y.b.value) - Math.abs(x.a.value - x.b.value))[0]
     return { base, ds, top }
   }, [raw, pack, scenario, selectedParent, overrides, plan, country])
+
+  // China clears a two-axis CREDIT balance, not a single line — the "cheapest
+  // path under the line" MACC does not apply. Show the credit-clearing action.
+  if (country === 'CN') return <ClearCreditsCN raw={raw} pack={pack} scenario={scenario} />
 
   return (
     <div className="space-y-5 animate-slidein">
@@ -159,7 +164,7 @@ export default function GetUnderLine() {
             {plan.actions.map((a, i) => (
               <li key={a.id} style={{ animationDelay: `${i * 70}ms` }}
                 className="rise relative flex items-start gap-4 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4 transition-colors hover:border-brand/25 hover:bg-brand/[0.025]">
-                <div className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full border border-brand/25 bg-[#FDF3EA] font-bold text-brand num shadow-[0_2px_6px_-2px_rgba(242,81,14,0.4)]">{i + 1}</div>
+                <div className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full border border-brand/25 bg-[#FDF3EA] font-bold text-brand num shadow-[0_2px_6px_-2px_rgba(232,34,59,0.4)]">{i + 1}</div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="grid h-7 w-7 place-items-center rounded-lg border border-black/[0.08] bg-black/[0.03] text-brand"><Icon name={LEVER_ICON[a.lever]} size={15} /></span>
@@ -170,7 +175,7 @@ export default function GetUnderLine() {
                   <div className="mt-2 flex flex-wrap gap-4 text-xs">
                     <span className="text-ink-500">Clears <b className="num text-safe">{fmtNum(a.gramsCleared, 2)} {pack.metricUnit}</b></span>
                     <span className="text-ink-500">Cost <b className="num text-ink-100">{fmtMoney(a.cost, pack.currency)}</b></span>
-                    <span className="text-ink-500">Fine avoided <b className="num text-accent">{fmtMoney(a.fineAvoided, pack.currency)}</b></span>
+                    <span className="text-ink-500">Fine avoided <b className="num text-accentblue">{fmtMoney(a.fineAvoided, pack.currency)}</b></span>
                   </div>
                 </div>
               </li>
@@ -195,3 +200,87 @@ const Cell = ({ label, children, highlight }: { label: string; children: React.R
     {children}
   </div>
 )
+
+// ── China · Clear the credits ────────────────────────────────────────────────
+// China isn't judged on a line — it's a two-axis credit balance. Clearing a
+// deficit is a dual-credit operation (own surplus → affiliate → buy NEV credits,
+// or electrify to EARN credits), not a fleet-CO₂ MACC. This is that action view.
+const CREDITS_PER_BEV = 2.0 // a marginal BEV earns ≈ 2 NEV credits (see dualcredit.ts)
+function ClearCreditsCN({ raw, pack, scenario }: { raw: any[]; pack: any; scenario: Scenario }) {
+  const setScreen = useStore((s) => s.setScreen)
+  const price = scenario.creditPrice ?? pack.creditPrice ?? pack.fineRate
+  const dc = useMemo(() => buildDualCredit(buildTree(raw, pack, scenario, {}), scenario, price), [raw, pack, scenario, price])
+  const shorts = dc.oems.filter((o) => o.creditsToBuy > 0.5).sort((a, b) => b.creditsToBuy - a.creditsToBuy)
+  const clear = dc.totals.makers - dc.totals.makersOver
+  const evsToBuild = Math.ceil(dc.totals.creditsToBuy / CREDITS_PER_BEV)
+  const f = (n: number) => (n >= 0 ? '+' : '−') + fmtInt(Math.abs(n))
+
+  return (
+    <div className="space-y-5 animate-slidein">
+      {/* verdict */}
+      <div className="rise card relative overflow-hidden p-5 pl-6">
+        <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: shorts.length ? 'linear-gradient(180deg,#E0484D,#E0484D55)' : 'linear-gradient(180deg,#0E9F6E,#0E9F6E55)' }} />
+        <div className="label text-ink-500">Clear the credits · 积分 · {scenario.year}</div>
+        <p className="mt-1.5 max-w-3xl text-[15px] leading-relaxed text-ink-300">
+          {shorts.length === 0 ? (
+            <>All <b className="text-ink-100">{dc.totals.makers}</b> compliance entities clear <b className="text-safe">both</b> axes — no credits to buy. Surplus can be banked or sold on the NEV-credit market.</>
+          ) : (
+            <><b className="text-ink-100">{clear} of {dc.totals.makers}</b> entities clear both axes. The rest are short after self-offset and must source{' '}
+              <b className="num text-danger">{fmtInt(dc.totals.creditsToBuy)}</b> NEV credits — <b className="num text-danger">{fmtMoney(dc.totals.cost, pack.currency)}</b> to buy clear, or ≈ <b className="num text-brand">{fmtInt(evsToBuild)}</b> more BEVs to earn them.</>
+          )}
+        </p>
+      </div>
+
+      {/* clearing order + buy-vs-build */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {[
+          { icon: 'reset', t: '1 · Own surplus', d: 'A prior-year CAFC surplus (banked, ≤5-yr) offsets a current CAFC deficit — automatic, free.' },
+          { icon: 'handshake', t: '2 · Affiliate transfer', d: 'CAFC surplus can move from an affiliate (≥25% common equity). NEV deficits never qualify.' },
+          { icon: 'card', t: '3 · Buy NEV credits', d: `Any residual CAFC deficit and every NEV deficit clear on the market at ${pack.creditPriceLabel ?? '≈¥1,000/credit'}.` },
+        ].map((s) => (
+          <div key={s.t} className="card p-4">
+            <div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name={s.icon as IconName} size={14} /></span><span className="text-[13px] font-bold text-ink-100">{s.t}</span></div>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-500">{s.d}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* per short-maker action table */}
+      {shorts.length > 0 ? (
+        <Section title="Who must act, and the cheapest way clear" right={<span className="text-[11px] text-ink-500">buy credits vs electrify</span>}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-black/[0.03] text-left text-[11px] uppercase tracking-wider text-ink-500">
+                  <th className="px-4 py-2.5">Compliance entity</th>
+                  <th className="px-4 py-2.5 text-right">CAFC 积分</th>
+                  <th className="px-4 py-2.5 text-right">NEV 积分</th>
+                  <th className="px-4 py-2.5 text-right">Credits to buy</th>
+                  <th className="px-4 py-2.5 text-right">Cost to clear</th>
+                  <th className="px-4 py-2.5 text-right">or build ≈</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shorts.map((o) => (
+                  <tr key={o.parent} className="border-t border-black/[0.04]">
+                    <td className="px-4 py-2.5 font-medium text-ink-100">{o.parent}</td>
+                    <td className={`num px-4 py-2.5 text-right ${o.cafcCredit < 0 ? 'text-danger' : 'text-safe'}`}>{f(o.cafcCredit)}</td>
+                    <td className={`num px-4 py-2.5 text-right ${o.nevBalance < 0 ? 'text-danger' : 'text-safe'}`}>{f(o.nevBalance)}</td>
+                    <td className="num px-4 py-2.5 text-right font-semibold text-danger">{fmtInt(o.creditsToBuy)}</td>
+                    <td className="num px-4 py-2.5 text-right font-bold text-danger">{fmtMoney(o.cost, pack.currency)}</td>
+                    <td className="num px-4 py-2.5 text-right text-brand">{fmtInt(Math.ceil(o.creditsToBuy / CREDITS_PER_BEV))} BEVs</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-500">A negative balance on either axis is a deficit. A CAFC deficit can be offset by the maker’s own spare NEV credits first; only the residual, plus any NEV-axis deficit, must be bought. Electrifying earns NEV credits instead of buying them — the last column is the rough BEV count that closes the gap at ≈{CREDITS_PER_BEV} credits/BEV.</p>
+        </Section>
+      ) : (
+        <Section><div className="py-8 text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-safe/30 bg-safe/10 text-safe"><Icon name="check" size={24} /></div><div className="mt-3 text-lg font-bold text-safe">Every entity clears both axes in {scenario.year}</div><div className="text-sm text-ink-500">No credits to buy. Move a lever on the right to stress-test the position.</div></div></Section>
+      )}
+
+      <button onClick={() => setScreen('creditbook')} className="btn-ghost"><Icon name="scale" size={15} /> Open the Credit book — full two-axis ledger & offset waterfall</button>
+    </div>
+  )
+}

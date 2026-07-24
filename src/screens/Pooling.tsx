@@ -7,10 +7,46 @@ import { Section, StatusPill, Stat, Bar } from '../components/ui'
 import Icon from '../components/Icon'
 
 export default function Pooling() {
-  const { pack, raw, scenario } = useCompliance()
+  const { pack, raw, scenario, country } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
   const setScreen = useStore((s) => s.setScreen)
   const overrides = useStore((s) => s.makerOverrides)
+
+  // China: no pooled averages at all — the whole clearing mechanism (own surplus,
+  // affiliate transfer, NEV-credit trading) is the dual-credit ledger. Send the
+  // user there rather than render an EU-style pool optimiser the law forbids.
+  if (country === 'CN') {
+    return (
+      <div className="space-y-5 animate-slidein">
+        <div className="card relative overflow-hidden p-6">
+          <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: 'linear-gradient(180deg,#E8223B,#E8223B55)' }} />
+          <div className="flex items-start gap-4">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><Icon name="handshake" size={20} /></div>
+            <div className="min-w-0">
+              <div className="label text-ink-500">Pooling · 双积分</div>
+              <h3 className="font-display mt-1 text-[19px] font-bold text-ink-100">China doesn’t pool fleets.</h3>
+              <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-400">
+                Unlike the EU, Chinese makers can’t combine fleets into one shared average. Every <b className="text-ink-200">compliance entity</b> is judged standalone on <b className="text-ink-200">both</b> axes — fuel-economy (CAFC 积分) and EV-volume (NEV 积分). A deficit is cleared, in order, by the maker’s <b className="text-ink-200">own carried-over surplus</b>, a transfer from an <b className="text-ink-200">affiliate</b> (关联企业, ≥25% equity), or by <b className="text-ink-200">buying NEV credits</b>. An NEV deficit can only ever be bought clear.
+              </p>
+              <button onClick={() => setScreen('creditbook')} className="btn-primary mt-4"><Icon name="scale" size={15} /> Open the Credit book — clear & trade credits</button>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {[
+            { icon: 'reset', t: 'Own surplus first', d: 'A prior-year CAFC surplus (banked, ≤5-yr validity) offsets a current CAFC deficit before anything is bought.' },
+            { icon: 'handshake', t: 'Affiliate transfer', d: 'CAFC surplus can move between entities with ≥25% common equity — intra-group only, never an open pool.' },
+            { icon: 'card', t: 'Buy NEV credits', d: 'The residual CAFC deficit and any NEV deficit are cleared on the NEV-credit market (¥/credit, volatile).' },
+          ].map((s) => (
+            <div key={s.t} className="card p-4">
+              <div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name={s.icon as any} size={14} /></span><span className="text-[13px] font-bold text-ink-100">{s.t}</span></div>
+              <p className="mt-2 text-[11.5px] leading-relaxed text-ink-500">{s.d}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   const rows = useMemo(() => standings(raw, pack, scenario, overrides), [raw, pack, scenario, overrides, dataVersion])
   const allParents = rows.map((r) => r.parent)
@@ -66,7 +102,7 @@ export default function Pooling() {
     <div className="space-y-5 animate-slidein">
       {/* THE VERDICT — what pooling is worth this year, in one sentence */}
       <div className="rise card relative overflow-hidden p-5">
-        <span className="absolute inset-y-0 left-0 w-1" style={{ background: opt.savings > 0 ? '#F2510E' : '#0E9F6E' }} />
+        <span className="absolute inset-y-0 left-0 w-1" style={{ background: opt.savings > 0 ? '#E8223B' : '#0E9F6E' }} />
         <div className="label">The verdict · {scenario.year}</div>
         <p className="mt-1.5 max-w-3xl text-[15px] leading-relaxed text-ink-300">
           {opt.savings > 0 ? (
@@ -90,7 +126,7 @@ export default function Pooling() {
         <Stat label="Standalone fines" value={fmtMoney(standaloneTotal, pack.currency)} sub="if no one cooperates" accent={standaloneTotal > 0 ? 'text-danger' : 'text-safe'} />
         <Stat label="If the whole market pools" value={fmtMoney(grand.fine, pack.currency)} sub={`${grand.status === 'fine' ? 'residual fine' : 'fully compliant'}`} accent={grand.fine > 0 ? 'text-warn' : 'text-safe'} />
         <Stat label="Value poolable" value={fmtMoney(standaloneTotal - grand.fine, pack.currency)} sub="total fine removable" accent="text-brand" />
-        <Stat label="Surplus available" value={`${fmtInt(surplusTotal)}`} sub={`g·units of headroom to share`} accent="text-accent" />
+        <Stat label="Surplus available" value={`${fmtInt(surplusTotal)}`} sub={`g·units of headroom to share`} accent="text-accentblue" />
       </div>
 
       {/* Registered pool groups — the legal hierarchy from the source data */}

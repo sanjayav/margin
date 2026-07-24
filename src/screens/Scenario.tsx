@@ -13,6 +13,7 @@ import { fmtMoney, fmtNum } from '../engine/engine'
 import { BasisChip } from '../components/ui'
 import Icon, { type IconName } from '../components/Icon'
 import Analyze from './Analyze'
+import AnalyzeCN from './cn/AnalyzeCN'
 import GetUnderLine from './GetUnderLine'
 import Compare from './Compare'
 
@@ -55,6 +56,7 @@ function VarianceStrip() {
 export default function ScenarioScreen() {
   const tab = useStore((s) => s.scenarioTab)
   const setScreen = useStore((s) => s.setScreen)
+  const country = useStore((s) => s.country)
 
   return (
     <div className="space-y-5">
@@ -64,7 +66,7 @@ export default function ScenarioScreen() {
           return (
             <button key={t.id} onClick={() => setScreen(t.id)}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all duration-200 ${on ? 'border border-black/[0.05] bg-white text-ink-100 shadow-[0_1px_3px_rgba(60,45,20,0.12)]' : 'border border-transparent text-ink-500 hover:text-ink-100'}`}>
-              <Icon name={t.icon} size={15} className={on ? 'text-brand' : ''} /> {t.label}
+              <Icon name={t.icon} size={15} className={on ? 'text-brand' : ''} /> {t.id === 'under' && country === 'CN' ? 'Clear the credits' : t.label}
             </button>
           )
         })}
@@ -73,7 +75,7 @@ export default function ScenarioScreen() {
         {tab === 'model' && (
           <>
             <VarianceStrip />
-            <Analyze mode="model" />
+            {country === 'CN' ? <AnalyzeCN mode="model" /> : <Analyze mode="model" />}
           </>
         )}
         {tab === 'under' && <GetUnderLine />}

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath, URL } from 'node:url'
 
 // Serves the /api functions under `npm run dev` (Vite doesn't do this natively).
 // Loads .env into process.env and dispatches /api/* to the same handlers Vercel
@@ -42,5 +43,6 @@ function localApi(): PluginOption {
 
 export default defineConfig({
   plugins: [react(), localApi()],
+  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { port: 5180, open: true },
 })

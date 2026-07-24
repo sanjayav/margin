@@ -6,6 +6,7 @@ import { fmtNum, fmtMoney, buildDrillTree, threeYearAverage, variantKey, fleetFi
 import { simulateRisk, type RiskResult } from '../engine/montecarlo'
 import type { Vehicle, Scenario, ShareScope } from '../engine/types'
 import { INDIA_CATALOG_BY_MODEL, INDIA_MODELS } from '../data/india_catalog'
+import { nevRatioFor } from '../engine/china/dualcredit'
 import Icon, { type IconName } from './Icon'
 
 const PT_COLOR: Record<string, string> = {
@@ -490,7 +491,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       {/* REGULATOR SETTINGS — one dial for the whole market, never per maker */}
       <Group title="Regulator settings" icon="scale" defaultOpen={false} modified={policyModified} subtitle="market-wide"
         owner="Regulator-side: pooling regime, credit mechanics, test-procedure corrections — one setting for the whole market"
-        onReset={() => patch({ poolingEnabled: false, superCreditsEnabled: country === 'IN', phevUF: true, creditPrice: null, targetShiftPct: null })}>
+        onReset={() => patch({ poolingEnabled: false, superCreditsEnabled: country === 'IN' || country === 'CN', phevUF: true, creditPrice: null, targetShiftPct: null, nevRatioTarget: null, nevCreditPrice: null })}>
         {pack.regimeFor?.(scenario.year)?.draft && (
           <NumSlider label="Draft stringency" value={scenario.targetShiftPct ?? 0} min={-10} max={10} step={1} unit="%" baseline={0}
             onChange={(v) => patch({ targetShiftPct: v === 0 ? null : v })}
@@ -504,6 +505,12 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         {pack.pooling.enabled && <Toggle label="Pooling" checked={scenario.poolingEnabled} onChange={(b) => patch({ poolingEnabled: b })} hint="combine makers, share one average" />}
         {pack.id === 'IN' && <Toggle label="Super-credits" checked={scenario.superCreditsEnabled} onChange={(b) => patch({ superCreditsEnabled: b })} hint="BEV ×3, PHEV ×2.5" />}
         {pack.id === 'IN' && <Toggle label="CNF discounts" checked={scenario.cnfEnabled !== false} onChange={(b) => patch({ cnfEnabled: b })} hint="E20 petrol −8% · CNG −5% (CAFE III draft) — off = struck from final rules" />}
+        {pack.id === 'CN' && <Toggle label="NEV count multiplier" checked={scenario.superCreditsEnabled} onChange={(b) => patch({ superCreditsEnabled: b })} hint="NEVs count as >1 vehicle in the CAFC average (Phase 6 ×1.4→×1.0)" />}
+        {pack.id === 'CN' && (
+          <NumSlider label="NEV credit ratio" value={scenario.nevRatioTarget ?? Math.round(nevRatioFor(scenario.year, null) * 100)} min={0} max={80} step={1} unit="%" baseline={Math.round(nevRatioFor(scenario.year, null) * 100)}
+            onChange={(v) => patch({ nevRatioTarget: v === Math.round(nevRatioFor(scenario.year, null) * 100) ? null : v })}
+            hint="statutory 18→58% (2023–27) — the NEV credits a maker must earn vs its conventional volume" />
+        )}
         {pack.creditPrice != null && (
           <NumSlider label="Credit price" value={scenario.creditPrice ?? pack.creditPrice} min={0} max={Math.max(150, pack.creditPrice * 2)} step={5} unit={`${pack.currency}/u`} baseline={pack.creditPrice}
             onChange={(v) => patch({ creditPrice: v })} hint="assumed trading price · drives pooling value" />

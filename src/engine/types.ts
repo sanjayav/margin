@@ -1,11 +1,11 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Autocred AI · shared types
+// AiRE · shared types
 // The calculation engine is country-agnostic. Everything that differs between
 // countries lives in a RulePack (the "four things that change per country":
 // limit formula, credit system, pooling rules, fine rate).
 // ───────────────────────────────────────────────────────────────────────────
 
-export type CountryId = 'EU' | 'IN' | 'AU' | 'UK'
+export type CountryId = 'EU' | 'IN' | 'AU' | 'UK' | 'CN'
 
 export interface Vehicle {
   parent: string          // Compliance parent (the car maker)
@@ -87,6 +87,19 @@ export interface Scenario {
    *  flex 22.3%) — auto-derived from fuel where the row carries no explicit
    *  cnf. Default true; false models "CNF struck from the final rules". */
   cnfEnabled?: boolean
+  // ── China dual-credit (双积分) — second-axis levers, read only by the CN
+  //    dual-credit ledger. null/undefined = statutory value for the year. ──
+  /** Override the NEV credit RATIO requirement (% of the conventional-car base
+   *  a maker must earn in NEV credits). null = the statutory schedule
+   *  (2023 18% · 2024 28% · 2025 38% · 2026 48% · 2027 58%). */
+  nevRatioTarget?: number | null
+  /** ¥ per NEV credit for valuing a maker's net position and the cost of
+   *  clearing a deficit. null = the pack's creditPrice. */
+  nevCreditPrice?: number | null
+  /** Allow affiliate (关联企业, ≥25% equity) CAFC-surplus transfers to net across
+   *  a group's legal entities before costing a deficit. Default false — each
+   *  entity is judged standalone. */
+  affiliateTransfer?: boolean
 }
 
 /** How an added variant's volume is expressed. `absolute` adds units on top of
@@ -122,6 +135,11 @@ export interface RulePack {
    *  it when the chronological first year (e.g. a historic actuals baseline) is
    *  not the year the workspace should open on. */
   defaultYear?: number
+  /** Latest year with SETTLED actuals. Years after this are the source's forward
+   *  (planning/projection) rows — the UI flags them "projected". Defaults to the
+   *  data-refresh year when omitted; set it when the dataset blends actuals with
+   *  forward years (e.g. China: 2024–25 settled, 2026–27 Phase-6 planning). */
+  actualsThroughYear?: number
   classes: string[]
   smallVolumeThreshold: number
   pooling: { enabled: boolean; note: string }

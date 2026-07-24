@@ -8,7 +8,7 @@ import { getMeta, parentsFor, setLiveFleet } from '../data/fleet'
 // modelling home: Model workbench + get-under-the-line + compare), Credit book
 // (positions ledger, actuals by default), Pricing (price/tax economics).
 // Pooling is the add-on; data/intel/admin are workspace utilities, not modules.
-export type ScreenId = 'analyse' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'data' | 'intel' | 'admin'
+export type ScreenId = 'analyse' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'dualcredit' | 'data' | 'intel' | 'admin'
 export type ScenarioTab = 'model' | 'under' | 'compare'
 /** @deprecated legacy alias kept for old deep-links */
 export type PlanTab = ScenarioTab | 'forecast'
@@ -73,7 +73,7 @@ interface UIState {
 
 // Entitlement persistence (mock; replaced by server-issued claims once billing lands).
 const ENT_KEY = 'ul_entitlement'
-const VALID_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK']
+const VALID_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK', 'CN']
 function loadEnt(): { modules: CountryId[]; ai: boolean; pooling: boolean } {
   try {
     const r = JSON.parse(localStorage.getItem(ENT_KEY) || '')
@@ -164,7 +164,7 @@ export function defaultScenario(country: CountryId): Scenario {
     massShiftKg: 0,
     ecoBoostG: 0,
     poolingEnabled: false,
-    superCreditsEnabled: country === 'IN',
+    superCreditsEnabled: country === 'IN' || country === 'CN', // IN: draft CAFE III super-credits · CN: statutory NEV count multipliers
     mix: null,
     extraVariants: [],
     // Explicit so every persisted/shared scenario has the same shape (the engine
@@ -173,6 +173,10 @@ export function defaultScenario(country: CountryId): Scenario {
     creditPrice: null,
     targetShiftPct: null,
     cnfEnabled: true,
+    // China dual-credit: null = statutory NEV ratio & pack credit price.
+    nevRatioTarget: null,
+    nevCreditPrice: null,
+    affiliateTransfer: false,
   }
 }
 
@@ -270,7 +274,7 @@ export const useStore = create<UIState>((set, get) => ({
     } else if (raw === 'scenario') {
       screen = 'scenario'
       scenarioTab = sh.planTab === 'compare' ? 'compare' : sh.planTab === 'under' ? 'under' : 'model'
-    } else if (raw && ['analyse', 'creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'].includes(raw)) {
+    } else if (raw && ['analyse', 'creditbook', 'pricing', 'pooling', 'dualcredit', 'data', 'intel', 'admin'].includes(raw)) {
       screen = raw as ScreenId
     } // 'analyze' / 'analytics' / unknown → 'analyse'
     set({

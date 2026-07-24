@@ -8,6 +8,7 @@ import { useMemo } from 'react'
 import { useStore } from '../state/store'
 import { useCompliance } from '../lib/useCompliance'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { buildDualCredit } from '../engine/china/dualcredit'
 import { BasisChip } from './ui'
 import Icon from './Icon'
 
@@ -15,10 +16,14 @@ export default function FactsRail() {
   const { pack, raw, tree, scenario, meta, country } = useCompliance('actuals')
   const patch = useStore((s) => s.patchScenario)
   const setScreen = useStore((s) => s.setScreen)
+  // China verdict is a credit balance (积分), not a "line".
+  const isCN = pack.id === 'CN'
+  const dc = isCN ? buildDualCredit(tree, scenario, pack.creditPrice ?? pack.fineRate) : null
+  const crn = (n: number) => `${n >= 0 ? '+' : '−'}${fmtInt(Math.abs(n))}`
 
   // dataset vintage: years at/before the refresh are monitored actuals; later
   // years are the same as-sold fleet judged against that year's statutory line.
-  const vintageYear = meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear()
+  const vintageYear = pack.actualsThroughYear ?? (meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear())
   const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
   const marketFine = makers.reduce((a, c) => a + c.fine, 0)
   const over = makers.filter((c) => c.status === 'fine').length
@@ -26,6 +31,9 @@ export default function FactsRail() {
     const pools = new Set(raw.filter((v) => v.year === scenario.year).map((v) => v.pool || v.parent))
     return { pools: pools.size }
   }, [raw, scenario.year])
+  // Does the selected year ship its own rows (a real forward-planning fleet, as in
+  // the China dataset) vs. being a naive carry-forward of the last actual fleet?
+  const yearHasOwnRows = useMemo(() => raw.some((v) => v.year === scenario.year), [raw, scenario.year])
 
   return (
     <aside className="flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-black/[0.06] bg-ink-900/30 p-4">
@@ -53,20 +61,35 @@ export default function FactsRail() {
           })}
         </div>
         {scenario.year > vintageYear && (
-          <p className="mt-1.5 text-[10px] leading-snug text-warn"><Icon name="alert" size={10} className="mr-0.5 inline" /> {scenario.year} is a projection: today's as-sold fleet against the {scenario.year} target. No assumptions applied.</p>
+          <p className="mt-1.5 text-[10px] leading-snug text-warn"><Icon name="alert" size={10} className="mr-0.5 inline" /> {yearHasOwnRows
+            ? `${scenario.year} is a forward year: the source's own ${scenario.year} planning fleet, judged against the ${scenario.year} target. No scenario levers applied.`
+            : `${scenario.year} is a projection: today's as-sold fleet against the ${scenario.year} target. No assumptions applied.`}</p>
         )}
       </div>
 
-      {/* verdict */}
-      <div className={`rounded-xl border p-3 ${tree.gap > 0 ? 'border-danger/25 bg-danger/[0.05]' : 'border-safe/25 bg-safe/[0.05]'}`}>
-        <div className="label text-ink-400">Market verdict · {scenario.year}</div>
-        <div className="num mt-1.5 text-[20px] font-bold leading-none text-ink-100">
-          {fmtNum(tree.avgMetric, 1)} <span className="text-xs font-semibold text-ink-500">/ {fmtNum(tree.limit, 1)} {pack.metricUnit}</span>
+      {/* verdict — credit standing for China, the line for CO₂/FC markets */}
+      {isCN ? (
+        <div className={`rounded-xl border p-3 ${dc!.totals.creditsToBuy > 0.5 ? 'border-danger/25 bg-danger/[0.05]' : 'border-safe/25 bg-safe/[0.05]'}`}>
+          <div className="label text-ink-400">Credit standing · 积分 · {scenario.year}</div>
+          <div className="mt-1.5 text-[13px] font-bold leading-tight">
+            <span className="text-ink-500">CAFC </span><span className={dc!.totals.cafcCredit >= 0 ? 'text-safe' : 'text-danger'}>{crn(dc!.totals.cafcCredit)}</span>
+            <span className="text-ink-500"> · NEV </span><span className={dc!.totals.nevBalance >= 0 ? 'text-safe' : 'text-danger'}>{crn(dc!.totals.nevBalance)}</span>
+          </div>
+          <div className={`mt-1.5 text-[11.5px] font-semibold ${dc!.totals.makersOver > 0 ? 'text-danger' : 'text-safe'}`}>
+            {dc!.totals.makers - dc!.totals.makersOver} of {dc!.totals.makers} clear both · {fmtMoney(dc!.totals.cost, pack.currency)} to buy clear
+          </div>
         </div>
-        <div className={`mt-1.5 text-[11.5px] font-semibold ${tree.gap > 0 ? 'text-danger' : 'text-safe'}`}>
-          {tree.gap > 0 ? `${fmtNum(tree.gap, 1)} over` : `${fmtNum(Math.abs(tree.gap), 1)} under`} · {fmtMoney(marketFine, pack.currency)} at risk · {over} of {makers.length} makers over
+      ) : (
+        <div className={`rounded-xl border p-3 ${tree.gap > 0 ? 'border-danger/25 bg-danger/[0.05]' : 'border-safe/25 bg-safe/[0.05]'}`}>
+          <div className="label text-ink-400">Market verdict · {scenario.year}</div>
+          <div className="num mt-1.5 text-[20px] font-bold leading-none text-ink-100">
+            {fmtNum(tree.avgMetric, 1)} <span className="text-xs font-semibold text-ink-500">/ {fmtNum(tree.limit, 1)} {pack.metricUnit}</span>
+          </div>
+          <div className={`mt-1.5 text-[11.5px] font-semibold ${tree.gap > 0 ? 'text-danger' : 'text-safe'}`}>
+            {tree.gap > 0 ? `${fmtNum(tree.gap, 1)} over` : `${fmtNum(Math.abs(tree.gap), 1)} under`} · {fmtMoney(marketFine, pack.currency)} at risk · {over} of {makers.length} makers over
+          </div>
         </div>
-      </div>
+      )}
 
       {/* dataset provenance */}
       <div className="rounded-xl border border-black/[0.06] bg-white/50 p-3">

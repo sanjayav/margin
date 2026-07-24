@@ -24,6 +24,7 @@ const TAX: Record<CountryId, { rate: number; label: string; note: string }> = {
   EU: { rate: 0.21, label: 'VAT ≈21%', note: 'VAT 17–27% by member state, plus national CO₂-linked registration taxes in FR/NL/PT and others.' },
   UK: { rate: 0.20, label: 'VAT 20% + VED', note: 'VAT 20%; first-year VED is CO₂-banded (£10 → £5,490), so high-CO₂ uplifts compound at the till.' },
   AU: { rate: 0.10, label: 'GST 10% + LCT', note: 'GST 10%; Luxury Car Tax 33% applies above the threshold (~A$80k, higher for fuel-efficient cars).' },
+  CN: { rate: 0.23, label: 'VAT 13% + purchase tax 10%', note: 'VAT 13% plus 10% vehicle purchase tax; NEVs were exempt through 2025 and pay half (capped) in 2026–27, so the effective wedge differs sharply by powertrain.' },
 }
 
 export default function Pricing() {
@@ -35,6 +36,7 @@ export default function Pricing() {
   const { pack, tree, parent, scenario, country, meta } = useCompliance(basisSel === 'actuals' ? 'actuals' : 'live')
   const selectedParent = useStore((s) => s.selectedParent)
   const setParent = useStore((s) => s.setParent)
+  const setScreen = useStore((s) => s.setScreen)
   const patchScenario = useStore((s) => s.patchScenario)
   const [passThrough, setPassThrough] = useState(100)
   const [taxPct, setTaxPct] = useState(Math.round(TAX[country].rate * 100))
@@ -72,11 +74,18 @@ export default function Pricing() {
       {/* KPI band */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat className="rise" label="Market compliance cost" value={fmtMoney(marketPerUnit, pack.currency)} sub={`per car sold · ${scenario.year}`} accent={marketPerUnit > 0 ? 'text-danger' : 'text-safe'} />
-        <Stat className="rise [animation-delay:50ms]" label={`${focus?.label.split(' ')[0] ?? '—'} cost / car`} value={fmtMoney(focusPerUnit, pack.currency)} sub={focus?.status === 'fine' ? 'fine ÷ units' : 'compliant — no fine'} accent={focusPerUnit > 0 ? 'text-danger' : 'text-safe'} />
+        <Stat className="rise [animation-delay:50ms]" label={`${focus?.label.split(' ')[0] ?? '—'} cost / car`} value={fmtMoney(focusPerUnit, pack.currency)} sub={country === 'CN' ? (focusPerUnit > 0 ? 'CAFC credit cost ÷ units' : 'CAFC-clear — no cost') : (focus?.status === 'fine' ? 'fine ÷ units' : 'compliant — no fine')} accent={focusPerUnit > 0 ? 'text-danger' : 'text-safe'} />
         <Stat className="rise [animation-delay:100ms]" label="Credit value / car" value={fmtMoney(focusCreditPerUnit, pack.currency)} sub={focusCreditPerUnit > 0 ? 'headroom × credit price' : 'no surplus at current mix'} accent={focusCreditPerUnit > 0 ? 'text-safe' : undefined} />
         <Stat className="rise [animation-delay:150ms]" label="Sticker uplift needed" value={fmtMoney(uplift, pack.currency)} sub={`at ${passThrough}% pass-through`} />
         <Stat className="rise [animation-delay:200ms]" label="On-road uplift" value={fmtMoney(uplift * (1 + tax), pack.currency)} sub={`incl. ${TAX[country].label}`} />
       </div>
+
+      {country === 'CN' && (
+        <div className="rise flex items-start gap-2.5 rounded-xl border border-brand/20 bg-brand/[0.04] px-3.5 py-2.5 text-[11.5px] leading-relaxed text-ink-400">
+          <Icon name="scale" size={14} className="mt-0.5 shrink-0 text-brand" />
+          <span>These are <b className="text-ink-200">fuel-economy (CAFC) axis</b> economics — the per-car cost of clearing a CAFC deficit at the NEV-credit price (China levies no statutory fine). The <b className="text-ink-200">NEV-volume axis</b> and the full two-axis position live in the <button onClick={() => setScreen('creditbook')} className="font-semibold text-brand hover:underline">Credit book</button>.</span>
+        </div>
+      )}
 
       {/* basis + reporting year */}
       <div className="rise card flex flex-wrap items-center gap-2 p-4 [animation-delay:180ms]">

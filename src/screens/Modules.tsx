@@ -3,6 +3,7 @@ import { useStore } from '../state/store'
 import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP, moduleSummary } from '../lib/modules'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import Icon from '../components/Icon'
+import Flag from '../components/Flag'
 
 const INCLUDED = ['Plan (actuals drill-down)', 'Forecast studio', 'Scenario workbench & compare', 'Credit book', 'Pricing & tax']
 
@@ -26,7 +27,7 @@ export default function Modules() {
               <span className="absolute inset-x-0 top-0 h-1" style={{ background: m.accent }} />
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="grid h-11 w-12 place-items-center rounded-xl text-[12px] font-bold text-white" style={{ background: m.accent }}>{m.flag}</span>
+                  <Flag id={m.id} className="h-11 w-12" rounded="rounded-xl" />
                   <div>
                     <div className="font-display text-[16px] font-bold leading-tight text-ink-100">{m.name}</div>
                     <div className="text-[11px] text-ink-500">{m.tagline}</div>
@@ -64,10 +65,10 @@ export default function Modules() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="card rise flex items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}><Icon name="spark" size={20} /></span>
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#F66864,#E8223B)' }}><Icon name="spark" size={20} /></span>
             <div>
               <div className="font-display text-[14px] font-bold text-ink-100">AI Analyst</div>
-              <div className="text-[11px] text-ink-500">Ask Autocred AI — works in every owned module. £{AI_PRICE_GBP}/mo</div>
+              <div className="text-[11px] text-ink-500">Ask AiRE — works in every owned module. £{AI_PRICE_GBP}/mo</div>
             </div>
           </div>
           {ai
@@ -76,7 +77,7 @@ export default function Modules() {
         </div>
         <div className="card rise flex items-center justify-between gap-4 p-5">
           <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><Icon name="handshake" size={20} /></span>
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accentblue/15 text-accentblue"><Icon name="handshake" size={20} /></span>
             <div>
               <div className="font-display text-[14px] font-bold text-ink-100">Pooling & credit market</div>
               <div className="text-[11px] text-ink-500">Cheapest pool, fair value-split, trading. £{POOLING_PRICE_GBP}/mo</div>

@@ -40,20 +40,20 @@ export function StatusPill({ status, big }: { status: Aggregate['status']; big?:
 
 export function Stat({ label, value, sub, accent, className = '' }: { label: string; value: ReactNode; sub?: ReactNode; accent?: string; className?: string }) {
   return (
-    <div className={`card p-4 ${className}`}>
+    <div className={`card p-5 ${className}`}>
       <div className="label">{label}</div>
-      <div className={`dnum mt-2 text-[27px] font-bold leading-none ${accent ?? 'text-ink-100'}`}>{value}</div>
-      {sub && <div className="mt-2 text-[11px] text-ink-500">{sub}</div>}
+      <div className={`dnum mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em] ${accent ?? 'text-ink-100'}`}>{value}</div>
+      {sub && <div className="mt-2.5 text-[10.5px] leading-snug text-ink-500">{sub}</div>}
     </div>
   )
 }
 
 export function Section({ title, right, children, className = '' }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={`card p-5 ${className}`}>
+    <div className={`card p-6 ${className}`}>
       {(title || right) && (
-        <div className="mb-4 flex items-center justify-between">
-          {title && <h3 className="font-display text-[15.5px] font-bold tracking-tight text-ink-100">{title}</h3>}
+        <div className="mb-5 flex items-center justify-between gap-3">
+          {title && <h3 className="font-display text-[16px] font-bold tracking-[-0.02em] text-ink-100">{title}</h3>}
           {right}
         </div>
       )}

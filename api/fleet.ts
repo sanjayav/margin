@@ -4,7 +4,7 @@
 import { getCurrent } from './_store.js'
 import type { CountryId } from '../src/engine/types.js'
 
-const MARKETS = new Set(['EU', 'IN', 'AU', 'UK'])
+const MARKETS = new Set(['EU', 'IN', 'AU', 'UK', 'CN'])
 
 export default async function handler(req: any, res: any) {
   const country = String(req.query?.country ?? 'EU').toUpperCase() as CountryId

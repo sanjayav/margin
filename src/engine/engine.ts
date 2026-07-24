@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Autocred AI · the shared calculation engine
+// AiRE · the shared calculation engine
 //
 // ONE operation — "group the cars and compute the weighted average" — runs at
 // every level of detail: whole market, one maker, one model, one powertrain.

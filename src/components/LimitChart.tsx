@@ -78,6 +78,9 @@ interface Props {
   view?: 'line' | 'gap'
   /** current regime is a draft — the main line renders dashed (not yet law). */
   draftLine?: boolean
+  /** Override the line's pill label. China isn't a pass/fail limit — the line is
+   *  the CAFC target (达标值 · the zero-credit boundary), so it's relabelled. */
+  limitLabel?: string
 }
 
 /**
@@ -85,7 +88,7 @@ interface Props {
  * marker. Below the line is safe (green), above means a fine (red). Everything
  * re-renders instantly when the scenario changes — no animation gate.
  */
-export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine }: Props) {
+export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine, limitLabel }: Props) {
   const [hover, setHover] = useState<string | null>(null)
   const [logoFailed, setLogoFailed] = useState<Set<string>>(new Set())
   const failLogo = (key: string) => setLogoFailed((prev) => { const n = new Set(prev); n.add(key); return n })
@@ -212,7 +215,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ghosts, line, yLo, yHi, gap])
 
-  const pillLabel = gap ? 'THE LINE' : draftLine ? 'DRAFT LIMIT' : 'THE LIMIT'
+  const pillLabel = limitLabel ?? (gap ? 'THE LINE' : draftLine ? 'DRAFT LIMIT' : 'THE LIMIT')
   const pillW = pillLabel.length * 6.4 + 16
 
   return (
@@ -328,7 +331,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const py = syAt(midMass, f(midMass))
           return (
             <g style={{ pointerEvents: 'none' }}>
-              <path d={pathOf(f)} fill="none" stroke="#F2510E" strokeWidth="2" strokeDasharray="6 4" opacity="0.9" />
+              <path d={pathOf(f)} fill="none" stroke="#E8223B" strokeWidth="2" strokeDasharray="6 4" opacity="0.9" />
               <rect x={px - 92} y={py - 30} width="184" height="18" rx="9" fill="#17140F" opacity="0.94" />
               <text x={px} y={py - 17} textAnchor="middle" fontSize="10" fill="#FFD9A8" fontWeight={700} className="num">
                 Draft stringency {lineDrag.pct > 0 ? '+' : ''}{lineDrag.pct}% — release to apply
@@ -420,10 +423,10 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const ty = Math.max(m.t + 2, Math.min(gy - 10, H - m.b - ghost.lines.length * 13 - 14))
           return (
             <g style={{ pointerEvents: 'none' }}>
-              <line x1={ox} y1={oy} x2={gx} y2={gy} stroke="#F2510E" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+              <line x1={ox} y1={oy} x2={gx} y2={gy} stroke="#E8223B" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
               <line x1={gx} y1={gy} x2={gx} y2={syAt(ghost.mass, limitAt(ghost.mass))} stroke={over ? '#ff5d6c' : '#3ddc97'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7" />
-              <circle cx={gx} cy={gy} r={11} fill="#F2510E" fillOpacity="0.22" stroke="#F2510E" strokeWidth="2" strokeDasharray="5 3" />
-              <circle cx={gx} cy={gy} r={2.5} fill="#F2510E" />
+              <circle cx={gx} cy={gy} r={11} fill="#E8223B" fillOpacity="0.22" stroke="#E8223B" strokeWidth="2" strokeDasharray="5 3" />
+              <circle cx={gx} cy={gy} r={2.5} fill="#E8223B" />
               <rect x={tx} y={ty} width={tw} height={ghost.lines.length * 13 + 12} rx="7" fill="#17140F" opacity="0.94" />
               {ghost.lines.map((l, i) => (
                 <text key={i} x={tx + 9} y={ty + 15 + i * 13} fontSize="10" fill={i === 0 ? '#FFD9A8' : '#EDE6D8'} fontWeight={i === 0 ? 700 : 500} className="num">{l}</text>

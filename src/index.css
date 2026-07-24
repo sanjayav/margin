@@ -2,19 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── AiRE brand typeface: Aptos (self-hosted) ───────────────────────────────
+   The AiRE brand type. Weights 300/400/600/700/900 cover the whole app; Geist
+   stays wired as the fallback family everywhere so text never falls to system. */
+@font-face { font-family: 'Aptos'; font-weight: 300; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Light.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/Aptos.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 500; font-style: normal; font-display: swap; src: url('/fonts/Aptos.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 600; font-style: normal; font-display: swap; src: url('/fonts/Aptos-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 700; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 800; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Black.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 900; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Black.ttf') format('truetype'); }
+
+/* ── shadcn/ui design tokens, mapped to the AiRE palette ────────────────────
+   Added so shadcn components render on-brand (not default zinc). The app's own
+   ink/brand tokens are untouched; these only feed shadcn's border/bg/primary/… */
+@layer base {
+  :root {
+    --background: 41 60% 96%;        /* #FBF7EF warm cream */
+    --foreground: 40 20% 9%;         /* #1C1812 */
+    --card: 48 50% 99%;              /* #FFFEFB */
+    --card-foreground: 40 20% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 40 20% 9%;
+    --primary: 352 81% 52%;          /* #E8223B AiRE red */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 33% 88%;         /* #ECE4D4 */
+    --secondary-foreground: 40 16% 16%;
+    --muted: 41 45% 92%;             /* #F4EEE1 */
+    --muted-foreground: 38 12% 50%;  /* #8C8273 */
+    --accent: 41 45% 92%;            /* subtle warm hover */
+    --accent-foreground: 40 16% 16%;
+    --destructive: 358 71% 58%;      /* #E0484D */
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 22% 84%;
+    --input: 40 22% 84%;
+    --ring: 352 81% 52%;
+    --radius: 0.75rem;
+    --chart-1: 352 81% 52%;
+    --chart-2: 162 84% 34%;
+    --chart-3: 38 92% 44%;
+    --chart-4: 358 71% 58%;
+    --chart-5: 221 72% 55%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+  .dark {
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
 :root { color-scheme: light; --bg: #FBF7EF; }
 
 html, body, #root { height: 100%; }
+/* premium grain — a fixed, subtle noise overlay for tactile depth (not flat) */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  pointer-events: none;
+  opacity: 0.03;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
 body {
   margin: 0;
   background:
-    radial-gradient(1100px 520px at 88% -10%, rgba(242, 81, 14, 0.05), transparent 60%),
-    radial-gradient(900px 480px at -6% 108%, rgba(217, 128, 5, 0.05), transparent 55%),
+    radial-gradient(1100px 520px at 88% -10%, rgba(232, 34, 59, 0.05), transparent 60%),
+    radial-gradient(900px 480px at -6% 108%, rgba(246, 104, 100, 0.05), transparent 55%),
     var(--bg);
   color: #1C1812;
-  font-family: 'Inter', system-ui, sans-serif;
-  font-feature-settings: 'cv11', 'ss01';
-  letter-spacing: -0.011em;
+  font-family: 'Aptos', 'Geist', 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv01', 'ss03';
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -24,26 +98,26 @@ body {
 *::-webkit-scrollbar-thumb { background: #DBD2BF; border-radius: 8px; }
 *::-webkit-scrollbar-thumb:hover { background: #C7BBA3; }
 
-h1, h2, h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -0.022em; }
+h1, h2, h3 { font-family: 'Aptos', 'Geist', 'Inter', sans-serif; letter-spacing: -0.03em; font-feature-settings: 'ss03'; }
 
 /* Keyboard-visible focus — brand ring, no ring on mouse click. Text fields keep
    their own focus-within border treatment instead of a second ring. */
-:focus-visible { outline: 2px solid rgba(242, 81, 14, 0.55); outline-offset: 2px; border-radius: 6px; }
+:focus-visible { outline: 2px solid rgba(232, 34, 59, 0.55); outline-offset: 2px; border-radius: 6px; }
 input:not([type='range']):not([type='checkbox']):not([type='radio']):focus-visible,
 textarea:focus-visible, select:focus-visible { outline: none; }
 ::-moz-focus-inner { border: 0; }
 
-/* hero numbers: geometric display face, tabular, tight */
-.dnum { font-family: 'Space Grotesk', 'Inter', sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; letter-spacing: -0.02em; }
+/* hero numbers: Geist, tabular, tight — premium data display */
+.dnum { font-family: 'Aptos', 'Geist', 'Inter', sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'ss03'; letter-spacing: -0.03em; }
 .text-gradient {
-  background: linear-gradient(100deg, #FF7A38 0%, #F2510E 55%, #D8430A 100%);
+  background: linear-gradient(100deg, #F66864 0%, #E8223B 55%, #C41730 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
 @layer components {
   .card {
-    @apply rounded-[14px] border border-black/[0.045] bg-[#FFFEFB];
-    box-shadow: 0 1px 1px rgba(40, 30, 15, 0.03), 0 2px 4px rgba(120, 90, 50, 0.04), 0 10px 24px -16px rgba(120, 90, 50, 0.16);
+    @apply rounded-[16px] border border-black/[0.05] bg-[#FFFEFB];
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 1px 2px rgba(40, 30, 15, 0.03), 0 8px 20px -14px rgba(120, 90, 50, 0.16), 0 24px 48px -32px rgba(120, 90, 50, 0.22);
     transition: box-shadow .28s ease, transform .28s cubic-bezier(.2,.7,.2,1), border-color .2s ease;
   }
   /* Only clickable cards lift — a transform on hover makes the card a CSS
@@ -62,8 +136,8 @@ textarea:focus-visible, select:focus-visible { outline: none; }
   }
   .btn-primary {
     @apply btn relative overflow-hidden text-white;
-    background: linear-gradient(180deg, #FF6A2A, #ED4709);
-    box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 10px 22px -10px rgba(242,81,14,0.55);
+    background: linear-gradient(180deg, #F66864, #E8223B);
+    box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 10px 22px -10px rgba(232, 34, 59,0.55);
   }
   .btn-primary::after {
     content: '';
@@ -73,7 +147,7 @@ textarea:focus-visible, select:focus-visible { outline: none; }
     opacity: 0; transition: opacity .2s;
     pointer-events: none;
   }
-  .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 14px 28px -12px rgba(242,81,14,0.65); }
+  .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 1px 0 0 rgba(255,255,255,0.30) inset, 0 14px 28px -12px rgba(232, 34, 59,0.65); }
   .btn-primary:hover::after { opacity: 1; animation: sheen .9s ease forwards; }
   .btn-ghost { @apply btn border border-black/[0.1] bg-black/[0.015] text-ink-300 hover:text-ink-100 hover:border-black/20 hover:bg-black/[0.04]; }
   .label { @apply text-[10.5px] font-semibold uppercase tracking-[0.13em] text-ink-500; }
@@ -113,24 +187,24 @@ textarea:focus-visible, select:focus-visible { outline: none; }
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
   height: 5px; border-radius: 999px; outline: none; cursor: pointer;
-  background: linear-gradient(90deg, #F2510E, #F2510E) no-repeat, #E6DCC8;
+  background: linear-gradient(90deg, #E8223B, #E8223B) no-repeat, #E6DCC8;
   background-size: var(--fill, 0%) 100%;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 16px; height: 16px; border-radius: 50%;
   background: #ffffff; border: 3px solid #FBF7EF;
-  box-shadow: 0 0 0 1.5px #F2510E, 0 2px 6px rgba(120,90,50,0.35);
+  box-shadow: 0 0 0 1.5px #E8223B, 0 2px 6px rgba(120,90,50,0.35);
   transition: transform .12s;
 }
 input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
 input[type="range"]::-webkit-slider-thumb:active { transform: scale(1.22); }
 input[type="range"]::-moz-range-thumb {
   width: 14px; height: 14px; border-radius: 50%; background: #ffffff;
-  border: 3px solid #FBF7EF; box-shadow: 0 0 0 1.5px #F2510E;
+  border: 3px solid #FBF7EF; box-shadow: 0 0 0 1.5px #E8223B;
 }
 
-::selection { background: rgba(242, 81, 14, 0.20); }
+::selection { background: rgba(232, 34, 59, 0.20); }
 
 /* ── premium motion ─────────────────────────────────────────── */
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }

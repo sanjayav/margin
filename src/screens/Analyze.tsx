@@ -269,7 +269,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   const regA = useCountUp(node.rawUnits), unitsA = useCountUp(node.units), massA = useCountUp(node.avgMass)
   const crumbs = [drillTree.label, ...drill]
   const reportParent = drill[1] ?? tree.children?.[0]?.label ?? node.label
-  const exportReport = () => openPrintReport(`Autocred AI · ${node.label}`, buildMakerReport(node, pack, scenario, meta, recommend(raw, pack, scenario, reportParent, overrides), new Date().toISOString().slice(0, 10)))
+  const exportReport = () => openPrintReport(`AiRE · ${node.label}`, buildMakerReport(node, pack, scenario, meta, recommend(raw, pack, scenario, reportParent, overrides), new Date().toISOString().slice(0, 10)))
   const [copied, setCopied] = useState(false)
   const copyLink = async () => { const url = buildShareUrl(); try { await navigator.clipboard.writeText(url) } catch { /* ignore */ } setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
@@ -315,8 +315,11 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       </div>
 
       {/* THE VERDICT — the answer in words, plus where this scope is heading */}
-      <div className="rise card relative flex flex-wrap items-start justify-between gap-x-8 gap-y-4 overflow-hidden p-5">
-        <span className="absolute inset-y-0 left-0 w-1" style={{ background: node.status === 'exempt' ? '#D98005' : over ? '#E0484D' : '#0E9F6E' }} />
+      <div className="rise card relative flex flex-wrap items-start justify-between gap-x-8 gap-y-4 overflow-hidden p-5 pl-6">
+        {(() => { const sc = node.status === 'exempt' ? '#D98005' : over ? '#E0484D' : '#0E9F6E'; return <>
+          <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: `linear-gradient(180deg, ${sc}, ${sc}55)` }} />
+          <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full opacity-[0.06] blur-3xl" style={{ background: sc }} />
+        </> })()}
         <div className="min-w-[280px] flex-1">
           <div className="label">The verdict · {scenario.year}</div>
           <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-300">

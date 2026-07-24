@@ -55,7 +55,7 @@ export default function GapWaterfall({ startGap, steps, endGap, unit, currency, 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 'auto' }}>
         <defs>
           <linearGradient id="wfStep" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#FF7A38" /><stop offset="100%" stopColor="#ED4709" />
+            <stop offset="0%" stopColor="#F66864" /><stop offset="100%" stopColor="#E8223B" />
           </linearGradient>
           <linearGradient id="wfUnder" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#0E9F6E" stopOpacity="0.0" /><stop offset="100%" stopColor="#0E9F6E" stopOpacity="0.10" />
@@ -102,7 +102,7 @@ export default function GapWaterfall({ startGap, steps, endGap, unit, currency, 
                 className="rise" style={{ animationDelay: `${i * 90}ms` }} />
               {/* value above the bar (clamped clear of the axis title) */}
               <text x={sx(i) + bw / 2} y={Math.max(yTop - 6, 24)} textAnchor="middle" fontSize="11" fontWeight="700" className="num"
-                fill={c.kind === 'step' ? '#D8430A' : under ? '#0E9F6E' : '#E0484D'}>{valText}</text>
+                fill={c.kind === 'step' ? '#C41730' : under ? '#0E9F6E' : '#E0484D'}>{valText}</text>
               {/* category label */}
               <text x={sx(i) + bw / 2} y={H - m.b + 16} textAnchor="middle" fontSize="9.5" fill="#4A4438" fontWeight="600">
                 {c.label.length > 16 ? c.label.slice(0, 15) + '…' : c.label}

@@ -217,7 +217,7 @@ export default function CommandK() {
           <span className="flex items-center gap-1.5"><span className="kbd">↑</span><span className="kbd">↓</span> navigate</span>
           <span className="flex items-center gap-1.5"><span className="kbd">↵</span> select</span>
           <span className="flex items-center gap-1.5"><span className="kbd">esc</span> close</span>
-          <span className="ml-auto flex items-center gap-1.5 text-[#5E574C]"><Icon name="spark" size={11} className="text-brand-400/70" /> Autocred AI</span>
+          <span className="ml-auto flex items-center gap-1.5 text-[#5E574C]"><Icon name="spark" size={11} className="text-brand-400/70" /> AiRE</span>
         </div>
       </div>
     </div>

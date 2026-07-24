@@ -55,7 +55,7 @@ export function runValidation(): Check[] {
     add({ id, group: 'Known gap — needs validation', desc, status: 'review', detail, source })
 
   // ── Invariants (must hold for any correct engine) ──────────────────────────
-  for (const id of ['EU', 'IN', 'AU', 'UK'] as CountryId[]) {
+  for (const id of ['EU', 'IN', 'AU', 'UK', 'CN'] as CountryId[]) {
     const p = getPack(id)
     const bev = veh({ co2: 0, powertrain: 'BEV', fuel: 'electric', zev: 1 })
     inv(`bev-zero-${id}`, `${id}: a BEV counts as 0 in the fleet metric`, p.vehicleMetric(bev, scenario()) === 0,

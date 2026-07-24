@@ -31,11 +31,9 @@ export default function PlatformShell() {
     <div className="flex h-screen overflow-hidden">
       <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
         <div className="mb-5 flex items-center gap-2.5 px-1.5 pt-1">
-          <div className="grid h-9 w-9 place-items-center rounded-xl text-white" style={{ background: 'linear-gradient(160deg,#FF8A4C,#ED4709)' }}>
-            <span className="text-[19px] font-black leading-none">A</span>
-          </div>
+          <img src="/brand/aire-mark-white.png" alt="AiRE" className="h-9 w-auto" />
           <div>
-            <div className="font-display text-[16px] font-bold leading-none text-gradient">Autocred AI</div>
+            <div className="font-display text-[17px] font-extrabold leading-none tracking-tight text-white">AiRE</div>
             <div className="mt-1 text-[10px] tracking-wide text-[#9A9082]">Compliance platform</div>
           </div>
         </div>
@@ -54,10 +52,17 @@ export default function PlatformShell() {
           )
         })}
 
-        <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-[#E8E0D2]"><Icon name="spark" size={13} className="text-brand-400" /> AI Analyst</div>
-          <div className="mt-1 text-[10px] text-[#8A8174]">{ai ? 'Active across all your modules.' : 'Add-on — answer in plain English.'}</div>
-          {!ai && <button onClick={() => goto('subscription')} className="mt-2 w-full rounded-lg bg-brand/20 py-1 text-[10px] font-bold text-brand-400 transition hover:bg-brand/30">Add AI</button>}
+        <div className="relative mt-4 overflow-hidden rounded-xl border border-brand/20 p-3.5" style={{ background: 'linear-gradient(135deg, rgba(232,34,59,0.13), rgba(246,104,100,0.03) 55%, transparent)' }}>
+          <div className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-brand/25 blur-2xl" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/20 text-brand-400"><Icon name="spark" size={14} /></span>
+              <span className="text-[12px] font-bold text-white">AI Analyst</span>
+            </div>
+            {ai && <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-safe"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-safe" /> On</span>}
+          </div>
+          <div className="relative mt-2 text-[10.5px] leading-snug text-white/50">{ai ? 'Answering across every module — ask anything in plain English.' : 'Ask any compliance question in plain English, answered from the live engine.'}</div>
+          {!ai && <button onClick={() => goto('subscription')} className="relative mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-1.5 text-[10.5px] font-bold text-white shadow-[0_6px_16px_-8px_rgba(232,34,59,0.7)] transition hover:brightness-110"><Icon name="spark" size={11} /> Add AI Analyst</button>}
         </div>
 
         <div className="mt-auto flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
@@ -75,7 +80,7 @@ export default function PlatformShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-white/[0.08] px-8 py-4" style={{ background: CHROME }}>
           <div>
-            <div className="label text-[#8A8174]">Autocred AI platform</div>
+            <div className="label text-[#8A8174]">AiRE platform</div>
             <h1 className="font-display text-[22px] font-bold leading-tight tracking-tight text-white">{t.title}</h1>
           </div>
           <div className="flex items-center gap-4">

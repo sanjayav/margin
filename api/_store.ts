@@ -42,7 +42,7 @@ function writeLocal(db: LocalDb) {
 function ensureSeed(): LocalDb {
   const db = readLocal()
   let changed = false
-  for (const m of ['EU', 'IN', 'AU', 'UK'] as CountryId[]) {
+  for (const m of ['EU', 'IN', 'AU', 'UK', 'CN'] as CountryId[]) {
     if (!db[m] && (fleet as any)[m]) {
       db[m] = { version: String(Date.now()), name: `${SOURCES[m].name} (bundled extract)`, url: SOURCES[m].url, refreshed: new Date().toISOString(), rows: (fleet as any)[m] }
       changed = true

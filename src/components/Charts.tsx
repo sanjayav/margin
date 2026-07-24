@@ -21,18 +21,18 @@ export function TrendChart({ series, unit, currency }: { series: YearPoint[]; un
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
       <defs>
         <linearGradient id="trgap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#E0484D" stopOpacity="0.22" /><stop offset="100%" stopColor="#E0484D" stopOpacity="0.03" /></linearGradient>
-        <linearGradient id="trfleet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#F2510E" stopOpacity="0.10" /><stop offset="100%" stopColor="#F2510E" stopOpacity="0" /></linearGradient>
+        <linearGradient id="trfleet" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#E8223B" stopOpacity="0.10" /><stop offset="100%" stopColor="#E8223B" stopOpacity="0" /></linearGradient>
       </defs>
       <path d={`${line('fleet')} L${x(series.length - 1).toFixed(1)},${(m.t + ih).toFixed(1)} L${x(0).toFixed(1)},${(m.t + ih).toFixed(1)} Z`} fill="url(#trfleet)" />
       {[0, 1, 2, 3].map((i) => { const v = (yMax * i) / 3, yy = y(v); return <g key={i}><line x1={m.l} y1={yy} x2={W - m.r} y2={yy} stroke={GRID} strokeOpacity="0.06" /><text x={m.l - 6} y={yy + 3} textAnchor="end" fontSize="9" fill={AXIS} className="num">{fmtNum(v, 0)}</text></g> })}
       <path d={overArea} fill="url(#trgap)" />
       <path className="lc-draw" pathLength={1} d={line('limit')} fill="none" stroke="#E0A100" strokeWidth="2.5" />
-      <path className="lc-draw" pathLength={1} d={line('fleet')} fill="none" stroke="#F2510E" strokeWidth="2.5" />
+      <path className="lc-draw" pathLength={1} d={line('fleet')} fill="none" stroke="#E8223B" strokeWidth="2.5" />
       {series.map((s, i) => (
         <g key={i} onMouseEnter={() => setH(i)} onMouseLeave={() => setH(null)}>
           <rect x={x(i) - 14} y={m.t} width="28" height={ih} fill="transparent" />
           <circle cx={x(i)} cy={y(s.limit)} r="2.5" fill="#E0A100" />
-          <circle cx={x(i)} cy={y(s.fleet)} r={h === i ? 5.5 : 4} fill={s.gap > 0 ? '#E0484D' : '#F2510E'} stroke="#FBF7EF" strokeWidth="1.5" />
+          <circle cx={x(i)} cy={y(s.fleet)} r={h === i ? 5.5 : 4} fill={s.gap > 0 ? '#E0484D' : '#E8223B'} stroke="#FBF7EF" strokeWidth="1.5" />
           <text x={x(i)} y={H - 14} textAnchor="middle" fontSize="9" fill={AXIS} className="num">{s.year}</text>
           {h === i && (
             <g>

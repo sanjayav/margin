@@ -58,7 +58,7 @@ export interface ForecastContext {
 // the regulatory limit have their own fixed colours.
 export const SCEN_COLORS: Record<string, string> = {
   emerald: '#0E9F6E', amber: '#D98005', violet: '#8b7ff0', sky: '#3B6FE0',
-  rose: '#E0484D', teal: '#12b3a6', orange: '#F2510E',
+  rose: '#E0484D', teal: '#12b3a6', orange: '#E8223B',
 }
 export const BASELINE_HEX = '#5b8def'
 export const LIMIT_HEX = '#E0A100'

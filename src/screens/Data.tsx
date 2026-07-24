@@ -318,7 +318,7 @@ export default function Data() {
     const blob = new Blob([`${header}\n${body}`], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `autocred-data-${country.toLowerCase()}-${tag}${scenarioMode ? '-' + activeScenario!.label.replace(/\s+/g, '-').toLowerCase() : ''}.csv`; a.click()
+    a.href = url; a.download = `aire-data-${country.toLowerCase()}-${tag}${scenarioMode ? '-' + activeScenario!.label.replace(/\s+/g, '-').toLowerCase() : ''}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 

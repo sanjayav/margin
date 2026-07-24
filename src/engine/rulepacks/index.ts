@@ -3,8 +3,9 @@ import { EU } from './eu.js'
 import { IN } from './india.js'
 import { AU } from './australia.js'
 import { UK } from './uk.js'
+import { CN } from './china.js'
 
-export const RULE_PACKS: Record<CountryId, RulePack> = { EU, IN, AU, UK }
-export const PACK_LIST: RulePack[] = [EU, IN, AU, UK]
+export const RULE_PACKS: Record<CountryId, RulePack> = { EU, IN, AU, UK, CN }
+export const PACK_LIST: RulePack[] = [EU, IN, AU, UK, CN]
 export const getPack = (id: CountryId) => RULE_PACKS[id]
-export { EU, IN, AU, UK }
+export { EU, IN, AU, UK, CN }

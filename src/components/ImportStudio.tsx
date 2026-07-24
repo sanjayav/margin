@@ -275,7 +275,7 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
                 </span>
               )}
               <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-ink-400">
-                <input type="checkbox" checked={hasHeader} onChange={(e) => { setHasHeader(e.target.checked); setMapping(autoMap(e.target.checked ? grid[0] : (grid[0] ?? []).map((_, i) => `Column ${i + 1}`))) }} className="accent-[#F2510E]" />
+                <input type="checkbox" checked={hasHeader} onChange={(e) => { setHasHeader(e.target.checked); setMapping(autoMap(e.target.checked ? grid[0] : (grid[0] ?? []).map((_, i) => `Column ${i + 1}`))) }} className="accent-[#E8223B]" />
                 First row is headers
               </label>
             </div>
@@ -528,7 +528,7 @@ function GridStep({ fields, rows, setRows, issues, errorCount, errRows, skipInva
         </span>
         {errorCount > 0 && (
           <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-ink-300">
-            <input type="checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} className="accent-[#F2510E]" />
+            <input type="checkbox" checked={skipInvalid} onChange={(e) => setSkipInvalid(e.target.checked)} className="accent-[#E8223B]" />
             Skip {fmtInt(errRows.size)} invalid row{errRows.size > 1 ? 's' : ''}
           </label>
         )}

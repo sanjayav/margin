@@ -9,6 +9,7 @@ export const FLEET: Record<CountryId, Vehicle[]> = {
   IN: data.IN,
   AU: data.AU,
   UK: data.UK,
+  CN: data.CN,
 }
 
 export interface FleetMeta {
@@ -41,4 +42,5 @@ export const DATA_REFRESHED: Record<CountryId, string> = {
   IN: '2026-04-30',
   AU: '2026-05-02',
   UK: '2026-05-11',
+  CN: '2026-07-24',
 }

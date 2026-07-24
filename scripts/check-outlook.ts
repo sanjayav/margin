@@ -44,7 +44,7 @@ const marketFine = (rows: Vehicle[], pack: ReturnType<typeof getPack>, sc: Retur
 }
 
 // ── 2 · bridge invariant: effects sum to the YoY total, every market/year ───
-for (const id of ['EU', 'IN', 'AU', 'UK'] as CountryId[]) {
+for (const id of ['EU', 'IN', 'AU', 'UK', 'CN'] as CountryId[]) {
   const pack = getPack(id)
   const cfg: OutlookConfig = { raw: data[id], pack, drivers: DRIVER_DEFAULTS[id], vintageYear: VINTAGE }
   let worst = 0

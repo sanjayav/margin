@@ -21,11 +21,12 @@ export const MODULE_META: Record<CountryId, ModuleMeta> = {
   IN: { id: 'IN', name: 'India', flag: 'IND', tagline: 'CAFE III fuel-economy norms', regulation: 'BEE Draft CAFE III (FY2027–32)', accent: '#f59e0b', priceGBP: 500 },
   AU: { id: 'AU', name: 'Australia', flag: 'AUS', tagline: 'New Vehicle Efficiency Standard', regulation: 'NVES Act 2024', accent: '#10b981', priceGBP: 500 },
   UK: { id: 'UK', name: 'United Kingdom', flag: 'UK', tagline: 'ZEV mandate (VETS)', regulation: 'DfT VETS Order 2023', accent: '#8b5cf6', priceGBP: 600 },
+  CN: { id: 'CN', name: 'China', flag: 'CN', tagline: 'CAFC + NEV dual-credit (双积分)', regulation: 'GB 27999 · MIIT dual-credit decree', accent: '#ef4444', priceGBP: 900 },
 }
 
 export const AI_PRICE_GBP = 400
 export const POOLING_PRICE_GBP = 350
-export const ALL_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK']
+export const ALL_MODULES: CountryId[] = ['EU', 'IN', 'AU', 'UK', 'CN']
 
 export interface ModuleSummary {
   fleet: number

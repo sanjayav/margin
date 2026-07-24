@@ -5,7 +5,7 @@ import Icon, { type IconName } from '../components/Icon'
 
 const KIND_META: Record<EventKind, { label: string; icon: IconName; c: string }> = {
   fine: { label: 'Fine', icon: 'alert', c: 'text-danger bg-danger/10 border-danger/30' },
-  alliance: { label: 'Alliance', icon: 'handshake', c: 'text-accent bg-accent/10 border-accent/30' },
+  alliance: { label: 'Alliance', icon: 'handshake', c: 'text-accentblue bg-accentblue/10 border-accentblue/30' },
   dispute: { label: 'Dispute', icon: 'scale', c: 'text-warn bg-warn/10 border-warn/30' },
   rule: { label: 'Rule change', icon: 'section', c: 'text-brand bg-brand/10 border-brand/30' },
   data: { label: 'Data', icon: 'database', c: 'text-ink-300 bg-black/5 border-black/10' },

@@ -109,7 +109,7 @@ const TOOLS: Anthropic.Tool[] = [
     description: 'List the car makers (compliance parents) available in a market.',
     input_schema: {
       type: 'object',
-      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] } },
+      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] } },
       required: ['country'],
     },
   },
@@ -120,7 +120,7 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] },
+        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] },
         parent: { type: 'string', description: 'Maker name, or omit for the whole market.' },
         year: { type: 'integer' },
         evSharePct: { type: 'number', description: 'Force the zero-emission sales share, 0-95.' },
@@ -140,7 +140,7 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] },
+        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] },
         parent: { type: 'string' },
         year: { type: 'integer' },
       },
@@ -154,7 +154,7 @@ const TOOLS: Anthropic.Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
-        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] },
+        country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] },
         screen: { type: 'string', enum: ['analyse', 'model', 'forecast', 'scenario', 'under', 'compare', 'creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'], description: 'analyse = ACTUALS book of record (no levers); model = Scenario workbench (drill + levers); forecast = multi-year studio; under/compare = get-under-the-line & compare; creditbook = positions ledger (actuals by default); pricing = cost per car & tax.' },
         parent: { type: 'string' },
         drillPath: { type: 'array', items: { type: 'string' }, description: 'Drill scope: [maker] or [maker, model]. Applies to analyse (viewing) and model (lever scoping).' },
@@ -176,7 +176,7 @@ const TOOLS: Anthropic.Tool[] = [
     description: 'Monte-Carlo €-at-risk: samples BEV-share, sales and mass uncertainty and re-runs the engine to return the fine distribution (P10/P50/P90, mean) and the probability of a fine, for a maker or the whole market. Use for "how likely", "worst case" or "P90" questions.',
     input_schema: {
       type: 'object',
-      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] }, parent: { type: 'string', description: 'Maker, or omit for the whole market.' }, year: { type: 'integer' } },
+      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] }, parent: { type: 'string', description: 'Maker, or omit for the whole market.' }, year: { type: 'integer' } },
       required: ['country'],
     },
   },
@@ -185,7 +185,7 @@ const TOOLS: Anthropic.Tool[] = [
     description: 'Find the value-maximising pool and the fair Shapley settlement per maker: who pays or receives and how much, the total fine removed, and the pool\'s residual fine. Use for pooling / credit-trading questions.',
     input_schema: {
       type: 'object',
-      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK'] }, year: { type: 'integer' } },
+      properties: { country: { type: 'string', enum: ['EU', 'IN', 'AU', 'UK', 'CN'] }, year: { type: 'integer' } },
       required: ['country'],
     },
   },
@@ -268,7 +268,7 @@ Your job: answer the user's question precisely and, when they want to see or cha
 
 ACCURACY IS NON-NEGOTIABLE. Never compute or estimate a number yourself. Every emissions figure, limit, gap, fine, cost, probability or share must come from a tool. Use query_compliance for a single position; get_recommendations for the cheapest way under the line; simulate_risk for probabilities, ranges or worst-case; optimise_pool for pooling/credit-trading. A question mentioning P10/P50/P90, "how likely", "chance", "range" or "worst case" REQUIRES simulate_risk — query_compliance returns only a point estimate. For the WHOLE market, the exposure is the marketFine field (the SUM of per-maker fines); the fleet average being under the line does NOT mean €0 — always check makersOverTheLine. Call the tool first, then answer using exactly what it returns; quote the fine's plain maths when you state a fine. update_dashboard drives the live screen and can also set the powertrain mix, credit price, PHEV utility factor and drill scope.
 
-Entitlements: the user's organisation has subscribed to these markets ONLY: ${(ctx.ownedModules ?? ['EU', 'IN', 'AU', 'UK']).join(', ')}. Never analyse, mention or switch to any other market.${ctx.pooling === false ? ' The Pooling add-on is not active — do not use optimise_pool or open the pooling screen.' : ''}
+Entitlements: the user's organisation has subscribed to these markets ONLY: ${(ctx.ownedModules ?? ['EU', 'IN', 'AU', 'UK', 'CN']).join(', ')}. Never analyse, mention or switch to any other market.${ctx.pooling === false ? ' The Pooling add-on is not active — do not use optimise_pool or open the pooling screen.' : ''}
 
 The markets you may use (country differences live in rule packs):
 ${packs}

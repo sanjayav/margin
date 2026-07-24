@@ -114,7 +114,7 @@ function MarketMap({ sellers, buyers, unit, onPick, picked }: {
             <g key={i} style={{ cursor: 'pointer', opacity: isDim(f) ? 0.14 : 1, transition: 'opacity .2s' }}
               onMouseEnter={() => setHover(f)} onMouseLeave={() => setHover(null)} onClick={() => onPick(f.seller, f.buyer)}>
               <path d={d} fill="none" stroke="#0E9F6E" strokeOpacity={pickedFlow ? 0.5 : 0.28} strokeWidth={w + 5} strokeLinecap="round" />
-              <path d={d} fill="none" stroke={pickedFlow ? '#F2510E' : '#0E9F6E'} strokeWidth={w} strokeLinecap="round" className="cb-flow" />
+              <path d={d} fill="none" stroke={pickedFlow ? '#E8223B' : '#0E9F6E'} strokeWidth={w} strokeLinecap="round" className="cb-flow" />
             </g>
           )
         })}

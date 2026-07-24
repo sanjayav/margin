@@ -10,7 +10,7 @@ import { getScenarioBlob, putScenarioBlob } from './_store.js'
 // the raw payload well above any legitimate workspace size.
 const MAX_BODY_BYTES = 512 * 1024
 const MAX_SCENARIOS = 60
-const VALID_COUNTRIES = new Set(['EU', 'IN', 'AU', 'UK'])
+const VALID_COUNTRIES = new Set(['EU', 'IN', 'AU', 'UK', 'CN'])
 
 /** Minimal shape check — a saved scenario the engine can actually replay. */
 function validScenario(s: any): boolean {

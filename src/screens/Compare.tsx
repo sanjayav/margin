@@ -113,7 +113,7 @@ export default function Compare() {
                 </td>
               ))}</Row>
               <Row label="Zero-emission share">{cols.map((c) => (
-                <td key={c.id} className={`num px-3 py-2.5 text-right font-semibold text-accent ${c.live ? 'bg-brand/[0.05]' : ''}`}>{Math.round(c.tree.zlevShare * 100)}%</td>
+                <td key={c.id} className={`num px-3 py-2.5 text-right font-semibold text-accentblue ${c.live ? 'bg-brand/[0.05]' : ''}`}>{Math.round(c.tree.zlevShare * 100)}%</td>
               ))}</Row>
               <Row label="Registrations">{cols.map((c) => (
                 <td key={c.id} className={`num px-3 py-2.5 text-right text-ink-300 ${c.live ? 'bg-brand/[0.05]' : ''}`}>{fmtInt(c.tree.rawUnits)}</td>

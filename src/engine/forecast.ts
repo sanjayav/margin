@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Autocred AI · forecast engine (pure)
+// AiRE · forecast engine (pure)
 //
 // One place that turns "a scenario" into a full multi-year trajectory: the
 // baseline (hold today's mix), the plan (your levers — optionally ramping year
@@ -28,7 +28,7 @@ export function baselineScenario(pack: RulePack): Scenario {
     massShiftKg: 0,
     ecoBoostG: 0,
     poolingEnabled: false,
-    superCreditsEnabled: pack.id === 'IN',
+    superCreditsEnabled: pack.id === 'IN' || pack.id === 'CN',
     mix: null,
     phevUF: true,
     creditPrice: null,
@@ -157,6 +157,11 @@ export interface ForecastScenarioDef {
     superCreditsEnabled?: boolean | null
     phevUF?: boolean | null
     creditPrice?: number | null
+    /** China dual-credit: force the NEV credit ratio requirement (% of the
+     *  conventional base). Ramp across the horizon to model the mandate path. */
+    nevRatioTarget?: Ramp | null
+    /** China dual-credit: the NEV credit trading price (¥/credit). */
+    nevCreditPrice?: Ramp | null
   }
   /** Narrative annotations (e.g. "2027 · diesel ban") — display only. */
   events?: { year: number; label: string }[]
@@ -188,6 +193,8 @@ export function materializeSpec(def: ForecastScenarioDef, baseline: Scenario, ye
     if (L.superCreditsEnabled != null) p.superCreditsEnabled = L.superCreditsEnabled
     if (L.phevUF != null) p.phevUF = L.phevUF
     if (L.creditPrice != null) p.creditPrice = L.creditPrice
+    if (L.nevRatioTarget != null) p.nevRatioTarget = clamp(Math.round(rampAt(L.nevRatioTarget, i, n)), 0, 100)
+    if (L.nevCreditPrice != null) p.nevCreditPrice = Math.max(0, rampAt(L.nevCreditPrice, i, n))
     perYear[y] = p
   })
   return { base: baseline, perYear }

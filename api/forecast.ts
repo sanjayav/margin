@@ -114,6 +114,8 @@ const SCENARIO_SCHEMA = {
               superCreditsEnabled: leverBool,
               phevUF: leverBool,
               creditPrice: { anyOf: [{ type: 'null' }, { type: 'number' }] },
+              nevRatioTarget: leverNum,
+              nevCreditPrice: leverNum,
             },
             required: ['evSharePct', 'salesMultiplier', 'massShiftKg', 'ecoBoostG', 'targetShiftPct', 'poolingEnabled', 'superCreditsEnabled', 'phevUF', 'creditPrice'],
             additionalProperties: false,
@@ -165,7 +167,7 @@ const SCENARIO_SCHEMA = {
 
 function generationSystem(country: CountryId, ownedNote: string): string {
   const pack = getPack(country)
-  return `You are the scenario architect inside Autocred's forecast studio, an emissions-compliance control room for car makers.
+  return `You are the scenario architect inside AiRE's forecast studio, an emissions-compliance control room for car makers.
 
 The user describes a possible future in plain language. Your job: turn it into 2–4 DISTINCT, decision-useful forecast scenarios by setting LEVERS — you never compute outcomes (emissions, limits, gaps, fines). A deterministic engine computes every number from the levers you set.
 
@@ -179,7 +181,13 @@ Each scenario's \`levers\` object (set a lever to null to leave it as-sold / unc
 - superCreditsEnabled: EV super-credits (${country === 'IN' ? 'India — on by default' : 'off in this market'}).
 - phevUF: EU 2025 PHEV utility-factor correction (${country === 'EU' ? 'set false to model the pre-2025 treatment' : 'keep null'}).
 - creditPrice: override the credit trading price; null = pack default.
-
+${country === 'CN' ? `
+CHINA DUAL-CREDIT (双积分) — this market is judged on TWO balances, both of which must finish above zero, and you can shape both:
+- nevRatioTarget: the NEV credit RATIO requirement (% of the conventional-car base a maker must earn in NEV credits). Statutory schedule is 2023 18% · 2024 28% · 2025 38% · 2026 48% · 2027 58%. Leave null to follow the schedule, or set a number / {from,to} ramp to stress the mandate (e.g. "Beijing pulls the 2027 target forward" → {from:28,to:70}).
+- nevCreditPrice: the NEV credit trading price (¥/credit). Historically volatile — peaked >¥2,000 in 2021, collapsed on oversupply. Set it to model a price shock (a crash makes buying cheap; a squeeze makes deficits expensive).
+- evSharePct here is the NEV (BEV+PHEV) sales share — the single biggest driver of a maker's NEV-credit surplus.
+The mechanics you are modelling: BEV/PHEV earn NEV credits (BEV ≈ 0.0056·range+0.4, capped; PHEV 1.6, halved from 2024) and count as near-zero fuel in CAFC; a fuel-economy (CAFC) shortfall can be covered by a maker's own spare NEV credits, but an NEV shortfall can ONLY be bought clear. Phase 6 (from 2026) tightens the CAFC target and counts BEV/PHEV energy. Frame scenarios around these levers — e.g. a downside where the mandate jumps but adoption stalls (NEV deficits, dear credits), an upside where BEV share races ahead (surplus to sell).
+` : ''}
 Rules:
 - Ground ambition in the baseline you are given. If today's ZE share is 20%, a "modest" scenario might ramp to 35%, an "aggressive" one to 65% — don't invent 90% overnight.
 - Make the scenarios span the decision: e.g. a downside/regulatory-shock, a base/current-trajectory, and an upside/mitigation. Name them crisply (2–4 words). Descriptions: one sentence each.
@@ -201,7 +209,7 @@ ${ownedNote}
 Market: ${pack.flag} ${pack.name} — limit in ${pack.metricUnit}, fine ${pack.fineRateLabel}, years ${pack.years[0]}–${pack.years[pack.years.length - 1]}.`
 }
 
-const briefSystem = `You are the lead forecast analyst inside Autocred, writing the executive brief of a Big-4-grade board pack. Below are trajectories the deterministic engine has ALREADY computed, including the weighted case matrix (Base/Upside/Downside), the year-over-year fine bridge and the electrification break-even. Write 150–220 words of plain prose (no headers):
+const briefSystem = `You are the lead forecast analyst inside AiRE, writing the executive brief of a Big-4-grade board pack. Below are trajectories the deterministic engine has ALREADY computed, including the weighted case matrix (Base/Upside/Downside), the year-over-year fine bridge and the electrification break-even. Write 150–220 words of plain prose (no headers):
 - Verdict first: the probability-weighted expected exposure and the range across cases.
 - What drives it: use the bridge (regulation vs volume vs technology vs mix) to say WHY the number moves.
 - The break-even: what adoption level zeroes the final-year fine, and whether the base case gets there.
@@ -219,7 +227,7 @@ export default async function handler(req: any, res: any) {
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return }
 
   const country: CountryId = (context.country ?? 'EU') as CountryId
-  const owned: CountryId[] = context.ownedModules ?? ['EU', 'IN', 'AU', 'UK']
+  const owned: CountryId[] = context.ownedModules ?? ['EU', 'IN', 'AU', 'UK', 'CN']
   if (!owned.includes(country)) { res.status(403).json({ error: `Market ${country} is not subscribed.` }); return }
 
   if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set on the server.' }); return }

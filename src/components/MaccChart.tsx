@@ -60,7 +60,7 @@ export default function MaccChart({ steps, fineRate, creditPrice, gapToClose, un
         {placed.map((b, i) => {
           const buy = creditPrice != null && b.unitCost > creditPrice
           const pay = b.unitCost > fineRate
-          const fill = pay ? '#C9C0B2' : buy ? '#E0A100' : '#F2510E'
+          const fill = pay ? '#C9C0B2' : buy ? '#E0A100' : '#E8223B'
           const active = hover === i
           return (
             <g key={b.label} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>

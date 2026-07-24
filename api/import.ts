@@ -5,7 +5,7 @@
 import { putDataset, SOURCES, backend } from './_store.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 
-const MARKETS = new Set(['EU', 'IN', 'AU', 'UK'])
+const MARKETS = new Set(['EU', 'IN', 'AU', 'UK', 'CN'])
 const MAX_ROWS = 100_000
 
 export default async function handler(req: any, res: any) {

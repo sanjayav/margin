@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────────────
-// Autocred AI · OUTLOOK engine (pure) — the fundamentals layer under Forecast.
+// AiRE · OUTLOOK engine (pure) — the fundamentals layer under Forecast.
 //
 // A Big-4-grade forecast is a driver tree, not an extrapolation. This module
 // owns the drivers (the Assumption Book), turns them into a synthetic per-year
@@ -65,6 +65,10 @@ export const DRIVER_DEFAULTS: Record<CountryId, DriverSet> = {
   UK: { marketGrowth: 1.5, evShareHorizon: 80, iceCo2Improve: 1.5, massDrift: 5 }, // horizon = the 2030 ZEV mandate
   IN: { marketGrowth: 4.5, evShareHorizon: 30, iceCo2Improve: 1.75, massDrift: 8 }, // 30@30 ambition; SUV shift strongest
   AU: { marketGrowth: 1.5, evShareHorizon: 45, iceCo2Improve: 1.5, massDrift: 4 },
+  // NEV share already >50% of retail; the 2026-27 credit ratios (48%/58%) and the
+  // 3.3 L/100km 2030 CAFC goal keep the trajectory steep. PHEV-heavy mix keeps
+  // combustion improvement high; SUV/battery mix pushes kerb mass up.
+  CN: { marketGrowth: 2.0, evShareHorizon: 75, iceCo2Improve: 2.5, massDrift: 8 },
 }
 
 // ── cases (the scenario matrix) ──────────────────────────────────────────────
