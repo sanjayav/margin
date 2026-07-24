@@ -208,7 +208,7 @@ export default function ForecastCN() {
             Describe a future — the AI forecasts every fundamental.
           </h1>
           <p className="mt-3.5 max-w-[64ch] text-[13.5px] leading-[1.65] text-white/55">
-            Claude turns your prose into grounded scenarios — adoption pace, market growth, combustion tech, the NEV mandate and credit price. The deterministic engine then projects fleet fuel use, EV share, battery demand and the full dual-credit position to {finalYear}. Every number is engine-proven.
+            AiRE turns your prose into grounded scenarios — adoption pace, market growth, combustion tech, the NEV mandate and credit price. The deterministic engine then projects fleet fuel use, EV share, battery demand and the full dual-credit position to {finalYear}. Every number is engine-proven.
           </p>
           <form onSubmit={(e) => { e.preventDefault(); generate() }} className="mt-6 flex gap-2.5">
             <div className="relative flex-1">

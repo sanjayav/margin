@@ -47,7 +47,7 @@ export default function Login() {
             The emissions-compliance<br />control room.
           </h1>
           <p className="mt-5 text-[15px] leading-relaxed text-white/55">
-            Track every regulated market, model any regulatory future, and price the exposure — before it lands.
+            Track every regulated market, stress-test any regulatory future, and price the exposure — before it lands.
           </p>
           <div className="mt-10 space-y-5">
             {POINTS.map((p, i) => (
