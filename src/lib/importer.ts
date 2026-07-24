@@ -144,40 +144,65 @@ export function detectVendor(headers: string[]): Vendor | null {
 }
 
 // Fuzzy fallback for compound vendor headers ("CO2 g/km (WLTP)", "Kerb Weight
-// (kg) EU", "Sales Volume FY26") — substring cues, tried only when no exact
-// synonym matched and the field is still free. Order = match priority.
+// (kg) EU", "V : WLTP Electric Consumption (China)") — substring cues, tried
+// when no exact synonym matched. Order = match priority.
 const FUZZY: [FieldKey, RegExp][] = [
   ['co2', /co2/],
-  ['mass', /kerbweight|curbweight|kerbmass|unladenmass|massinrunningorder|testmass|referencemass/],
+  ['mass', /kerbweight|curbweight|kerbmass|unladenmass|massinrunningorder|runningordermass|testmass|referencemass/],
   ['sales', /registrations|salesvolume|volume|unitssold/],
   ['year', /(model|calendar|fiscal|production|sales|registration)year/],
   ['powertrain', /powertrain|propulsion/],
   ['fuel', /fueltype/],
   ['engineCC', /displacement|enginecapacity/],
   ['battery', /batterycapacity|batterykwh/],
+  ['range', /erange|electricrange/],
+  ['energy', /electricconsumption|energyconsumption|kwh100/],
+  ['powerKW', /enginepower|maxpower|ratedpower|powerkw/],
+  ['fuelL100', /fuelcons.*l100|fuelconsumptionl100/],
+  ['ftCode', /ftcode/],
+  ['gearbox', /gearbox|transmission/],
+  ['driveline', /driveline|drivenwheels|drivetrain/],
   ['variant', /version|trimlevel|derivative/],
   ['bodyStyle', /bodytype|bodystyle/],
   ['segment', /segment/],
-  ['gearbox', /transmission/],
-  ['driveline', /drivenwheels|drivetrain/],
 ]
 
+// A "R :" / "M :" prefixed column is a REGULATORY or sales-weighted aggregate
+// (an output), not a raw vehicle spec — never let it win a vehicle field.
+const isAggregate = (h: string) => /^\s*[RM]\s*:/i.test(h)
+
 export interface Mapping { field: FieldKey | null; header: string }
-export function autoMap(headers: string[]): Mapping[] {
+/** Map source headers to target fields. `preferCycle` breaks ties between
+ *  duplicated cycle columns (NEDC vs WLTP vs MIDC) so the market's own basis
+ *  wins — e.g. China/EU want WLTP/WLTC, India wants MIDC. */
+export function autoMap(headers: string[], preferCycle: 'WLTP' | 'MIDC' = 'WLTP'): Mapping[] {
   const taken = new Set<FieldKey>()
-  const out: Mapping[] = headers.map((h) => {
-    const f = SYNONYMS[canon(h)] ?? null
-    if (f && !taken.has(f)) { taken.add(f); return { field: f, header: h } }
-    return { field: null, header: h }
-  })
-  // second pass: fuzzy-match still-unmapped headers to still-free fields
+  const out: Mapping[] = headers.map((h) => ({ field: null as FieldKey | null, header: h }))
+  // pass 1: exact synonyms — skip aggregate columns so a raw V: spec wins the field
   out.forEach((m) => {
-    if (m.field) return
-    const c = canon(m.header)
-    for (const [field, re] of FUZZY) {
-      if (!taken.has(field) && re.test(c)) { m.field = field; taken.add(field); break }
-    }
+    if (isAggregate(m.header)) return
+    const f = SYNONYMS[canon(m.header)]
+    if (f && !taken.has(f)) { m.field = f; taken.add(f) }
   })
+  // pass 2: score-based fuzzy — the BEST candidate per still-free field, not the
+  // first. Cycle preference + aggregate penalty decide between duplicate columns.
+  const cyc = preferCycle === 'MIDC' ? { pref: /midc/, avoid: /wltp|wltc|nedc/ } : { pref: /wltp|wltc/, avoid: /nedc|midc/ }
+  for (const [field, re] of FUZZY) {
+    if (taken.has(field)) continue
+    let best: Mapping | null = null, bestScore = 0
+    out.forEach((m, i) => {
+      if (m.field) return
+      const c = canon(m.header)
+      if (!re.test(c)) return
+      let score = 10
+      if (cyc.pref.test(c)) score += 6
+      if (cyc.avoid.test(c)) score -= 5
+      if (isAggregate(m.header)) score -= 20
+      score -= i * 0.001 // stable tiebreak: earlier column wins
+      if (score > bestScore) { bestScore = score; best = m }
+    })
+    if (best) { (best as Mapping).field = field; taken.add(field) }
+  }
   // repair pass: a file whose ONLY mass column is Test/Reference Mass (EU
   // extracts) must still satisfy the required 'mass' — that column donates.
   if (!taken.has('mass')) {

@@ -26,6 +26,9 @@ const FIELD_ORDER = new Map(FIELDS.map((f, i) => [f.key, i]))
 const colLetter = (i: number) => (i < 26 ? '' : String.fromCharCode(64 + Math.floor(i / 26))) + String.fromCharCode(65 + (i % 26))
 
 export default function ImportStudio({ country, pack, onClose }: { country: CountryId; pack: RulePack; onClose: (imported: boolean) => void }) {
+  // India's homologation basis is MIDC; every other market here runs WLTP/WLTC.
+  // The importer uses this to pick the right column when a file carries several.
+  const preferCycle: 'WLTP' | 'MIDC' = country === 'IN' ? 'MIDC' : 'WLTP'
   const [step, setStep] = useState<Step>('source')
   const [fileName, setFileName] = useState<string | null>(null)
   const [sheets, setSheets] = useState<SheetData[]>([])
@@ -62,7 +65,7 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
     // pick the sheet whose header row maps best
     let best = 0, bestScore = -1
     withRows.forEach((s, i) => {
-      const score = autoMap(s.grid[0] ?? []).filter((m) => m.field).length
+      const score = autoMap(s.grid[0] ?? [], preferCycle).filter((m) => m.field).length
       if (score > bestScore) { best = i; bestScore = score }
     })
     selectSheet(withRows, best)
@@ -74,7 +77,7 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
     const header = looksLikeHeader(g[0] ?? [])
     setHasHeader(header)
     const hdrs = header ? g[0] : (g[0] ?? []).map((_, i) => `Column ${i + 1}`)
-    setMapping(autoMap(hdrs))
+    setMapping(autoMap(hdrs, preferCycle))
     setVendor(header ? detectVendor(g[0]) : null)
   }
 
@@ -275,7 +278,7 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
                 </span>
               )}
               <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-ink-400">
-                <input type="checkbox" checked={hasHeader} onChange={(e) => { setHasHeader(e.target.checked); setMapping(autoMap(e.target.checked ? grid[0] : (grid[0] ?? []).map((_, i) => `Column ${i + 1}`))) }} className="accent-[#E8223B]" />
+                <input type="checkbox" checked={hasHeader} onChange={(e) => { setHasHeader(e.target.checked); setMapping(autoMap(e.target.checked ? grid[0] : (grid[0] ?? []).map((_, i) => `Column ${i + 1}`), preferCycle)) }} className="accent-[#E8223B]" />
                 First row is headers
               </label>
             </div>
