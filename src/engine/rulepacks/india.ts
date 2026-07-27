@@ -94,12 +94,19 @@ export const IN: RulePack = {
   vehicleMetric: (v: Vehicle, s) => {
     if (/electric|bev/i.test(v.fuel) || v.co2 === 0) return 0
     const petrolEq = v.co2 / PETROL_DIV
+    const cafe3 = s.year >= CAFE3_FROM
     // CNF discounts are a CAFE III (draft) mechanism — inert in CAFE II years.
     // Auto-derived from fuel (E20 petrol 8% · CNG 5% · flex 22.3%) unless the
     // row carries an explicit cnf; the cnfEnabled lever stress-tests "CNF is
     // struck from the final notification".
-    const cnf = s.year >= CAFE3_FROM && s.cnfEnabled !== false ? (v.cnf ?? autoCnf(v.fuel)) : 0
-    return Math.max(0, petrolEq * (1 - cnf))
+    let cnf = cafe3 && s.cnfEnabled !== false ? (v.cnf ?? autoCnf(v.fuel)) : 0
+    // Fuel-pathway lever: a richer blend/CNG pathway (E27, flex, CNG conversion)
+    // adds CNF points to every combustion row. Capped so it stays defensible.
+    if (cafe3 && s.cnfBoostPct && cnf >= 0) cnf = Math.min(0.35, cnf + s.cnfBoostPct / 100)
+    // MIDC→WLTP cycle conversion: the transition raises the measured number
+    // ~18% while the (MIDC-based) limit is unchanged — the FY27-28 cliff.
+    const wltp = cafe3 && s.cycleWltp ? 1.18 : 1
+    return Math.max(0, petrolEq * (1 - cnf) * wltp)
   },
   vehicleUnits: (v: Vehicle, s) => {
     // Super-credits exist only in the draft CAFE III regime.

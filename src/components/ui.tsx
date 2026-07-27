@@ -39,11 +39,17 @@ export function StatusPill({ status, big }: { status: Aggregate['status']; big?:
 }
 
 export function Stat({ label, value, sub, accent, className = '' }: { label: string; value: ReactNode; sub?: ReactNode; accent?: string; className?: string }) {
+  // status stats get a colored accent rail; plain metrics a warm-neutral one.
+  const toned = !!accent && accent !== 'text-ink-100'
+  const hex = accent === 'text-safe' ? '#0E9F6E' : accent === 'text-danger' ? '#E0484D' : accent === 'text-warn' ? '#D98005'
+    : accent === 'text-accentblue' ? '#3B6FE0' : accent === 'text-brand' ? '#E8223B' : '#C9BCA3'
   return (
-    <div className={`card p-5 ${className}`}>
-      <div className="label">{label}</div>
-      <div className={`dnum mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em] ${accent ?? 'text-ink-100'}`}>{value}</div>
-      {sub && <div className="mt-2.5 text-[10.5px] leading-snug text-ink-500">{sub}</div>}
+    <div className={`card group relative overflow-hidden p-5 ${className}`}>
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${hex}, ${hex}00 82%)`, opacity: toned ? 0.8 : 0.5 }} />
+      {toned && <div aria-hidden className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100" style={{ background: `${hex}22` }} />}
+      <div className="label relative">{label}</div>
+      <div className={`dnum relative mt-2.5 text-[26px] font-bold leading-none tracking-[-0.02em] ${accent ?? 'text-ink-100'}`}>{value}</div>
+      {sub && <div className="relative mt-2.5 text-[10.5px] leading-snug text-ink-500">{sub}</div>}
     </div>
   )
 }

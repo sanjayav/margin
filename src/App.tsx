@@ -33,6 +33,7 @@ import Admin from './screens/Admin'
 import DualCredit from './screens/DualCredit'
 import AnalyzeCN from './screens/cn/AnalyzeCN'
 import ForecastCN from './screens/cn/ForecastCN'
+import IntelligenceIN from './screens/in/IntelligenceIN'
 import Login from './screens/Login'
 import type { CountryId } from './engine/types'
 
@@ -239,7 +240,9 @@ function ModuleShell() {
   const screen = navItem?.country && navItem.country !== country ? 'analyse' : screenRaw
   // China-only restyled forks — identical functionality, elevated presentation.
   const CN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'CN' ? { analyse: AnalyseActualsCN, forecast: ForecastCN, creditbook: DualCredit } : {}
-  const Screen = CN_FORKS[screen] ?? {
+  // India-only intelligence cockpit — replaces the generic event feed for IN.
+  const IN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'IN' ? { intel: IntelligenceIN } : {}
+  const Screen = CN_FORKS[screen] ?? IN_FORKS[screen] ?? {
     analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
     pricing: Pricing, pooling: Pooling, dualcredit: DualCredit, data: Data, intel: Intelligence, admin: Admin,
   }[screen]

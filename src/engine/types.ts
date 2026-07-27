@@ -87,6 +87,14 @@ export interface Scenario {
    *  flex 22.3%) — auto-derived from fuel where the row carries no explicit
    *  cnf. Default true; false models "CNF struck from the final rules". */
   cnfEnabled?: boolean
+  /** India CAFE III · fuel-pathway lever. Extra carbon-neutral-fuel discount
+   *  POINTS on top of the auto-derived per-vehicle CNF, modelling a richer
+   *  blend/CNG pathway (E20 → E27 → flex/CNG). 0 = today's E20 baseline. */
+  cnfBoostPct?: number
+  /** India CAFE III · apply the MIDC→WLTP cycle-conversion uplift to fuel use
+   *  (the cycle change typically raises the measured number ~18%). Stress-tests
+   *  the FY2027-28 transition cliff while the limit stays MIDC-based. */
+  cycleWltp?: boolean
   // ── China dual-credit (双积分) — second-axis levers, read only by the CN
   //    dual-credit ledger. null/undefined = statutory value for the year. ──
   /** Override the NEV credit RATIO requirement (% of the conventional-car base

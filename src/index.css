@@ -245,7 +245,10 @@ input[type="range"]::-moz-range-thumb {
 @keyframes cb-stream {
   to { stroke-dashoffset: -17; }
 }
+/* premium flow: a thin bright spark travelling seller → buyer along the ribbon */
+.cb-spark { stroke-dasharray: 3 20; animation: cb-spark 1.7s linear infinite; }
+@keyframes cb-spark { to { stroke-dashoffset: -23; } }
 .cb-node { transition: opacity 0.2s ease; }
 @media (prefers-reduced-motion: reduce) {
-  .cb-flow { animation: none; stroke-dasharray: none; }
+  .cb-flow, .cb-spark { animation: none; stroke-dasharray: none; }
 }

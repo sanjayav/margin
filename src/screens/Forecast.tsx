@@ -287,33 +287,47 @@ export default function Forecast() {
         <button onClick={exportPack} className="btn-ghost ml-auto px-3 py-1.5 text-xs"><Icon name="section" size={14} /> Board pack</button>
       </div>
 
-      <Section
-        title={<span className="flex items-center gap-2"><Icon name="spark" size={16} className="text-brand" /> Forecast studio</span>}
-        right={<span className="text-[11px] text-ink-500">describe a future — the AI builds the scenarios, the engine computes them</span>}
-      >
-        <form onSubmit={(e) => { e.preventDefault(); generate() }} className="flex items-center gap-2 rounded-xl border border-black/10 bg-ink-850 px-3 py-2 focus-within:border-brand/40">
-          <Icon name="spark" size={16} className="shrink-0 text-brand" />
-          <input value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={generating}
-            placeholder={`Forecast ${isMarket ? 'the market' : parent.split(' ')[0]} if…`}
-            className="w-full bg-transparent text-sm text-ink-100 outline-none placeholder:text-ink-600" />
-          <button type="submit" disabled={generating || !prompt.trim()}
-            className="btn-primary shrink-0 px-3 py-1.5 text-xs disabled:opacity-40">
-            {generating ? <><span className="inline-flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1 w-1 animate-pulse rounded-full bg-white" style={{ animationDelay: `${d * 150}ms` }} />)}</span> Building</> : <><Icon name="arrow-up" size={14} /> Generate</>}
-          </button>
-        </form>
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {STARTERS.map((s) => (
-            <button key={s} onClick={() => { setPrompt(s); }} disabled={generating}
-              className="rounded-lg border border-black/[0.07] bg-white/50 px-2.5 py-1 text-[10.5px] font-medium text-ink-400 transition hover:border-brand/40 hover:text-brand disabled:opacity-40">{s}</button>
-          ))}
-        </div>
-        {error && (
-          <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {error}
-            {/ANTHROPIC_API_KEY/i.test(error) && <div className="mt-1 text-ink-500">Set <span className="font-mono">ANTHROPIC_API_KEY</span> on the server (locally: <span className="font-mono">.env</span> + restart). The scenario builder and charts still work — add scenarios by hand with ＋ New.</div>}
+      {/* ── AI STUDIO · frontier cockpit ─────────────────────────────────── */}
+      <div className="rise relative overflow-hidden rounded-[20px] border border-black/[0.06] p-7 xl:p-9" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 46%, #17130F 100%)' }}>
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.36), transparent 62%)' }} />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 right-1/3 h-72 w-72 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(246,104,100,0.16), transparent 62%)' }} />
+        <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.45]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '24px 24px', maskImage: 'radial-gradient(120% 130% at 88% 0%, #000 28%, transparent 74%)', WebkitMaskImage: 'radial-gradient(120% 130% at 88% 0%, #000 28%, transparent 74%)' }} />
+        <div className="relative">
+          <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">
+            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400/60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-brand-400" /></span>
+            Forecast studio · {pack.name} · {pack.years[0]}–{pack.years[pack.years.length - 1]}
           </div>
-        )}
-      </Section>
+          <h1 className="font-display mt-4 max-w-[22ch] text-[32px] font-extrabold leading-[1.06] tracking-[-0.03em] text-white xl:text-[36px]">
+            Describe a future — the AI builds every scenario.
+          </h1>
+          <p className="mt-3.5 max-w-[64ch] text-[13.5px] leading-[1.65] text-white/55">
+            Turn a sentence into grounded scenarios — adoption pace, market growth, combustion tech and the tightening limit. The deterministic engine then projects {isMarket ? 'the market' : parent.split(' ')[0]}’s fleet fuel use, ZE share and {pack.currency}-at-risk year by year. Every number is engine-proven, never invented.
+          </p>
+          <form onSubmit={(e) => { e.preventDefault(); generate() }} className="mt-6 flex gap-2.5">
+            <div className="relative flex-1">
+              <Icon name="spark" size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400/80" />
+              <input value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={generating}
+                placeholder={`Forecast ${isMarket ? 'the market' : parent.split(' ')[0]} if…`}
+                className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-3 pl-10 pr-4 text-[13.5px] text-white outline-none backdrop-blur-sm transition placeholder:text-white/35 focus:border-brand-400/50 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand-400/20" />
+            </div>
+            <button type="submit" disabled={generating || !prompt.trim()} className="btn-primary shrink-0 px-5 disabled:opacity-40">
+              {generating ? <><span className="inline-flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1 w-1 animate-pulse rounded-full bg-white" style={{ animationDelay: `${d * 150}ms` }} />)}</span> Building</> : <><Icon name="spark" size={14} /> Generate</>}
+            </button>
+          </form>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {STARTERS.map((s) => (
+              <button key={s} onClick={() => { setPrompt(s) }} disabled={generating}
+                className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/55 transition hover:border-brand-400/40 hover:bg-white/[0.08] hover:text-white disabled:opacity-50">{s}</button>
+            ))}
+          </div>
+          {error && (
+            <div className="mt-3 rounded-lg border border-danger/40 bg-danger/[0.12] px-3 py-2 text-xs text-[#FF9A93]">
+              {error}
+              {/ANTHROPIC_API_KEY/i.test(error) && <div className="mt-1 text-white/50">Set <span className="font-mono">ANTHROPIC_API_KEY</span> on the server (locally: <span className="font-mono">.env</span> + restart). The scenario builder and charts still work — add scenarios by hand with ＋ New.</div>}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* the AI's recommended forecast MODEL — apply to the Assumption Book */}
       {aiBook && (
@@ -850,11 +864,16 @@ function Sparkline({ values, hex, w = 128, h = 34 }: { values: number[]; hex: st
 }
 
 function ImpactChip({ icon, label, value, sub, tone }: { icon: IconName; label: string; value: string; sub: string; tone?: string }) {
+  const hex = tone === 'text-safe' ? '#0E9F6E' : tone === 'text-warn' ? '#D98005' : tone === 'text-danger' ? '#E0484D' : tone === 'text-accentblue' ? '#3B6FE0' : '#E8223B'
   return (
-    <div className="rounded-xl border border-black/[0.06] bg-white/55 p-3.5">
-      <div className="label flex items-center gap-1.5"><Icon name={icon} size={12} className="text-brand" /> {label}</div>
-      <div className={`dnum mt-1.5 text-[26px] font-black leading-none ${tone ?? 'text-ink-100'}`}>{value}</div>
-      <div className="mt-1 text-[11px] leading-snug text-ink-500">{sub}</div>
+    <div className="group relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/60 p-4 transition hover:border-black/[0.1]">
+      <span aria-hidden className="absolute inset-x-0 top-0 h-[2px] opacity-75" style={{ background: `linear-gradient(90deg, ${hex}, ${hex}00 82%)` }} />
+      <div aria-hidden className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100" style={{ background: `${hex}26` }} />
+      <div className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.11em] text-ink-500">
+        <span className="grid h-5 w-5 place-items-center rounded" style={{ background: `${hex}1A`, color: hex }}><Icon name={icon} size={11} /></span>{label}
+      </div>
+      <div className={`dnum relative mt-3 text-[26px] font-black leading-none tracking-[-0.02em] ${tone ?? 'text-ink-100'}`}>{value}</div>
+      <div className="relative mt-1.5 text-[11px] leading-snug text-ink-500">{sub}</div>
     </div>
   )
 }

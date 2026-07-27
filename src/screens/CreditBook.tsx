@@ -102,19 +102,30 @@ function MarketMap({ sellers, buyers, unit, onPick, picked }: {
   return (
     <div data-testid="credit-flow" className="overflow-x-auto">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 640 }}>
+        <defs>
+          <filter id="cbGlow" x="-20%" y="-80%" width="140%" height="260%"><feGaussianBlur stdDeviation="3.5" /></filter>
+          {flows.map((f, i) => (
+            <linearGradient key={i} id={`cbg${i}`} gradientUnits="userSpaceOnUse" x1={122} y1={sy.get(f.seller)!} x2={W - 122} y2={by.get(f.buyer)!}>
+              <stop offset="0%" stopColor="#12B981" />
+              <stop offset="55%" stopColor="#7FB88A" />
+              <stop offset="100%" stopColor="#E0484D" />
+            </linearGradient>
+          ))}
+        </defs>
         <text x={96} y={20} textAnchor="middle" fontSize="10" fontWeight={800} letterSpacing="1.5" fill="#0E7A4E">SELLERS · SURPLUS</text>
         <text x={W - 96} y={20} textAnchor="middle" fontSize="10" fontWeight={800} letterSpacing="1.5" fill="#B3261E">BUYERS · DEFICIT</text>
-        {/* flows under the nodes */}
+        {/* flows under the nodes — smooth gradient ribbons (surplus → deficit) */}
         {flows.map((f, i) => {
           const y1 = sy.get(f.seller)!, y2 = by.get(f.buyer)!
-          const w = 1.5 + (f.qty / maxQty) * 11
-          const d = `M ${96 + 26} ${y1} C ${W * 0.38} ${y1}, ${W * 0.62} ${y2}, ${W - 96 - 26} ${y2}`
+          const w = 2 + (f.qty / maxQty) * 12
+          const d = `M ${96 + 26} ${y1} C ${W * 0.4} ${y1}, ${W * 0.6} ${y2}, ${W - 96 - 26} ${y2}`
           const pickedFlow = picked.seller === f.seller && picked.buyer === f.buyer
           return (
-            <g key={i} style={{ cursor: 'pointer', opacity: isDim(f) ? 0.14 : 1, transition: 'opacity .2s' }}
+            <g key={i} style={{ cursor: 'pointer', opacity: isDim(f) ? 0.12 : 1, transition: 'opacity .2s' }}
               onMouseEnter={() => setHover(f)} onMouseLeave={() => setHover(null)} onClick={() => onPick(f.seller, f.buyer)}>
-              <path d={d} fill="none" stroke="#0E9F6E" strokeOpacity={pickedFlow ? 0.5 : 0.28} strokeWidth={w + 5} strokeLinecap="round" />
-              <path d={d} fill="none" stroke={pickedFlow ? '#E8223B' : '#0E9F6E'} strokeWidth={w} strokeLinecap="round" className="cb-flow" />
+              <path d={d} fill="none" stroke={`url(#cbg${i})`} strokeOpacity={pickedFlow ? 0.5 : 0.26} strokeWidth={w + 8} strokeLinecap="round" filter="url(#cbGlow)" />
+              <path d={d} fill="none" stroke={`url(#cbg${i})`} strokeWidth={w} strokeLinecap="round" strokeOpacity={0.95} />
+              <path d={d} fill="none" stroke="#fff" strokeOpacity={pickedFlow ? 0.9 : 0.5} strokeWidth={Math.max(1.1, w * 0.24)} strokeLinecap="round" className="cb-spark" />
             </g>
           )
         })}
