@@ -14,6 +14,13 @@ export const fmtInt = (n: number) =>
 
 export const fmtMoney = (n: number, currency: string) => {
   const abs = Math.abs(n)
+  // Indian numbering: rupee amounts read in crore (1e7) and lakh (1e5), never B/M.
+  if (currency === '₹') {
+    if (abs >= 1e7) return `${currency}${(n / 1e7).toFixed(abs >= 1e9 ? 0 : abs >= 1e8 ? 1 : 2)} Cr`
+    if (abs >= 1e5) return `${currency}${(n / 1e5).toFixed(1)} L`
+    if (abs >= 1e3) return `${currency}${(n / 1e3).toFixed(1)}k`
+    return `${currency}${Math.round(n)}`
+  }
   if (abs >= 1e9) return `${currency}${(n / 1e9).toFixed(2)}B`
   if (abs >= 1e6) return `${currency}${(n / 1e6).toFixed(2)}M`
   if (abs >= 1e3) return `${currency}${(n / 1e3).toFixed(1)}k`

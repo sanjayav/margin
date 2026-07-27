@@ -19,6 +19,7 @@ import {
 import { getFleet, setLiveFleet } from '../data/fleet'
 import { useStore } from '../state/store'
 import { fmtInt } from '../engine/engine'
+import { scanAnomalies, type Anomaly } from '../engine/anomaly'
 import Icon from './Icon'
 
 type Step = 'source' | 'map' | 'grid'
@@ -153,6 +154,9 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
       years: [...new Set(vs.map((v) => v.year).filter((y) => y > 0))].sort(),
     }
   }, [keptRows, fields, country, pack])
+  // anomaly scan on the rows about to be imported — surfaced before commit so
+  // impossible/contradictory values are caught, not silently merged.
+  const importAnoms = useMemo<Anomaly[]>(() => scanAnomalies(toVehicles(keptRows, fields, country, { vclass: pack.classes[0] })), [keptRows, fields, country, pack])
 
   const commit = async () => {
     setCommitting(true); setCommitErr(null)
@@ -345,7 +349,7 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
           <GridStep
             fields={fields} rows={rows} setRows={setRows} issues={issues} errorCount={errorCount} errRows={errRows}
             skipInvalid={skipInvalid} setSkipInvalid={setSkipInvalid} mode={mode} setMode={setMode}
-            preview={preview} committing={committing} commitErr={commitErr}
+            preview={preview} anomalies={importAnoms} committing={committing} commitErr={commitErr}
             onBack={() => setStep('map')} onCommit={() => void commit()} pack={pack}
           />
         )}
@@ -356,15 +360,18 @@ export default function ImportStudio({ country, pack, onClose }: { country: Coun
 
 // ── step 3 — the Excel-style grid ────────────────────────────────────────────
 const ROW_H = 30
-function GridStep({ fields, rows, setRows, issues, errorCount, errRows, skipInvalid, setSkipInvalid, mode, setMode, preview, committing, commitErr, onBack, onCommit, pack }: {
+function GridStep({ fields, rows, setRows, issues, errorCount, errRows, skipInvalid, setSkipInvalid, mode, setMode, preview, anomalies, committing, commitErr, onBack, onCommit, pack }: {
   fields: FieldKey[]; rows: string[][]; setRows: (r: string[][]) => void
   issues: IssueMap; errorCount: number; errRows: Set<number>
   skipInvalid: boolean; setSkipInvalid: (b: boolean) => void
   mode: 'merge' | 'replace'; setMode: (m: 'merge' | 'replace') => void
   preview: { rows: number; units: number; makers: number; years: number[] }
+  anomalies: Anomaly[]
   committing: boolean; commitErr: string | null
   onBack: () => void; onCommit: () => void; pack: RulePack
 }) {
+  const anomWarn = anomalies.filter((a) => a.severity === 'warn').length
+  const [anomOpen, setAnomOpen] = useState(false)
   const defs = fields.map((f) => FIELDS.find((d) => d.key === f)!)
   const [sel, setSel] = useState<{ r: number; c: number }>({ r: 0, c: 0 })
   const [edit, setEdit] = useState<string | null>(null)
@@ -465,12 +472,28 @@ function GridStep({ fields, rows, setRows, issues, errorCount, errRows, skipInva
         ) : (
           <span className="chip border-safe/30 bg-safe/[0.07] font-semibold text-safe"><Icon name="check" size={12} /> All rows valid</span>
         )}
+        {anomWarn > 0 && (
+          <button onClick={() => setAnomOpen((v) => !v)} className="chip border-warn/35 bg-warn/[0.07] font-semibold text-warn transition hover:bg-warn/[0.14]">
+            <Icon name="activity" size={12} /> {anomWarn} anomal{anomWarn === 1 ? 'y' : 'ies'} — {anomOpen ? 'hide' : 'review'}
+          </button>
+        )}
         <span className="text-ink-500">Double-click or just type to edit · ⌘V pastes a block at the selection</span>
         <span className="ml-auto flex items-center gap-1.5">
           <button onClick={addRow} className="btn-ghost px-2.5 py-1 text-[11px]">+ Row</button>
           <button onClick={deleteRow} className="btn-ghost px-2.5 py-1 text-[11px]">Delete row {sel.r + 1}</button>
         </span>
       </div>
+      {anomOpen && anomWarn > 0 && (
+        <div className="max-h-40 shrink-0 overflow-y-auto rounded-xl border border-warn/25 bg-warn/[0.04] p-1">
+          {anomalies.filter((a) => a.severity === 'warn').slice(0, 100).map((a, i) => (
+            <div key={i} className="flex items-start gap-2 px-2.5 py-1.5 text-[11px]">
+              <Icon name="activity" size={11} className="mt-0.5 shrink-0 text-warn" />
+              <span className="font-semibold text-ink-200">{a.label}</span>
+              <span className="text-ink-500">{a.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* the sheet */}
       <div ref={scrollRef} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)} onKeyDown={onKey} onPaste={onPaste} tabIndex={0}

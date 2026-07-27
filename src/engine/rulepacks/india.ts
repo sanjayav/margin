@@ -64,12 +64,13 @@ export const IN: RulePack = {
   // Linear-equivalent of the first statutory tier (₹25,000 per 0.2 L/100km) —
   // used only for benchmark lines (MACC); the actual fine is fineFor below.
   fineRate: FINE_TIER1 / FINE_STEP,
-  fineRateLabel: '₹25,000/car (≤0.2 L/100km over) · ₹50,000/car beyond — EC Act 2022',
+  fineRateLabel: '₹25,000/car (≤0.2 L/100km over) · ₹50,000/car beyond · EC Act 2022',
   creditPrice: CREDIT_PER_L,
   creditPriceLabel: '≈₹2,500 per gCO₂/km per car (draft CAFE III trading price, FY28)',
-  // 2025–26 are the CAFE II actuals baseline (real 4-OEM extract); 2027–31 are
-  // the CAFE III draft horizon. defaultYear keeps the workspace opening on the
-  // CAFE III headline year while the actuals stay selectable in the year strip.
+  // 2025 (FY2025-26) is the complete actual — the 12-OEM extract, ~4.79M units.
+  // The Jul-2026 pull of FY2026-27 was only a part-year, so 2026–31 hold the 2025
+  // fleet (mix and volume) against each year's tightening line rather than carry a
+  // part-year forward. defaultYear opens on the CAFE III headline year.
   years: [2025, 2026, 2027, 2028, 2029, 2030, 2031],
   defaultYear: 2027,
   classes: ['Passenger car'],
@@ -77,8 +78,8 @@ export const IN: RulePack = {
   pooling: { enabled: false, note: 'CAFE is assessed per manufacturer; the draft provides credit trading between makers, not pooled averages.' },
   credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
   limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',
-  source: 'BEE — Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
-  coverageNote: 'Reporting manufacturers only — not all-India volume. Add the remaining OEMs via the master file or the Import Studio.',
+  source: 'Master fleet extract (Jul 2026): 12 compliance entities, model-level sales-weighted CO₂ (MIDC) and kerb mass, FY2025-26 complete actual (~4.79M units). BEE Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
+  coverageNote: 'The 12 major OEMs (Maruti Suzuki, Mahindra, Tata, Hyundai, Toyota, Kia, Škoda-VW, MG, Honda, Renault, Nissan, FCA) cover the bulk of the Indian PV market. 2026–31 hold the FY2025-26 as-sold fleet against each year’s tightening CAFE III line.',
 
   regimeFor: (year) =>
     year < CAFE3_FROM
@@ -88,7 +89,7 @@ export const IN: RulePack = {
         }
       : {
           name: 'CAFE III', draft: true, cycle: 'MIDC → WLTP',
-          cycleNote: 'Draft CAFE III starts on MIDC and transitions to WLTP once MoRTH adopts it — the MIDC→WLTP conversion factor is to be notified separately (Ministry of Power).',
+          cycleNote: 'Draft CAFE III starts on MIDC and transitions to WLTP once MoRTH adopts it. The MIDC→WLTP conversion factor is to be notified separately (Ministry of Power).',
         },
 
   vehicleMetric: (v: Vehicle, s) => {

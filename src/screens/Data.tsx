@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { useStore } from '../state/store'
+import { useStore, defaultScenario } from '../state/store'
 import { getFleet, getMeta, setLiveFleet } from '../data/fleet'
 import { getPack } from '../engine/rulepacks'
-import type { Vehicle } from '../engine/types'
-import { fmtInt, fmtNum, applyScenario } from '../engine/engine'
+import type { Vehicle, Scenario } from '../engine/types'
+import { fmtInt, fmtNum, fmtMoney, applyScenario, buildTree } from '../engine/engine'
+import { parseWhatIf, parseDataQuery, whatIfStarters } from '../lib/whatif'
+import { scanAnomalies, type Anomaly } from '../engine/anomaly'
 import Icon from '../components/Icon'
 import ImportStudio from '../components/ImportStudio'
 import { Stat } from '../components/ui'
@@ -135,6 +137,9 @@ export default function Data() {
   // expert filters — facets + numeric ranges + grouping
   const [fMaker, setFMaker] = useState<Set<string>>(new Set())
   const [fPt, setFPt] = useState<Set<string>>(new Set())
+  const [fFuel, setFFuel] = useState<Set<string>>(new Set())
+  const [fSeg, setFSeg] = useState<Set<string>>(new Set())
+  const [fBody, setFBody] = useState<Set<string>>(new Set())
   const [fClass, setFClass] = useState<Set<string>>(new Set())
   const [fYear, setFYear] = useState<Set<string>>(new Set())
   const [co2Lo, setCo2Lo] = useState(''); const [co2Hi, setCo2Hi] = useState('')
@@ -156,20 +161,68 @@ export default function Data() {
     [hasLibrary],
   )
 
+  // ── AI what-if: a sentence → scenario levers, applied live to the table ─────
+  const [wiPrompt, setWiPrompt] = useState('')
+  const [whatIf, setWhatIf] = useState<{ scenario: Partial<Scenario>; applied: string[] } | null>(null)
+  const [wiErr, setWiErr] = useState(false)
+  const wiYear = pack.defaultYear ?? pack.years[0]
+  const zePctNow = useMemo(() => {
+    const rows = all.filter((v) => v.year === wiYear)
+    const tot = rows.reduce((a, v) => a + v.sales, 0)
+    const ze = rows.filter((v) => pack.isZeroEmission(v)).reduce((a, v) => a + v.sales, 0)
+    return tot > 0 ? (ze / tot) * 100 : 0
+  }, [all, pack, wiYear])
+  const wiScenario = useMemo<Scenario | null>(() => (whatIf ? { ...defaultScenario(country), ...whatIf.scenario, year: wiYear } : null), [whatIf, country, wiYear])
+  // One command bar, two intents: FILTER the data ("Maruti SUVs over 150 g/km")
+  // and/or FORECAST a what-if ("increase EV share 2%"). Both can fire at once.
+  const runWhatIf = (prompt: string) => {
+    const wf = parseWhatIf(prompt, country, zePctNow)
+    const q = parseDataQuery(prompt, { makers: optMakers, powertrains: optPts, fuels: optFuels, segments: optSeg, bodies: optBody })
+    if (!wf.applied.length && !q.matched) { setWhatIf(null); setWiErr(true); return }
+    setWiErr(false)
+    if (q.matched) {
+      if (q.makers.length) setFMaker(new Set(q.makers))
+      if (q.powertrains.length) setFPt(new Set(q.powertrains))
+      if (q.fuels.length) setFFuel(new Set(q.fuels))
+      if (q.segments.length) setFSeg(new Set(q.segments))
+      if (q.bodies.length) setFBody(new Set(q.bodies))
+      if (q.co2) { setCo2Lo(q.co2[0] != null ? String(q.co2[0]) : ''); setCo2Hi(q.co2[1] != null ? String(q.co2[1]) : '') }
+      if (q.mass) { setMassLo(q.mass[0] != null ? String(q.mass[0]) : ''); setMassHi(q.mass[1] != null ? String(q.mass[1]) : '') }
+    }
+    if (wf.applied.length) { setWhatIf({ scenario: wf.scenario, applied: wf.applied }); setView('ACTUAL') }
+    else if (q.matched) setWhatIf(null)
+  }
+  // before/after compliance impact of the what-if
+  const wiImpact = useMemo(() => {
+    if (!wiScenario) return null
+    const b = buildTree(all, pack, { ...defaultScenario(country), year: wiYear })
+    const a = buildTree(all, pack, wiScenario)
+    return { beforeMetric: b.avgMetric, afterMetric: a.avgMetric, beforeGap: b.gap, afterGap: a.gap, beforeFine: (b.children ?? []).reduce((s, c) => s + c.fine, 0), afterFine: (a.children ?? []).reduce((s, c) => s + c.fine, 0), limit: a.limit }
+  }, [wiScenario, all, pack, country, wiYear])
+
   // In scenario mode the rows are the engine's output for that scenario's year
   // (levers, mix, added variants and all). In actuals mode it's the raw fleet.
   // The variant library is a spec catalog — scenarios don't apply to it.
   const base = useMemo<Vehicle[]>(() => {
     if (library) return libraryRows
-    if (!activeScenario) return all
-    return applyScenario(all, activeScenario.scenario, pack, activeScenario.overrides)
-  }, [all, activeScenario, pack, library, libraryRows])
+    if (activeScenario) return applyScenario(all, activeScenario.scenario, pack, activeScenario.overrides)
+    if (wiScenario) return applyScenario(all, wiScenario, pack, {})
+    return all
+  }, [all, activeScenario, pack, library, libraryRows, wiScenario])
 
-  const metricOf = (r: Vehicle) => (activeScenario ? pack.vehicleMetric(r, activeScenario.scenario) : r.co2)
+  const metricOf = (r: Vehicle) => (activeScenario ? pack.vehicleMetric(r, activeScenario.scenario) : wiScenario ? pack.vehicleMetric(r, wiScenario) : r.co2)
+
+  // ── anomaly scan (on the current base) ─────────────────────────────────────
+  const [showAnomalies, setShowAnomalies] = useState(false)
+  const anomalies = useMemo<Anomaly[]>(() => (library ? [] : scanAnomalies(all)), [all, library])
+  const anomCounts = useMemo(() => ({ err: anomalies.filter((a) => a.severity === 'error').length, warn: anomalies.filter((a) => a.severity === 'warn').length }), [anomalies])
 
   // facet options come from the unfiltered base so choices never vanish
   const optMakers = useMemo(() => [...new Set(base.map((r) => r.parent))].sort(), [base])
   const optPts = useMemo(() => [...new Set(base.map((r) => r.powertrain))].sort(), [base])
+  const optFuels = useMemo(() => [...new Set(base.map((r) => r.fuel).filter(Boolean))].sort(), [base])
+  const optSeg = useMemo(() => [...new Set(base.map((r) => r.segment).filter(Boolean) as string[])].sort(), [base])
+  const optBody = useMemo(() => [...new Set(base.map((r) => r.bodyStyle).filter(Boolean) as string[])].sort(), [base])
   const optClasses = useMemo(() => [...new Set(base.map((r) => r.vclass))].sort(), [base])
   const optYears = useMemo(() => [...new Set(base.map((r) => String(r.year)))].sort(), [base])
   // dimension-bearing datasets only: hide Segment/Body style pivots when absent
@@ -216,6 +269,9 @@ export default function Data() {
     let r = base
     if (fMaker.size) r = r.filter((x) => fMaker.has(x.parent))
     if (fPt.size) r = r.filter((x) => fPt.has(x.powertrain))
+    if (fFuel.size) r = r.filter((x) => fFuel.has(x.fuel))
+    if (fSeg.size) r = r.filter((x) => fSeg.has(x.segment ?? ''))
+    if (fBody.size) r = r.filter((x) => fBody.has(x.bodyStyle ?? ''))
     if (fClass.size) r = r.filter((x) => fClass.has(x.vclass))
     if (fYear.size) r = r.filter((x) => fYear.has(String(x.year)))
     if (co2Lo !== '') r = r.filter((x) => x.co2 >= parseFloat(co2Lo))
@@ -234,7 +290,7 @@ export default function Data() {
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir
       return String(av ?? '').localeCompare(String(bv ?? '')) * dir
     })
-  }, [base, q, sortKey, sortDir, activeScenario, fMaker, fPt, fClass, fYear, co2Lo, co2Hi, massLo, massHi]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, q, sortKey, sortDir, activeScenario, fMaker, fPt, fFuel, fSeg, fBody, fClass, fYear, co2Lo, co2Hi, massLo, massHi]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalUnits = rows.reduce((a, r) => a + r.sales, 0)
   const makers = new Set(rows.map((r) => r.parent)).size
@@ -285,8 +341,8 @@ export default function Data() {
     return (v ?? '') as string | number
   }
 
-  const anyFilter = fMaker.size > 0 || fPt.size > 0 || fClass.size > 0 || fYear.size > 0 || co2Lo !== '' || co2Hi !== '' || massLo !== '' || massHi !== '' || q.trim() !== ''
-  const clearAll = () => { setFMaker(new Set()); setFPt(new Set()); setFClass(new Set()); setFYear(new Set()); setCo2Lo(''); setCo2Hi(''); setMassLo(''); setMassHi(''); setQ('') }
+  const anyFilter = fMaker.size > 0 || fPt.size > 0 || fFuel.size > 0 || fSeg.size > 0 || fBody.size > 0 || fClass.size > 0 || fYear.size > 0 || co2Lo !== '' || co2Hi !== '' || massLo !== '' || massHi !== '' || q.trim() !== ''
+  const clearAll = () => { setFMaker(new Set()); setFPt(new Set()); setFFuel(new Set()); setFSeg(new Set()); setFBody(new Set()); setFClass(new Set()); setFYear(new Set()); setCo2Lo(''); setCo2Hi(''); setMassLo(''); setMassHi(''); setQ('') }
 
   const chip = (label: string, onX: () => void): ReactNode => (
     <span key={label} className="flex items-center gap-1 rounded-full border border-brand/25 bg-brand/[0.07] py-0.5 pl-2.5 pr-1 text-[10.5px] font-semibold text-brand">
@@ -295,8 +351,11 @@ export default function Data() {
     </span>
   )
   const chips: ReactNode[] = [
-    ...[...fMaker].map((v) => chip(v, () => { const n = new Set(fMaker); n.delete(v); setFMaker(n) })),
+    ...[...fMaker].map((v) => chip(v.split(' ').slice(0, 2).join(' '), () => { const n = new Set(fMaker); n.delete(v); setFMaker(n) })),
     ...[...fPt].map((v) => chip(v, () => { const n = new Set(fPt); n.delete(v); setFPt(n) })),
+    ...[...fFuel].map((v) => chip(v, () => { const n = new Set(fFuel); n.delete(v); setFFuel(n) })),
+    ...[...fSeg].map((v) => chip(`Seg ${v}`, () => { const n = new Set(fSeg); n.delete(v); setFSeg(n) })),
+    ...[...fBody].map((v) => chip(v, () => { const n = new Set(fBody); n.delete(v); setFBody(n) })),
     ...[...fClass].map((v) => chip(v, () => { const n = new Set(fClass); n.delete(v); setFClass(n) })),
     ...[...fYear].map((v) => chip(v, () => { const n = new Set(fYear); n.delete(v); setFYear(n) })),
     ...(co2Lo !== '' || co2Hi !== '' ? [chip(`CO₂ ${co2Lo || '0'}–${co2Hi || '∞'}`, () => { setCo2Lo(''); setCo2Hi('') })] : []),
@@ -392,6 +451,66 @@ export default function Data() {
         </div>
       </div>
 
+      {/* ── AI what-if + anomaly quality ───────────────────────────────────── */}
+      {!library && (
+        <div className="rise space-y-3 [animation-delay:200ms]">
+          <div className="relative overflow-hidden rounded-[18px] border border-black/[0.06] p-5" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 46%, #17130F 100%)' }}>
+            <div aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.28), transparent 62%)' }} />
+            <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.4]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '22px 22px', maskImage: 'radial-gradient(120% 130% at 92% 0%, #000 26%, transparent 72%)', WebkitMaskImage: 'radial-gradient(120% 130% at 92% 0%, #000 26%, transparent 72%)' }} />
+            <div className="relative">
+              <div className="mb-3 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-white/40">
+                <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400/60" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-400" /></span>
+                Ask the data · filter or forecast
+              </div>
+              <form onSubmit={(e) => { e.preventDefault(); runWhatIf(wiPrompt) }} className="flex items-center gap-2.5">
+                <div className="relative flex-1">
+                  <Icon name="spark" size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400/80" />
+                  <input value={wiPrompt} onChange={(e) => { setWiPrompt(e.target.value); setWiErr(false) }} placeholder="e.g. Maruti SUVs over 150 g/km · BEVs under 1500 kg · increase EV share by 2%"
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-2.5 pl-10 pr-4 text-[13.5px] text-white outline-none backdrop-blur-sm transition placeholder:text-white/35 focus:border-brand-400/50 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand-400/20" />
+                </div>
+                <button type="submit" disabled={!wiPrompt.trim()} className="btn-primary shrink-0 px-5 py-2.5 text-xs disabled:opacity-40"><Icon name="spark" size={13} /> Run</button>
+              </form>
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-[9.5px] font-semibold uppercase tracking-wide text-white/35">Try</span>
+                {whatIfStarters(country).map((s) => (
+                  <button key={s} onClick={() => { setWiPrompt(s); runWhatIf(s) }} className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10.5px] font-medium text-white/55 transition hover:border-brand-400/40 hover:bg-white/[0.08] hover:text-white">{s}</button>
+                ))}
+              </div>
+              {wiErr && <div className="mt-2.5 text-[11.5px] text-[#FF9A93]">Couldn’t read that. Filter with “Maruti SUVs over 150 g/km”, “diesel sedans”, “BEVs under 1500 kg”, or forecast with “increase EV share by 2%”, “add 50 kg”{country === 'IN' ? ', “show on WLTP”' : ''}.</div>}
+              {whatIf && wiImpact && (
+                <div className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-brand-400/25 bg-brand-400/[0.08] px-4 py-3">
+                  <div className="flex items-center gap-2 text-[12px] font-semibold text-white/85"><Icon name="sliders" size={13} className="text-brand-400" /> {whatIf.applied.join(' · ')} · {pack.defaultYear ?? pack.years[0]}</div>
+                  <div className="ml-auto flex items-center gap-6">
+                    <DeltaDark label={`Fleet ${pack.metricUnit}`} before={wiImpact.beforeMetric} after={wiImpact.afterMetric} fmt={(x) => fmtNum(x, 2)} />
+                    <DeltaDark label={`${pack.currency} at risk`} before={wiImpact.beforeFine} after={wiImpact.afterFine} fmt={(x) => fmtMoney(x, pack.currency)} />
+                  </div>
+                  <button onClick={() => { setWhatIf(null); setWiPrompt('') }} className="text-[11px] font-semibold text-white/45 transition hover:text-white"><Icon name="close" size={12} className="mr-0.5 inline" />Clear</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(anomCounts.err > 0 || anomCounts.warn > 0) && (
+            <button onClick={() => setShowAnomalies((v) => !v)} className={`flex w-full items-center gap-2.5 rounded-xl border px-4 py-2.5 text-left transition ${anomCounts.err > 0 ? 'border-danger/30 bg-danger/[0.05]' : 'border-warn/30 bg-warn/[0.05]'}`}>
+              <Icon name="alert" size={15} className={anomCounts.err > 0 ? 'text-danger' : 'text-warn'} />
+              <span className="text-[12.5px] font-semibold text-ink-200">{anomCounts.err > 0 && <span className="text-danger">{anomCounts.err} error{anomCounts.err === 1 ? '' : 's'}</span>}{anomCounts.err > 0 && anomCounts.warn > 0 && ' · '}{anomCounts.warn > 0 && <span className="text-warn">{anomCounts.warn} warning{anomCounts.warn === 1 ? '' : 's'}</span>} found in the dataset</span>
+              <span className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-ink-500">{showAnomalies ? 'Hide' : 'Review'} <Icon name="chevron" size={12} /></span>
+            </button>
+          )}
+          {showAnomalies && (
+            <div className="card max-h-80 overflow-y-auto p-0">
+              {anomalies.slice(0, 300).map((a, i) => (
+                <div key={i} className="flex items-start gap-2.5 border-b border-black/[0.04] px-4 py-2.5 last:border-0">
+                  <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded ${a.severity === 'error' ? 'bg-danger/10 text-danger' : 'bg-warn/10 text-warn'}`}><Icon name={a.severity === 'error' ? 'alert' : 'activity'} size={11} /></span>
+                  <div className="min-w-0"><div className="text-[12px] font-semibold text-ink-100">{a.label}</div><div className="text-[11.5px] leading-snug text-ink-500">{a.message}</div></div>
+                  <span className="ml-auto shrink-0 font-mono text-[9px] uppercase tracking-wide text-ink-500/60">{a.kind}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Expert toolbar — search · facets · ranges · grouping */}
       <div className="rise card space-y-3 p-4 [animation-delay:240ms]">
         <div className="flex flex-wrap items-center gap-2">
@@ -438,7 +557,9 @@ export default function Data() {
         <div className="flex flex-wrap items-center gap-2">
           <Facet label="Manufacturer" options={optMakers} sel={fMaker} onChange={setFMaker} />
           <Facet label="Powertrain" options={optPts} sel={fPt} onChange={setFPt} />
-          <Facet label="Class" options={optClasses} sel={fClass} onChange={setFClass} />
+          {optFuels.length > 1 && <Facet label="Fuel" options={optFuels} sel={fFuel} onChange={setFFuel} />}
+          {optBody.length > 1 && <Facet label="Body style" options={optBody} sel={fBody} onChange={setFBody} />}
+          {optSeg.length > 1 && <Facet label="Segment" options={optSeg} sel={fSeg} onChange={setFSeg} />}
           <Facet label="Year" options={optYears} sel={fYear} onChange={setFYear} />
           <span className="h-6 w-px bg-black/[0.07]" />
           <Range label="CO₂" unit="g" lo={co2Lo} hi={co2Hi} setLo={setCo2Lo} setHi={setCo2Hi} />
@@ -469,8 +590,8 @@ export default function Data() {
         <div className="max-h-[62vh] overflow-auto">
           {groups ? (
             <table className="w-full border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-[#FFFEFB]/95 shadow-[0_1px_0_rgba(0,0,0,0.07),0_4px_10px_-6px_rgba(60,45,20,0.12)] backdrop-blur">
-                <tr className="border-b border-black/[0.08]">
+              <thead className="sticky top-0 z-10 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.4)]" style={{ background: '#211C16' }}>
+                <tr>
                   {([
                     ['key', GROUPS.find((g) => g.k === groupBy)!.label, false],
                     ['rows', 'Rows', true],
@@ -482,8 +603,8 @@ export default function Data() {
                     ['bevShare', 'BEV share', true],
                   ] as [keyof GroupRow, string, boolean][]).map(([k, label, num]) => (
                     <th key={k} onClick={() => gsort(k)}
-                      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 font-semibold uppercase tracking-wide text-ink-500 hover:text-ink-100 ${num ? 'text-right' : 'text-left'}`}>
-                      <span className="inline-flex items-center gap-1">{label}{gSort === k && <span className="text-brand">{gDir === 'asc' ? '▲' : '▼'}</span>}</span>
+                      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors ${gSort === k ? 'text-white' : 'text-white/45'} hover:text-white ${num ? 'text-right' : 'text-left'}`}>
+                      <span className="inline-flex items-center gap-1">{label}{gSort === k && <span className="text-brand-400">{gDir === 'asc' ? '▲' : '▼'}</span>}</span>
                     </th>
                   ))}
                 </tr>
@@ -519,12 +640,12 @@ export default function Data() {
             </table>
           ) : (
             <table className="w-full border-collapse text-left text-xs">
-              <thead className="sticky top-0 z-10 bg-[#FFFEFB]/95 shadow-[0_1px_0_rgba(0,0,0,0.07),0_4px_10px_-6px_rgba(60,45,20,0.12)] backdrop-blur">
-                <tr className="border-b border-black/[0.08]">
+              <thead className="sticky top-0 z-10 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.4)]" style={{ background: '#211C16' }}>
+                <tr>
                   {cols.map((c) => (
                     <th key={c.k} onClick={() => sort(c.k)}
-                      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 font-semibold uppercase tracking-wide ${c.k === 'metric' ? 'text-brand' : 'text-ink-500'} hover:text-ink-100 ${c.num ? 'text-right' : 'text-left'}`}>
-                      <span className="inline-flex items-center gap-1">{c.label}{sortKey === c.k && <span className="text-brand">{sortDir === 'asc' ? '▲' : '▼'}</span>}</span>
+                      className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors ${c.k === 'metric' ? 'text-brand-400' : sortKey === c.k ? 'text-white' : 'text-white/45'} hover:text-white ${c.num ? 'text-right' : 'text-left'}`}>
+                      <span className="inline-flex items-center gap-1">{c.label}{sortKey === c.k && <span className="text-brand-400">{sortDir === 'asc' ? '▲' : '▼'}</span>}</span>
                     </th>
                   ))}
                   {!scenarioMode && !library && <th className="w-16 px-2 py-2.5" aria-label="Row actions" />}
@@ -540,7 +661,7 @@ export default function Data() {
                       case 'parent': return <td key={c.k} className="whitespace-nowrap px-3 py-2 font-medium text-ink-100">{r.parent}</td>
                       case 'model': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-200">{r.model}</td>
                       case 'variant': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-400">{variantLabel(r)}</td>
-                      case 'powertrain': return <td key={c.k} className="px-3 py-2"><span className="inline-flex items-center gap-1.5 text-ink-200"><i className="h-2 w-2 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
+                      case 'powertrain': return <td key={c.k} className="px-3 py-2"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(r.powertrain)}40`, background: `${ptColor(r.powertrain)}14`, color: ptColor(r.powertrain) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
                       case 'year': return <td key={c.k} className="num px-3 py-2 text-right text-ink-300">{r.year}</td>
                       case 'co2': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${r.co2 === 0 ? 'text-safe' : 'text-ink-100'}`}>{fmtNum(r.co2, 0)}</td>
                       case 'metric': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${m === 0 ? 'text-safe' : 'text-brand'}`}>{fmtNum(m, 1)}</td>
@@ -564,7 +685,7 @@ export default function Data() {
                     }
                   }
                   return (
-                    <tr key={i} className="group border-b border-black/[0.04] transition-colors odd:bg-black/[0.012] hover:bg-brand/[0.04]">
+                    <tr key={i} className="group border-b border-black/[0.03] transition-colors odd:bg-black/[0.022] hover:bg-brand/[0.06]">
                       {cols.map(td)}
                       {!scenarioMode && !library && (
                         <td className="whitespace-nowrap px-2 py-1.5 text-right">
@@ -603,6 +724,31 @@ export default function Data() {
 // Kept deliberately schema-first: the core engine fields up top, the master
 // structure below. Saving writes a NEW dataset version (audit trail), exactly
 // like an import — the record is versioned, never silently mutated.
+// before → after metric for the what-if impact (green = improved, lower is better)
+function Delta({ label, before, after, fmt }: { label: string; before: number; after: number; fmt: (x: number) => string }) {
+  const d = after - before
+  const flat = Math.abs(d) < Math.max(1e-6, Math.abs(before) * 0.001)
+  const color = flat ? 'text-ink-500' : d < 0 ? 'text-safe' : 'text-danger'
+  return (
+    <div className="text-right">
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">{label}</div>
+      <div className="dnum mt-0.5 text-[12.5px] font-bold text-ink-100">{fmt(before)} <span className="text-ink-500">→</span> <span className={color}>{fmt(after)} {flat ? '' : d < 0 ? '▼' : '▲'}</span></div>
+    </div>
+  )
+}
+
+function DeltaDark({ label, before, after, fmt }: { label: string; before: number; after: number; fmt: (x: number) => string }) {
+  const d = after - before
+  const flat = Math.abs(d) < Math.max(1e-6, Math.abs(before) * 0.001)
+  const color = flat ? 'text-white/50' : d < 0 ? 'text-[#5EE0A0]' : 'text-[#FF9A93]'
+  return (
+    <div className="text-right">
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">{label}</div>
+      <div className="dnum mt-0.5 text-[12.5px] font-bold text-white/90">{fmt(before)} <span className="text-white/40">→</span> <span className={color}>{fmt(after)} {flat ? '' : d < 0 ? '▼' : '▲'}</span></div>
+    </div>
+  )
+}
+
 function RowEditor({ initial, isNew, pack, makers, powertrains, fuels, onSave, onClose }: {
   initial: Partial<Vehicle>; isNew: boolean; pack: ReturnType<typeof getPack>
   makers: string[]; powertrains: string[]; fuels: string[]

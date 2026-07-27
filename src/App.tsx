@@ -34,6 +34,7 @@ import DualCredit from './screens/DualCredit'
 import AnalyzeCN from './screens/cn/AnalyzeCN'
 import ForecastCN from './screens/cn/ForecastCN'
 import IntelligenceIN from './screens/in/IntelligenceIN'
+import CoPilot from './screens/CoPilot'
 import Login from './screens/Login'
 import type { CountryId } from './engine/types'
 
@@ -41,6 +42,7 @@ import type { CountryId } from './engine/types'
 // book of record; levers live in Scenario); Pooling is the add-on (only some
 // regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling'; country?: CountryId }[] = [
+  { id: 'copilot', label: 'Co-pilot', icon: 'spark', tier: 'Core' },
   { id: 'analyse', label: 'Plan', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
   { id: 'scenario', label: 'Scenario', icon: 'target', tier: 'Core' },
@@ -243,7 +245,7 @@ function ModuleShell() {
   // India-only intelligence cockpit — replaces the generic event feed for IN.
   const IN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'IN' ? { intel: IntelligenceIN } : {}
   const Screen = CN_FORKS[screen] ?? IN_FORKS[screen] ?? {
-    analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
+    copilot: CoPilot, analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
     pricing: Pricing, pooling: Pooling, dualcredit: DualCredit, data: Data, intel: Intelligence, admin: Admin,
   }[screen]
   const gated = screen === 'pooling' && !poolingAddon

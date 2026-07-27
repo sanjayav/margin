@@ -50,6 +50,8 @@ const uid = (p: string) => `${p}-${Math.random().toString(36).slice(2, 8)}`
 
 const CASE_HEX: Record<CaseId | 'mgmt', string> = { base: SCEN_COLORS.emerald, upside: SCEN_COLORS.teal, downside: SCEN_COLORS.rose, mgmt: SCEN_COLORS.violet }
 
+const greeting = (): string => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' }
+
 export default function Forecast() {
   const { pack, raw, scenario: liveScenario, selectedParent, country, meta } = useCompliance()
   const setParent = useStore((s) => s.setParent)
@@ -148,6 +150,17 @@ export default function Forecast() {
   const focusFc = fcById.get(focusId) ?? baseFc
   const overlay = focusId !== 'baseline'
   const shown = allScenarios.filter((s) => (s.pinned || s.id === focusId) && fcById.has(s.id))
+
+  // ── the premium overview: the case matrix as weighted breakdown cards ──
+  const lastYear = pack.years[pack.years.length - 1]
+  const heroWho = isMarket ? 'The market' : parent ? parent.split(' ')[0] : 'The market'
+  const overviewCases = useMemo(() => caseScenarios.map((s) => {
+    const fc = fcById.get(s.id)
+    if (!fc) return null
+    const wKey = (s.caseId === 'mgmt' ? 'mgmt' : s.caseId) as 'base' | 'upside' | 'downside' | 'mgmt'
+    return { id: s.id, name: s.name, hex: s.hex, weight: weights[wKey], cum: fc.cumPlan, breachYear: fc.years.find((y) => y.lGap > 0)?.year ?? null }
+  }).filter((x): x is NonNullable<typeof x> => x != null), [caseScenarios, fcById, weights])
+  const expectedCum = overviewCases.reduce((a, c) => a + c.cum * c.weight, 0)
 
   // ── sensitivity: how much each lever swings the focused scenario's exposure ──
   // (the classic tornado — every value is engine-computed, one buildForecast per extreme)
@@ -278,48 +291,74 @@ export default function Forecast() {
 
   return (
     <div className="space-y-5 animate-slidein">
-      {/* target + prompt */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => setTargetSel(MARKET_TARGET)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${isMarket ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>Whole market</button>
-        {parents.map((p) => (
-          <button key={p} onClick={() => { setTargetSel(p); setParent(p) }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${!isMarket && parent === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{p}</button>
-        ))}
-        <button onClick={exportPack} className="btn-ghost ml-auto px-3 py-1.5 text-xs"><Icon name="section" size={14} /> Board pack</button>
-      </div>
-
-      {/* ── AI STUDIO · frontier cockpit ─────────────────────────────────── */}
-      <div className="rise relative overflow-hidden rounded-[20px] border border-black/[0.06] p-7 xl:p-9" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 46%, #17130F 100%)' }}>
-        <div aria-hidden className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.36), transparent 62%)' }} />
-        <div aria-hidden className="pointer-events-none absolute -bottom-32 right-1/3 h-72 w-72 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(246,104,100,0.16), transparent 62%)' }} />
+      {/* ── HERO · conversational forecast cockpit ───────────────────────── */}
+      <div className="rise relative overflow-hidden rounded-[24px] border border-black/[0.06] p-7 xl:p-9" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 46%, #17130F 100%)' }}>
+        <div aria-hidden className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.34), transparent 62%)' }} />
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 right-1/3 h-72 w-72 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(246,104,100,0.15), transparent 62%)' }} />
         <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.45]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '24px 24px', maskImage: 'radial-gradient(120% 130% at 88% 0%, #000 28%, transparent 74%)', WebkitMaskImage: 'radial-gradient(120% 130% at 88% 0%, #000 28%, transparent 74%)' }} />
         <div className="relative">
-          <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">
-            <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400/60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-brand-400" /></span>
-            Forecast studio · {pack.name} · {pack.years[0]}–{pack.years[pack.years.length - 1]}
-          </div>
-          <h1 className="font-display mt-4 max-w-[22ch] text-[32px] font-extrabold leading-[1.06] tracking-[-0.03em] text-white xl:text-[36px]">
-            Describe a future — the AI builds every scenario.
-          </h1>
-          <p className="mt-3.5 max-w-[64ch] text-[13.5px] leading-[1.65] text-white/55">
-            Turn a sentence into grounded scenarios — adoption pace, market growth, combustion tech and the tightening limit. The deterministic engine then projects {isMarket ? 'the market' : parent.split(' ')[0]}’s fleet fuel use, ZE share and {pack.currency}-at-risk year by year. Every number is engine-proven, never invented.
-          </p>
-          <form onSubmit={(e) => { e.preventDefault(); generate() }} className="mt-6 flex gap-2.5">
-            <div className="relative flex-1">
-              <Icon name="spark" size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-brand-400/80" />
-              <input value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={generating}
-                placeholder={`Forecast ${isMarket ? 'the market' : parent.split(' ')[0]} if…`}
-                className="w-full rounded-xl border border-white/10 bg-white/[0.05] py-3 pl-10 pr-4 text-[13.5px] text-white outline-none backdrop-blur-sm transition placeholder:text-white/35 focus:border-brand-400/50 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand-400/20" />
+          {/* top row · eyebrow + target control + board pack */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/45">
+              <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400/60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-brand-400" /></span>
+              Forecast studio · {pack.name} · {pack.years[0]}–{lastYear}
             </div>
-            <button type="submit" disabled={generating || !prompt.trim()} className="btn-primary shrink-0 px-5 disabled:opacity-40">
-              {generating ? <><span className="inline-flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1 w-1 animate-pulse rounded-full bg-white" style={{ animationDelay: `${d * 150}ms` }} />)}</span> Building</> : <><Icon name="spark" size={14} /> Generate</>}
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center gap-0.5 rounded-xl border border-white/10 bg-white/[0.04] p-0.5">
+                <button onClick={() => setTargetSel(MARKET_TARGET)} className={`rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${isMarket ? 'bg-white/90 text-[#1B1714]' : 'text-white/55 hover:text-white'}`}>Whole market</button>
+                <div className="relative">
+                  <select value={isMarket ? '' : parent} onChange={(e) => { const v = e.target.value; if (!v) { setTargetSel(MARKET_TARGET) } else { setTargetSel(v); setParent(v) } }}
+                    className={`appearance-none rounded-lg py-1.5 pl-3 pr-7 text-[11px] font-semibold outline-none transition ${!isMarket ? 'bg-white/90 text-[#1B1714]' : 'bg-transparent text-white/55 hover:text-white'}`}>
+                    <option value="">Single maker…</option>
+                    {parents.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <Icon name="chevron" size={11} className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rotate-90 ${!isMarket ? 'text-ink-500' : 'text-white/40'}`} />
+                </div>
+              </div>
+              <button onClick={exportPack} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-[11px] font-semibold text-white/70 transition hover:bg-white/[0.1] hover:text-white"><Icon name="section" size={13} /> Board pack</button>
+            </div>
+          </div>
+
+          {/* greeting + grounded status */}
+          <h1 className="font-display mt-6 text-[30px] font-extrabold leading-[1.08] tracking-[-0.03em] text-white xl:text-[34px]">{greeting()}.</h1>
+          <p className="mt-2.5 max-w-[66ch] text-[14px] leading-[1.6] text-white/60">
+            {baseFc.firstBreach
+              ? <>{heroWho} crosses the line in <span className="font-semibold text-white">{baseFc.firstBreach.year}</span>. <span className="font-semibold text-[#F6A9A2]">{fmtMoney(baseFc.cumBase, pack.currency)}</span> is at risk by {lastYear} if today’s mix holds.</>
+              : <>{heroWho} stays under the line through {lastYear} on today’s mix — <span className="font-semibold text-[#7FD8AC]">no fine in any year</span>.</>}
+            {' '}<span className="text-white/40">Describe any future below and the engine projects it — never invents it.</span>
+          </p>
+
+          {/* Claude-style prompt */}
+          <form onSubmit={(e) => { e.preventDefault(); generate() }} className="mt-6">
+            <div className="relative">
+              <Icon name="spark" size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-brand-400/80" />
+              <input value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={generating}
+                placeholder={`Ask AiRE to forecast ${isMarket ? 'the market' : heroWho} if…`}
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.05] py-4 pl-12 pr-16 text-[14px] text-white outline-none backdrop-blur-sm transition placeholder:text-white/35 focus:border-brand-400/50 focus:bg-white/[0.07] focus:ring-2 focus:ring-brand-400/20" />
+              <button type="submit" disabled={generating || !prompt.trim()} aria-label="Generate forecast"
+                className="absolute right-2.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-xl bg-brand text-white transition hover:bg-brand/90 disabled:opacity-40">
+                {generating ? <span className="inline-flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1 w-1 animate-pulse rounded-full bg-white" style={{ animationDelay: `${d * 150}ms` }} />)}</span> : <Icon name="arrow-up" size={16} />}
+              </button>
+            </div>
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
             {STARTERS.map((s) => (
-              <button key={s} onClick={() => { setPrompt(s) }} disabled={generating}
+              <button key={s} onClick={() => setPrompt(s)} disabled={generating}
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-white/55 transition hover:border-brand-400/40 hover:bg-white/[0.08] hover:text-white disabled:opacity-50">{s}</button>
             ))}
           </div>
+
+          {/* AiRE response · streamed analyst brief as a chat bubble */}
+          {(brief || generating) && (
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.045] p-4 backdrop-blur-sm">
+              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45"><Icon name="spark" size={11} className="text-brand-400" /> AiRE · analyst brief <span className="font-medium normal-case tracking-normal text-white/30">— every figure engine-computed</span></div>
+              <p className="mt-2 whitespace-pre-wrap text-[13px] leading-[1.65] text-white/75">
+                {brief || <span className="text-white/40">Reading the computed trajectories…</span>}
+                {generating && <span className="ml-0.5 inline-block h-3.5 w-[2px] animate-pulse bg-brand-400 align-text-bottom" />}
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="mt-3 rounded-lg border border-danger/40 bg-danger/[0.12] px-3 py-2 text-xs text-[#FF9A93]">
               {error}
@@ -380,19 +419,15 @@ export default function Forecast() {
         <LeverEditor s={focusScen} pack={pack} onName={(n) => rename(focusScen.id, n)} onLevers={(patch) => setLevers(focusScen.id, patch)} onClose={() => setEditingId(null)} />
       )}
 
-      {/* impact header — the board-grade verdict for the focused scenario */}
-      <ImpactHeader scen={focusScen} fc={focusFc} baseFc={baseFc} overlay={overlay} pack={pack} />
+      {/* ── PREMIUM OVERVIEW · KPIs · fleet-vs-line · case breakdown · schedule ── */}
+      <ForecastOverview focusScen={focusScen} focusFc={focusFc} baseFc={baseFc} shown={shown} fcById={fcById}
+        pack={pack} cases={overviewCases} expectedCum={expectedCum} isMarket={isMarket} who={heroWho} onFocus={focusAndPin} />
 
       {/* THE DECADE, ANIMATED — engine keyframes, interpolated */}
       <Section
         title={<span className="flex items-center gap-2"><Icon name="activity" size={16} className="text-brand" /> The decade, animated</span>}
         right={<span className="hidden text-[11px] text-ink-500 md:inline">a motion chart of the scenario engine — every keyframe computed, nothing invented</span>}>
         <MotionTheatre raw={raw} pack={pack} country={country} drivers={driverSet} vintageYear={vintageYear} />
-      </Section>
-
-      {/* hero: all pinned scenarios vs the tightening limit */}
-      <Section title="Every scenario against the line" right={<StudioLegend shown={shown} focusId={focusId} />}>
-        <StudioChart years={pack.years} baseFc={baseFc} shown={shown} fcById={fcById} focusFc={focusFc} pack={pack} />
       </Section>
 
       {/* compare matrix */}
@@ -480,18 +515,6 @@ export default function Forecast() {
         right={<span className="text-[11px] text-ink-500">{focusScen.name} · exposure at each lever's plausible extremes</span>}>
         <TornadoChart base={focusFc.cumPlan} drivers={sensitivity} currency={pack.currency} />
       </Section>
-
-      {/* AI brief */}
-      {(brief || generating) && (
-        <Section title={<span className="flex items-center gap-2"><Icon name="feather" size={15} className="text-brand" /> Analyst brief</span>}
-          right={<span className="text-[11px] text-ink-500">every figure engine-computed</span>}>
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-ink-200">
-            {brief}
-            {generating && <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-brand align-text-bottom" />}
-            {!brief && generating && <span className="text-ink-500">Reading the computed trajectories…</span>}
-          </div>
-        </Section>
-      )}
 
       {/* focused-scenario detail */}
       <div className="flex items-center gap-2 pt-1">
@@ -971,4 +994,181 @@ function GlidePath({ series }: { series: ForecastResult['years'] }) {
       </div>
     </div>
   )
+}
+
+// ── PREMIUM OVERVIEW · the Bond-style "read it at a glance" dashboard ─────────
+// KPI tiles (with sparklines) · the fleet-vs-line chart with a summary rail and a
+// weighted case breakdown · and a "what's ahead" regulatory schedule. Every value
+// is engine-computed — the same numbers the deep sections below expand on.
+
+type CaseCard = { id: string; name: string; hex: string; weight: number; cum: number; breachYear: number | null }
+
+function ForecastOverview({ focusScen, focusFc, baseFc, shown, fcById, pack, cases, expectedCum, isMarket, who, onFocus }: {
+  focusScen: StudioScenario; focusFc: ForecastResult; baseFc: ForecastResult; shown: StudioScenario[]; fcById: Map<string, ForecastResult>
+  pack: any; cases: CaseCard[]; expectedCum: number; isMarket: boolean; who: string; onFocus: (id: string) => void
+}) {
+  const v = verdictOf(focusFc)
+  const tone = TONE[v.tone]
+  const firstBreach = focusFc.years.find((y) => y.lGap > 0)
+  const peakYear = focusFc.years.reduce((a, y) => (y.lFine > a.lFine ? y : a), focusFc.years[0])
+  const req = focusFc.last.req
+  const delta = focusFc.cumPlan - baseFc.cumBase
+  const deltaLabel = Math.abs(delta) < 1 ? 'same as as-sold' : `${delta < 0 ? '▼' : '▲'} ${fmtMoney(Math.abs(delta), pack.currency)} vs. as-sold`
+  const deltaTone = Math.abs(delta) < 1 ? 'text-ink-500' : delta < 0 ? 'text-safe' : 'text-danger'
+  const fineSeries = focusFc.years.map((y) => y.lFine)
+  const gapSeries = focusFc.years.map((y) => Math.max(0, y.lGap))
+  const items = scheduleAhead(focusFc, baseFc, who, pack)
+  const maxCum = Math.max(...cases.map((c) => Math.abs(c.cum)), 1)
+
+  return (
+    <div className="space-y-4">
+      {/* KPI row */}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile label={`${pack.currency} at risk · ${focusFc.first.year}–${focusFc.last.year}`}
+          value={fmtMoney(focusFc.cumPlan, pack.currency)} delta={deltaLabel} deltaTone={deltaTone} spark={fineSeries} hex={focusScen.hex} />
+        <KpiTile label="First over the line"
+          value={firstBreach ? String(firstBreach.year) : 'Clears'}
+          delta={firstBreach ? `+${fmtNum(firstBreach.lGap, 1)} ${pack.metricUnit} that year` : 'compliant every year'}
+          deltaTone={firstBreach ? 'text-warn' : 'text-safe'} spark={gapSeries} hex={firstBreach ? '#D98005' : '#0E9F6E'} />
+        <KpiTile label="Peak annual fine"
+          value={peakYear.lFine > 0 ? fmtMoney(peakYear.lFine, pack.currency) : '—'}
+          delta={peakYear.lFine > 0 ? `worst year · ${peakYear.year}` : 'no fine in any year'}
+          deltaTone={peakYear.lFine > 0 ? 'text-ink-400' : 'text-safe'} spark={fineSeries} hex="#E0484D" />
+        <KpiTile label="Clear the line"
+          value={req != null ? `${req}%` : firstBreach ? 'EV alone can’t' : 'On track'}
+          delta={req != null ? `zero-emission share by ${focusFc.last.year}` : firstBreach ? 'needs mass, credits or pooling' : `compliant through ${focusFc.last.year}`}
+          deltaTone={req != null ? 'text-accentblue' : firstBreach ? 'text-warn' : 'text-safe'} spark={focusFc.years.map((y) => y.bShare)} hex="#3B6FE0" />
+      </div>
+
+      {/* the fleet-vs-line chart + the schedule */}
+      <div className="grid gap-4 xl:grid-cols-[1fr_336px]">
+        <div className="relative overflow-hidden rounded-[22px] border border-black/[0.06] bg-white p-5 shadow-card xl:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-[15px] font-bold text-ink-100">Fleet against the line</h3>
+              <p className="mt-0.5 text-[11.5px] text-ink-500">{isMarket ? 'Whole market' : who} · {String(pack.metricLabel).toLowerCase()}, {focusFc.first.year}–{focusFc.last.year}</p>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${tone.bg} ${tone.text}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${tone.dot} ${v.tone === 'danger' ? 'animate-pulse' : ''}`} /> {v.label}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-5 lg:grid-cols-[188px_1fr]">
+            <div className="flex flex-col justify-between gap-4">
+              <div>
+                <div className="label">Cumulative exposure</div>
+                <div className={`dnum mt-1 text-[34px] font-black leading-none tracking-[-0.02em] ${focusFc.cumPlan > 0 ? 'text-ink-100' : 'text-safe'}`}>{fmtMoney(focusFc.cumPlan, pack.currency)}</div>
+                <div className={`mt-1.5 text-[11.5px] font-semibold ${deltaTone}`}>{deltaLabel}</div>
+              </div>
+              <dl className="space-y-2 border-t border-black/[0.06] pt-3">
+                <StatRow label={`Final-year ${String(pack.metricLabel).toLowerCase()}`} value={`${fmtNum(focusFc.last.lMetric, 1)} ${pack.metricUnit}`} />
+                <StatRow label="The line by then" value={`${fmtNum(focusFc.last.lLimit, 1)} ${pack.metricUnit}`} sub={`−${baseFc.limitDropPct}%`} />
+                <StatRow label="First over the line" value={firstBreach ? String(firstBreach.year) : 'clears'} tone={firstBreach ? 'text-danger' : 'text-safe'} />
+              </dl>
+            </div>
+            <div className="min-w-0">
+              <StudioChart years={pack.years} baseFc={baseFc} shown={shown} fcById={fcById} focusFc={focusFc} pack={pack} />
+            </div>
+          </div>
+
+          {cases.length > 0 && (
+            <>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {cases.map((c) => {
+                  const focused = c.id === focusScen.id
+                  return (
+                    <button key={c.id} onClick={() => onFocus(c.id)}
+                      className={`group rounded-xl border p-3.5 text-left transition ${focused ? 'border-transparent bg-[#211C16] shadow-card' : 'border-black/[0.06] bg-black/[0.015] hover:border-black/[0.12]'}`}>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.hex }} />
+                        <span className={`truncate text-[11px] font-semibold ${focused ? 'text-white/80' : 'text-ink-400'}`}>{c.name}</span>
+                      </div>
+                      <div className={`dnum mt-1.5 text-[17px] font-black tracking-[-0.02em] ${focused ? 'text-white' : c.cum > 0 ? 'text-ink-100' : 'text-safe'}`}>{fmtMoney(c.cum, pack.currency)}</div>
+                      <div className={`text-[10px] ${focused ? 'text-white/45' : 'text-ink-500'}`}>{c.breachYear ? `breaches ${c.breachYear}` : 'clears'} · w {Math.round(c.weight * 100)}%</div>
+                      <div className={`mt-2 h-1 overflow-hidden rounded-full ${focused ? 'bg-white/15' : 'bg-black/[0.06]'}`}>
+                        <div className="h-full rounded-full" style={{ width: `${Math.max(4, (Math.abs(c.cum) / maxCum) * 100)}%`, background: c.hex }} />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-black/[0.06] pt-3">
+                <span className="text-[11px] font-semibold text-ink-500">Probability-weighted expected exposure</span>
+                <span className="dnum text-[15px] font-black text-ink-100">{fmtMoney(expectedCum, pack.currency)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* what's ahead — the regulatory schedule */}
+        <div className="rounded-[22px] border border-black/[0.06] bg-white p-5 shadow-card">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-[15px] font-bold text-ink-100">What’s ahead</h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">{focusFc.first.year}–{focusFc.last.year}</span>
+          </div>
+          <div className="mt-4 space-y-2">
+            {items.map((it, i) => (
+              <div key={i} className="rounded-xl border-l-2 bg-black/[0.015] py-2.5 pl-3.5 pr-3" style={{ borderColor: it.hex }}>
+                <div className="flex items-center justify-between">
+                  <span className="dnum text-[12px] font-bold text-ink-200">{it.year}</span>
+                  <span className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide" style={{ background: `${it.hex}18`, color: it.hex }}>{it.tag}</span>
+                </div>
+                <div className="mt-1 text-[12.5px] font-semibold leading-snug text-ink-100">{it.title}</div>
+                {it.sub && <div className="mt-0.5 text-[11px] text-ink-500">{it.sub}</div>}
+              </div>
+            ))}
+            {!items.length && <div className="rounded-xl bg-black/[0.015] px-3.5 py-6 text-center text-[12px] text-ink-500">Nothing scheduled — {who} clears every year.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function KpiTile({ label, value, delta, deltaTone, spark, hex }: { label: string; value: string; delta: string; deltaTone: string; spark: number[]; hex: string }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white px-4 py-4 shadow-[0_1px_2px_rgba(40,30,15,0.03)] transition hover:border-black/[0.1]">
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-ink-500">{label}</div>
+      <div className="mt-2.5 flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <div className="dnum text-[24px] font-black leading-none tracking-[-0.02em] text-ink-100">{value}</div>
+          <div className={`mt-1.5 truncate text-[10.5px] font-semibold ${deltaTone}`}>{delta}</div>
+        </div>
+        <Sparkline values={spark.some((x) => x > 0) ? spark : [0, 0]} hex={hex} w={74} h={30} />
+      </div>
+    </div>
+  )
+}
+
+function StatRow({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-[11.5px] text-ink-500">{label}</dt>
+      <dd className={`dnum text-right text-[12.5px] font-bold ${tone ?? 'text-ink-100'}`}>{value}{sub && <span className="ml-1 text-[10px] font-medium text-ink-500">{sub}</span>}</dd>
+    </div>
+  )
+}
+
+// Build the "what's ahead" list from the computed trajectory — regime transitions,
+// the steepest limit cliff, the first breach on the focused plan, the final verdict.
+function scheduleAhead(focusFc: ForecastResult, baseFc: ForecastResult, who: string, pack: any): { year: number; title: string; sub?: string; tag: string; hex: string }[] {
+  const out: { year: number; title: string; sub?: string; tag: string; hex: string }[] = []
+  const years = focusFc.years
+  let prevNote = years[0]?.note ?? ''
+  years.forEach((y) => {
+    if (y.note && y.note !== prevNote) { out.push({ year: y.year, title: y.note, tag: 'Regime', hex: '#3B6FE0' }); prevNote = y.note }
+  })
+  const cliffIdx = baseFc.cliffs.findIndex((c) => c === baseFc.maxDrop && baseFc.maxDrop > 0.08)
+  if (cliffIdx > 0) out.push({ year: years[cliffIdx].year, title: `The line tightens ${Math.round(baseFc.maxDrop * 100)}%`, sub: `${fmtNum(years[cliffIdx - 1].bLimit, 1)} → ${fmtNum(years[cliffIdx].bLimit, 1)} ${pack.metricUnit}`, tag: 'Cliff', hex: '#D98005' })
+  const fb = years.find((y) => y.lGap > 0)
+  if (fb) out.push({ year: fb.year, title: `${who} crosses the line`, sub: `+${fmtNum(fb.lGap, 1)} ${pack.metricUnit} · ${fmtMoney(fb.lFine, pack.currency)} fine`, tag: 'Breach', hex: '#E0484D' })
+  const last = focusFc.last
+  out.push({
+    year: last.year,
+    title: last.lGap > 0 ? `Still over by +${fmtNum(last.lGap, 1)} ${pack.metricUnit}` : `Clears with ${fmtNum(Math.max(0, last.lLimit - last.lMetric), 1)} ${pack.metricUnit} to spare`,
+    sub: last.lGap > 0 && last.req != null ? `needs ${last.req}% zero-emission share` : undefined,
+    tag: last.lGap > 0 ? 'Risk' : 'Clear', hex: last.lGap > 0 ? '#E0484D' : '#0E9F6E',
+  })
+  const seen = new Set<string>()
+  return out.filter((it) => { const k = `${it.year}|${it.title}`; if (seen.has(k)) return false; seen.add(k); return true }).sort((a, b) => a.year - b.year).slice(0, 6)
 }

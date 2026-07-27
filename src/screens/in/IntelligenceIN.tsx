@@ -158,7 +158,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
     const max = Math.max(A.cycle.midc.avgMetric, A.cycle.wltp.avgMetric)
     return (<>
       <Big value={`+${fmtNum(A.cycle.dFuel, 2)}`} unit="L/100km on the cliff" tone={tone} />
-      <Line>The MIDC→WLTP switch lifts the measured fleet number ~18%. The {A.cycle.overMidc} makers already over stay capped at ₹50k/car — India’s fine is a staircase — so the cliff first erodes the headroom of makers still clear.</Line>
+      <Line>The MIDC→WLTP switch lifts the measured fleet number about 18%. The {A.cycle.overMidc} makers already over stay capped at ₹50k/car, since India’s fine is a staircase, so the cliff first erodes the headroom of makers still clear.</Line>
       <div className="mt-7 space-y-4">
         <VsBar label="Fleet on MIDC (today)" val={A.cycle.midc.avgMetric} max={max} hex="#8C8273" sub={`${fmtNum(A.cycle.midc.avgMetric, 2)} L/100km`} />
         <VsBar label="Fleet on WLTP (CAFE III)" val={A.cycle.wltp.avgMetric} max={max} hex={tone} sub={`${fmtNum(A.cycle.wltp.avgMetric, 2)} L/100km`} />
@@ -170,7 +170,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
     const max = Math.max(A.supercredit.on, A.supercredit.off)
     return (<>
       <Big value={`−${fmtNum(A.supercredit.dilution, 2)}`} unit="L/100km dilution" tone={tone} />
-      <Line>BEV ×3, PHEV ×2.5 and strong-hybrid ×2 multiply clean-tech volume in the denominator, pulling the fleet mean down {fmtNum(A.supercredit.dilution, 2)} L/100km — the difference between a {fmtNum(A.supercredit.on, 2)} and a {fmtNum(A.supercredit.off, 2)} CAFE number for FY{String(cafe3).slice(2)} headroom.</Line>
+      <Line>BEV ×3, PHEV ×2.5 and strong-hybrid ×2 multiply clean-tech volume in the denominator, pulling the fleet mean down {fmtNum(A.supercredit.dilution, 2)} L/100km. That is the difference between a {fmtNum(A.supercredit.on, 2)} and a {fmtNum(A.supercredit.off, 2)} CAFE number for FY{String(cafe3).slice(2)} headroom.</Line>
       <div className="mt-7 space-y-4">
         <VsBar label="With super-credits" val={A.supercredit.on} max={max} hex={tone} sub={`${fmtNum(A.supercredit.on, 2)} L/100km`} />
         <VsBar label="Without" val={A.supercredit.off} max={max} hex="#8C8273" sub={`${fmtNum(A.supercredit.off, 2)} L/100km`} />
@@ -182,7 +182,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
     const lighter = A.masscreep.massDrift < 0
     return (<>
       <Big value={`${fmtNum(A.masscreep.suvShare, 0)}%`} unit="SUV share of the fleet" tone={tone} />
-      <Line>SUVs dominate India. Kerb mass is {lighter ? <><b className="text-ink-100">{fmtInt(A.masscreep.massDrift)} kg lighter</b> as EVs mix in</> : <>drifting <b className="text-ink-100">+{fmtInt(A.masscreep.massDrift)} kg</b> heavier</>} through {fy(last)} — the mass-linked target gives back {fmtNum(Math.abs(A.masscreep.targetRelief), 2)} L/100km, but a heavier SUV pivot erodes headroom via the fuel–mass link.</Line>
+      <Line>SUVs dominate India. Kerb mass is {lighter ? <><b className="text-ink-100">{fmtInt(A.masscreep.massDrift)} kg lighter</b> as EVs mix in</> : <>drifting <b className="text-ink-100">+{fmtInt(A.masscreep.massDrift)} kg</b> heavier</>} through {fy(last)}. The mass-linked target gives back {fmtNum(Math.abs(A.masscreep.targetRelief), 2)} L/100km, but a heavier SUV pivot erodes headroom via the fuel-to-mass link.</Line>
       <Facts items={[['Kerb mass', `${fmtInt(A.masscreep.massFirst)} → ${fmtInt(A.masscreep.massLast)}`], ['Fuel use', `${fmtNum(A.masscreep.fuelFirst, 1)} → ${fmtNum(A.masscreep.fuelLast, 1)}`], ['Target relief', `${fmtNum(A.masscreep.targetRelief, 2)}`]]} />
     </>)
   }
@@ -190,7 +190,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
     const p0 = A.pathway[0].fuel, min = Math.min(...A.pathway.map((p: any) => p.fuel)), max = Math.max(...A.pathway.map((p: any) => p.fuel))
     return (<>
       <Big value={`−${fmtNum(p0 - A.pathway[3].fuel, 2)}`} unit="L/100km at flex-fuel" tone={tone} />
-      <Line>India’s signature lever: carbon-neutral fuels discount fleet fuel use. Each step down the blend/CNG pathway lowers the CAFE number and the bill — computed via the CNF-boost lever.</Line>
+      <Line>India’s signature lever: carbon-neutral fuels discount fleet fuel use. Each step down the blend/CNG pathway lowers the CAFE number and the bill, computed via the CNF-boost lever.</Line>
       <div className="mt-7 space-y-3.5">
         {A.pathway.map((p: any, i: number) => {
           const dRisk = p.risk - A.pathway[0].risk
@@ -212,7 +212,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
   if (id === 'maker') {
     return (<>
       <Big value={`${A.perMaker.filter((m: any) => m.gap > 0).length}`} unit={`of ${A.perMaker.length} makers must act`} tone={tone} />
-      <Line>The cheapest first step to clear each maker at {fy(cafe3)}, ranked by {cur} per L/100km — from the same optimiser as the compliance path.</Line>
+      <Line>The cheapest first step to clear each maker at {fy(cafe3)}, ranked by {cur} per L/100km, from the same optimiser as the compliance path.</Line>
       <div className="mt-6 space-y-1">
         {A.perMaker.map((m: any) => (
           <div key={m.name} className="flex items-center gap-3 rounded-xl px-3 py-3 transition hover:bg-black/[0.02]">
@@ -232,7 +232,7 @@ function Detail({ id, A, cur, fy, cafe3, first, last, setScreen, tone }: any) {
   const max = Math.max(...A.provisioning.map((p: any) => p.risk), 1)
   return (<>
     <Big value={fmtMoney(A.provTotal, cur)} unit={`cumulative to ${fy(last)}`} tone={tone} />
-    <Line>EC Amendment Act 2022 stepped penalty — ₹25k/car at ≤0.2 L/100km over, ₹50k/car beyond — on the as-sold book against each year’s draft CAFE III target. Provision against the trajectory, not a single year.</Line>
+    <Line>EC Amendment Act 2022 stepped penalty (₹25k/car at ≤0.2 L/100km over, ₹50k/car beyond) on the as-sold book against each year’s draft CAFE III target. Provision against the trajectory, not a single year.</Line>
     <div className="mt-8 flex items-end gap-3">
       {A.provisioning.map((p: any) => (
         <div key={p.year} className="flex flex-1 flex-col items-center gap-2">

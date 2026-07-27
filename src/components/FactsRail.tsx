@@ -42,7 +42,7 @@ export default function FactsRail() {
         <BasisChip basis="actuals" meta={meta} />
       </div>
       <p className="text-[10.5px] leading-relaxed text-ink-500">
-        The book of record — official registrations as sold. No lever can reach this screen; modelling lives in Scenario.
+        The book of record: official registrations as sold. No lever can reach this screen; modelling lives in Scenario.
       </p>
 
       {/* reporting period */}

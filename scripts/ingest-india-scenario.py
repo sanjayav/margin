@@ -139,11 +139,13 @@ def parse_fleet(wb):
     fixes = {"dropped_no_sales": [], "mass_backfilled": [], "co2_backfilled": []}
     for d in models:
         parent, model, year = d.get("E"), d.get("G"), num(d.get("A"))
-        vol = num(d.get("U"))
+        # Sales Volume column moved between master versions: BH ("Salse Volume")
+        # in the 2026-07 layout, U in the earlier one. Try both.
+        vol = num(d.get("BH")) or num(d.get("U"))
         # A model row with no positive volume cannot affect a sales-weighted
         # compliance average — keep it only in the catalog, not the fleet.
         if not vol or vol <= 0:
-            fixes["dropped_no_sales"].append(f"{year} {parent[:24]} · {model}")
+            fixes["dropped_no_sales"].append(f"{year} {(parent or '?')[:24]} · {model}")
             continue
         avg_co2 = num(d.get("AM"))
         avg_mass = num(d.get("AN"))
@@ -191,7 +193,7 @@ def parse_fleet(wb):
         }
         fleet.append({k: v for k, v in rec.items() if v is not None})
 
-    brand_totals = {(b.get("E"), num(b.get("A"))): num(b.get("U")) for b in brands}
+    brand_totals = {(b.get("E"), num(b.get("A"))): (num(b.get("BH")) or num(b.get("U"))) for b in brands}
     reg_rows = [{
         "parent": g.get("E"), "targetYear": num(g.get("A")),
         "P_gpkm": num(g.get("AO")), "CAFCS_l100": num(g.get("AP")),
@@ -286,12 +288,12 @@ def main():
     for v in fleet:
         got[(v["parent"], v["year"])] += v["sales"]
     ok = True
-    for key, expect in sorted(brand_totals.items()):
+    for key, expect in sorted(brand_totals.items(), key=lambda kv: (str(kv[0][0]), kv[0][1] or 0)):
         g = got.get(key, 0)
         flag = "ok" if g == (expect or 0) else "MISMATCH"
         if flag != "ok":
             ok = False
-        print(f"   {key[1]}  {key[0][:42]:42}  extracted={g:7d}  workbook={int(expect or 0):7d}  {flag}")
+        print(f"   {key[1]}  {(key[0] or '—')[:42]:42}  extracted={g:7d}  workbook={int(expect or 0):7d}  {flag}")
     print(f"\n   → reconciliation {'PASSED' if ok else 'FAILED'}")
 
     # ── data-quality corrections applied ─────────────────────────────────────

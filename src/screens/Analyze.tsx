@@ -72,7 +72,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   const corridor = useMemo(() => (draftLine ? {
     lo: makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: -10 }),
     hi: makeLimitAtWith(pack, scenario, chartNode, { targetShiftPct: 10 }),
-    note: `${pack.regimeFor!(scenario.year).name} is a draft — the final notification can land anywhere in this corridor (stringency −10% … +10%). The centre line is the draft as published${(scenario.targetShiftPct ?? 0) !== 0 ? `, currently stressed ${scenario.targetShiftPct! > 0 ? '+' : ''}${scenario.targetShiftPct}%` : ''}.`,
+    note: `${pack.regimeFor!(scenario.year).name} is a draft, so the final notification can land anywhere in this corridor (stringency −10% to +10%). The centre line is the draft as published${(scenario.targetShiftPct ?? 0) !== 0 ? `, currently stressed ${scenario.targetShiftPct! > 0 ? '+' : ''}${scenario.targetShiftPct}%` : ''}.`,
   } : undefined), [draftLine, pack, scenario, chartNode])
   // dragging the line is a LEVER (regulator-side) — Model workbench only;
   // Plan is the book of record, where the line is the draft as published.
@@ -275,7 +275,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
 
   const sectionLabel = LEVEL_NAME[Math.min(level, 3)]
   const hint = mode === 'model' && level <= 1
-    ? 'drag a bubble to set a target — the engine solves the levers · click to drill'
+    ? 'drag a bubble to set a target and the engine solves the levers · click to drill'
     : level < 2 ? 'click a bubble to drill in' : level === 2 ? 'click a model to open it' : level === 3 ? 'click a variant to inspect' : 'size = sales · colour = powertrain'
 
   return (
@@ -303,7 +303,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             const r = pack.regimeFor(scenario.year)
             return (
               <span className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${r.draft ? 'border-warn/30 bg-warn/10 text-warn' : 'border-safe/30 bg-safe/10 text-safe'}`}
-                title={`${r.draft ? `${r.name} is a draft — final notification pending; stress it with the Draft stringency lever` : `${r.name} is in force`}${r.cycleNote ? ` · ${r.cycleNote}` : ''}`}>
+                title={`${r.draft ? `${r.name} is a draft. Final notification pending; stress it with the Draft stringency lever` : `${r.name} is in force`}${r.cycleNote ? ` · ${r.cycleNote}` : ''}`}>
                 <Icon name="scale" size={12} /> {r.name}{r.draft ? ' · draft' : ''}{r.cycle ? ` · ${r.cycle}` : ''}
               </span>
             )
@@ -325,14 +325,14 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-300">
             <b className="text-ink-100">{node.label}</b>{' '}
             {node.status === 'exempt' ? (
-              <>is <b className="text-warn">out of scope</b> at {fmtInt(node.rawUnits)} units (threshold {fmtInt(pack.smallVolumeThreshold)}) — no penalty applies.</>
+              <>is <b className="text-warn">out of scope</b> at {fmtInt(node.rawUnits)} units, under the {fmtInt(pack.smallVolumeThreshold)} threshold, so no penalty applies.</>
             ) : over ? (
-              <>is <b className="text-danger">{fmtNum(node.gap, 1)} {pack.metricUnit} over</b> its {fmtNum(node.limit, 1)} target —{' '}
+              <>is <b className="text-danger">{fmtNum(node.gap, 1)} {pack.metricUnit} over</b> its {fmtNum(node.limit, 1)} target, putting{' '}
                 <b className="num text-danger">{fmtMoney(fineValue, pack.currency)}</b> at risk across {fmtInt(node.rawUnits)} units.</>
             ) : (
               <>is <b className="text-safe">{fmtNum(Math.abs(node.gap), 1)} {pack.metricUnit} under</b> its {fmtNum(node.limit, 1)} target
                 {pack.creditPrice != null && node.rawUnits > 0 && (
-                  <> — headroom worth ≈ <b className="num text-safe">{fmtMoney(Math.abs(node.gap) * pack.creditPrice * node.rawUnits, pack.currency)}</b> at current credit prices</>
+                  <>, with headroom worth about <b className="num text-safe">{fmtMoney(Math.abs(node.gap) * pack.creditPrice * node.rawUnits, pack.currency)}</b> at current credit prices</>
                 )}.</>
             )}
           </p>
@@ -391,7 +391,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             const lo = Math.min(...counts), hi = Math.max(...counts)
             return lo !== hi ? (
               <p className="mt-1.5 max-w-[340px] text-[10px] leading-snug text-warn">
-                <Icon name="alert" size={10} className="mr-0.5 inline" /> Maker coverage varies by year ({lo}→{hi}) — year-over-year market moves include composition, not just fleet change.
+                <Icon name="alert" size={10} className="mr-0.5 inline" /> Maker coverage varies by year ({lo}→{hi}), so year-over-year market moves include composition, not just fleet change.
               </p>
             ) : null
           })()}
@@ -415,7 +415,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <div className={`dnum mt-2 text-[27px] font-bold leading-none ${fineValue > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(fineA, pack.currency)}</div>
           <div className="mt-2 flex items-center gap-1.5 text-[11px] text-ink-500">
             {fineSub}
-            {pack.illustrativeRates && <span className="rounded-full border border-warn/30 bg-warn/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-warn" title={`${pack.fineRateLabel} — rate pending primary-source confirmation`}>illustrative rate</span>}
+            {pack.illustrativeRates && <span className="rounded-full border border-warn/30 bg-warn/10 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-warn" title={`${pack.fineRateLabel} · rate pending primary-source confirmation`}>illustrative rate</span>}
           </div>
         </div>
         <Stat className="rise [animation-delay:180ms]" label="Registrations" value={fmtInt(regA)} sub={`${fmtInt(unitsA)} effective`} />
@@ -425,7 +425,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       {/* Bubble chart with drill */}
       <Section className="rise [animation-delay:300ms]" title={chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`} right={
         <span className="flex items-center gap-3">
-          <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5" title="Line = the classic mass-indexed chart. Gap = distance to the line as the axis — under the line is literally below zero, and gaps compare across masses.">
+          <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5" title="Line = the classic mass-indexed chart. Gap = distance to the line as the axis, so under the line is literally below zero, and gaps compare across masses.">
             {(['line', 'gap'] as const).map((v) => (
               <button key={v} data-testid={`chart-view-${v}`} onClick={() => setChartView(v)}
                 className={`rounded-md px-2 py-0.5 text-[10px] font-semibold capitalize transition ${chartView === v ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
@@ -447,7 +447,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         {lastDrag && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-brand/25 bg-brand/[0.06] px-3 py-1.5 text-[11.5px]">
             <Icon name="sliders" size={13} className="text-brand" />
-            <span className="text-ink-200">Applied to <b>{lastDrag.label.split(' ')[0]}</b>: <span className="num font-semibold">{lastDrag.desc}</span> — scoped levers, visible in the rail.</span>
+            <span className="text-ink-200">Applied to <b>{lastDrag.label.split(' ')[0]}</b>: <span className="num font-semibold">{lastDrag.desc}</span>. Scoped levers, visible in the rail.</span>
             <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
           </div>
         )}
@@ -522,7 +522,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         const specs = INDIA_CATALOG.filter((c) => c.parent === drill[1] && c.model === drill[2])
         if (!specs.length) return null
         return (
-          <Section className="rise" title={`Catalog variants · ${drill[2]}`} right={<span className="text-[11px] text-ink-500">master-file specs — sales are recorded at model level</span>}>
+          <Section className="rise" title={`Catalog variants · ${drill[2]}`} right={<span className="text-[11px] text-ink-500">master-file specs · sales are recorded at model level</span>}>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs" data-testid="catalog-variants">
                 <thead><tr className="border-b border-black/[0.08] text-[10px] font-semibold uppercase tracking-wide text-ink-500">
