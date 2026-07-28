@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Aggregate } from '../engine/types'
 import type { FleetMeta } from '../data/fleet'
 
@@ -54,7 +54,28 @@ export function Stat({ label, value, sub, accent, className = '' }: { label: str
   )
 }
 
-export function Section({ title, right, children, className = '' }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
+export function Section({ title, right, children, className = '', collapsible = false, defaultOpen = true, subtitle }: {
+  title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string
+  /** When true the header toggles the body — progressive disclosure for the
+   *  secondary sections a screen doesn't need at first glance. */
+  collapsible?: boolean; defaultOpen?: boolean; subtitle?: ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  if (collapsible) {
+    return (
+      <div className={`card ${open ? 'p-6' : 'px-6 py-4'} ${className}`}>
+        <div className="flex w-full items-center justify-between gap-3">
+          <button onClick={() => setOpen((o) => !o)} className="group flex flex-1 items-center gap-2.5 text-left">
+            <ChevronToggle open={open} />
+            <span className="font-display text-[16px] font-bold tracking-[-0.02em] text-ink-100">{title}</span>
+            {!open && subtitle && <span className="text-[11.5px] font-medium text-ink-500">{subtitle}</span>}
+          </button>
+          {open && right && <div className="shrink-0">{right}</div>}
+        </div>
+        {open && <div className="mt-5">{children}</div>}
+      </div>
+    )
+  }
   return (
     <div className={`card p-6 ${className}`}>
       {(title || right) && (
@@ -65,6 +86,13 @@ export function Section({ title, right, children, className = '' }: { title?: Re
       )}
       {children}
     </div>
+  )
+}
+
+function ChevronToggle({ open }: { open: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+      className={`shrink-0 text-ink-400 transition-transform group-hover:text-ink-200 ${open ? 'rotate-90' : ''}`}><path d="M9 6l6 6-6 6" /></svg>
   )
 }
 

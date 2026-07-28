@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore, type ScreenId } from './state/store'
 import { useCompliance } from './lib/useCompliance'
 import { fmtMoney, fmtNum } from './engine/engine'
@@ -8,6 +8,7 @@ import Icon, { type IconName } from './components/Icon'
 import Flag from './components/Flag'
 import { buildDualCredit } from './engine/china/dualcredit'
 import { fmtInt } from './engine/engine'
+import { getPack } from './engine/rulepacks'
 import { ScenarioRail } from './components/ScenarioRail'
 import FactsRail from './components/FactsRail'
 import Assistant from './components/Assistant'
@@ -53,6 +54,14 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
   { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
 ]
 
+// Hubs group the workspace modules so the sidebar shows a few clear buckets
+// instead of a flat wall of seven. Co-pilot stays standalone (the front door).
+const SCENARIO_SCREENS: ScreenId[] = ['scenario'] // tabs resolve to screen:'scenario'
+const HUBS: { label: string; icon: IconName; hint: string; items: ScreenId[] }[] = [
+  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['analyse', 'scenario', 'forecast'] },
+  { label: 'Credits', icon: 'scale', hint: 'ledger · pool · price', items: ['creditbook', 'pooling', 'pricing'] },
+]
+
 // Workspace utilities — always reachable, but not "modules".
 const UTIL: { id: ScreenId; label: string; icon: IconName }[] = [
   { id: 'data', label: 'Data & imports', icon: 'database' },
@@ -62,7 +71,7 @@ const UTIL: { id: ScreenId; label: string; icon: IconName }[] = [
 
 const SCENARIO_TABS: { id: 'model' | 'under' | 'compare'; label: string; icon: IconName }[] = [
   { id: 'model', label: 'Model', icon: 'sliders' },
-  { id: 'under', label: 'Get under the line', icon: 'target' },
+  { id: 'under', label: 'Action plan', icon: 'target' },
   { id: 'compare', label: 'Compare scenarios', icon: 'layers' },
 ]
 
@@ -80,6 +89,11 @@ function Sidebar() {
   const nav = NAV
     .filter((n) => !n.addon || (n.addon === 'pooling' && poolingAddon))
     .filter((n) => !n.country || n.country === country) // CN-only bespoke screens
+  const byId = Object.fromEntries(nav.map((n) => [n.id, n]))
+  const copilot = byId['copilot']
+  const [openHubs, setOpenHubs] = useState<Set<string>>(new Set())
+  const toggleHub = (l: string) => setOpenHubs((s) => { const n = new Set(s); n.has(l) ? n.delete(l) : n.add(l); return n })
+  const isLeafActive = (id: ScreenId) => screen === id || (id === 'scenario' && SCENARIO_SCREENS.includes(screen))
 
   return (
     <nav className="flex w-[248px] shrink-0 flex-col gap-1 border-r border-white/[0.08] p-3.5" style={{ background: CHROME }}>
@@ -103,26 +117,62 @@ function Sidebar() {
       </button>
 
       <div className="label px-1.5 pb-1.5 text-[#8A8174]">Workspace</div>
-      {nav.map((n) => {
-        const active = screen === n.id
+
+      {/* Co-pilot — the guided front door, always first */}
+      {copilot && (() => {
+        const active = screen === 'copilot'
         return (
-          <div key={n.id}>
-            <button onClick={() => setScreen(n.id)}
-              className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition ${active ? 'bg-white/[0.08] text-white' : 'text-[#A89E8C] hover:bg-white/[0.04] hover:text-white'}`}>
-              {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
-              <Icon name={n.icon} size={18} className={active ? 'text-brand-400' : 'text-[#7E766A] group-hover:text-[#B8AE9C]'} />
-              <span className="flex-1 font-medium">{n.label}</span>
-              <span className={`text-[9px] font-semibold uppercase tracking-wider ${n.tier === 'Core' ? 'text-brand-400/70' : n.tier === 'Add-on' ? 'text-accentblue' : 'text-[#6E665A]'}`}>{n.tier}</span>
+          <button onClick={() => setScreen('copilot')}
+            className={`group relative mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition ${active ? 'bg-white/[0.08] text-white' : 'text-[#A89E8C] hover:bg-white/[0.04] hover:text-white'}`}>
+            {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
+            <Icon name="spark" size={18} className={active ? 'text-brand-400' : 'text-[#7E766A] group-hover:text-[#B8AE9C]'} />
+            <span className="flex-1 font-medium">Co-pilot</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-brand-400/70">Start here</span>
+          </button>
+        )
+      })()}
+
+      {/* Hubs — expand to reveal the tools */}
+      {HUBS.map((hub) => {
+        const items = hub.items.map((id) => byId[id]).filter(Boolean)
+        if (!items.length) return null
+        const containsActive = items.some((n) => isLeafActive(n.id))
+        const open = containsActive || openHubs.has(hub.label)
+        return (
+          <div key={hub.label} className="mb-0.5">
+            <button onClick={() => toggleHub(hub.label)}
+              className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13.5px] transition ${containsActive ? 'text-white' : 'text-[#A89E8C] hover:bg-white/[0.04] hover:text-white'}`}>
+              <Icon name={hub.icon} size={18} className={containsActive ? 'text-brand-400' : 'text-[#7E766A] group-hover:text-[#B8AE9C]'} />
+              <span className="flex-1 font-semibold">{hub.label}</span>
+              <Icon name="chevron" size={13} className={`text-[#7E766A] transition-transform ${open ? 'rotate-90' : ''}`} />
             </button>
-            {n.id === 'scenario' && (
-              <div className="mb-1 ml-[26px] mt-0.5 flex flex-col gap-0.5 border-l border-white/[0.08] pl-3">
-                {SCENARIO_TABS.map((t) => {
-                  const on = screen === 'scenario' && scenarioTab === t.id
+            {open && (
+              <div className="mb-1 ml-[22px] mt-0.5 flex flex-col gap-0.5 border-l border-white/[0.08] pl-2.5">
+                {items.map((n) => {
+                  const active = isLeafActive(n.id)
                   return (
-                    <button key={t.id} onClick={() => setScreen(t.id)}
-                      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${on ? 'text-white' : 'text-[#8A8174] hover:text-white'}`}>
-                      <Icon name={t.icon} size={13} className={on ? 'text-brand-400' : 'text-[#6E665A]'} /> {t.id === 'under' && country === 'CN' ? 'Clear the credits' : t.label}
-                    </button>
+                    <div key={n.id}>
+                      <button onClick={() => setScreen(n.id)}
+                        className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition ${active ? 'bg-white/[0.07] text-white' : 'text-[#9A9082] hover:bg-white/[0.04] hover:text-white'}`}>
+                        {active && <span className="absolute left-[-10px] top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-brand" />}
+                        <Icon name={n.icon} size={15} className={active ? 'text-brand-400' : 'text-[#6E665A] group-hover:text-[#B8AE9C]'} />
+                        <span className="flex-1">{n.label}</span>
+                        {n.tier === 'Add-on' && <span className="text-[8.5px] font-semibold uppercase tracking-wider text-accentblue">Add-on</span>}
+                      </button>
+                      {n.id === 'scenario' && active && (
+                        <div className="ml-[22px] mt-0.5 flex flex-col gap-0.5 border-l border-white/[0.08] pl-2.5">
+                          {SCENARIO_TABS.map((t) => {
+                            const on = screen === 'scenario' && scenarioTab === t.id
+                            return (
+                              <button key={t.id} onClick={() => setScreen(t.id)}
+                                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] transition ${on ? 'text-white' : 'text-[#8A8174] hover:text-white'}`}>
+                                <Icon name={t.icon} size={12} className={on ? 'text-brand-400' : 'text-[#6E665A]'} /> {t.id === 'under' && country === 'CN' ? 'Clear the credits' : t.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
@@ -255,7 +305,7 @@ function ModuleShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
         <div className="flex min-h-0 flex-1">
-          <main className="min-w-0 flex-1 overflow-y-auto px-7 py-6">
+          <main className={`min-w-0 flex-1 overflow-y-auto px-7 py-6 ${screen === 'scenario' || screen === 'analyse' ? 'scn-dark' : ''}`}>
             <div key={gated ? 'locked' : screen} className="screen-in">
               <ErrorBoundary screenKey={screen}>
                 {gated ? <PoolingLocked /> : <Screen />}
@@ -263,7 +313,10 @@ function ModuleShell() {
             </div>
           </main>
           {screen === 'analyse' && <FactsRail />}
-          {RAIL_SCREENS.has(screen) && !gated && <ScenarioRail />}
+          {/* The assumptions rail is a modelling surface — only where it applies.
+              On Pooling it belongs to regimes that actually pool (EU/AU/UK); India
+              assesses every maker standalone, so there's nothing to model here. */}
+          {RAIL_SCREENS.has(screen) && !gated && (screen !== 'pooling' || getPack(country).pooling.enabled) && <ScenarioRail />}
         </div>
       </div>
       {aiEnabled && <Assistant />}

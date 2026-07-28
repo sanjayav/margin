@@ -224,13 +224,23 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
         onPointerMove={moveDrag} onPointerUp={endDrag} onPointerLeave={() => { if (dragRef.current || lineDragRef.current) endDrag() }}>
         <defs>
           <linearGradient id="fineZone" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ff5d6c" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#ff5d6c" stopOpacity="0.015" />
+            <stop offset="0%" stopColor="#F04A5A" stopOpacity="0.13" />
+            <stop offset="62%" stopColor="#F04A5A" stopOpacity="0.045" />
+            <stop offset="100%" stopColor="#F04A5A" stopOpacity="0.008" />
           </linearGradient>
           <linearGradient id="safeZone" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3ddc97" stopOpacity="0.02" />
-            <stop offset="100%" stopColor="#3ddc97" stopOpacity="0.13" />
+            <stop offset="0%" stopColor="#12B981" stopOpacity="0.012" />
+            <stop offset="45%" stopColor="#12B981" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#12B981" stopOpacity="0.12" />
           </linearGradient>
+          {/* soft, warm drop shadow so each maker sits as a premium coin */}
+          <filter id="lcCoin" x="-70%" y="-70%" width="240%" height="240%">
+            <feDropShadow dx="0" dy="2.2" stdDeviation="2.6" floodColor="#4A3418" floodOpacity="0.26" />
+          </filter>
+          <radialGradient id="lcGloss" cx="50%" cy="32%" r="65%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+          </radialGradient>
           {/* fan-chart shading for the draft corridor: densest at the centre line */}
           <linearGradient id="corridorFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#E0A100" stopOpacity="0.05" />
@@ -253,8 +263,8 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const y = sy(v)
           return (
             <g key={i}>
-              <line x1={m.l} y1={y} x2={W - m.r} y2={y} stroke="#1C1812" strokeOpacity="0.05" />
-              <text x={m.l - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#8C8273" className="num">{gap && v > 0 ? '+' : ''}{fmtNum(v, yDecimals)}</text>
+              <line x1={m.l} y1={y} x2={W - m.r} y2={y} stroke="#1C1812" strokeOpacity="0.045" strokeDasharray="1 5" strokeLinecap="round" />
+              <text x={m.l - 10} y={y + 3.5} textAnchor="end" fontSize="10" fontWeight="500" fill="#A79E8C" className="num" letterSpacing="0.2">{gap && v > 0 ? '+' : ''}{fmtNum(v, yDecimals)}</text>
             </g>
           )
         })}
@@ -263,7 +273,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const v = xMin + ((xMax - xMin) * i) / xticks
           const x = sx(v)
           return (
-            <text key={i} x={x} y={H - m.b + 16} textAnchor="middle" fontSize="10" fill="#8C8273" className="num">{fmtInt(v)}</text>
+            <text key={i} x={x} y={H - m.b + 16} textAnchor="middle" fontSize="10" fontWeight="500" fill="#A79E8C" className="num" letterSpacing="0.2">{fmtInt(v)}</text>
           )
         })}
         <text x={m.l} y={12} fontSize="10" fill="#8C8273" className="uppercase tracking-wider">
@@ -315,8 +325,11 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const ly = syAt(line[line.length - 1].mass, line[line.length - 1].limit)
           return (
             <g style={{ transition: 'all .25s' }}>
-              <rect x={lx - pillW - 4} y={ly - 24} width={pillW} height="17" rx="8.5" fill="#E0A100" />
-              <text x={lx - 4 - pillW / 2} y={ly - 12} textAnchor="middle" fontSize="10" fill="#1a1405" fontWeight="800" letterSpacing="0.5">{pillLabel}</text>
+              <g style={{ filter: 'drop-shadow(0 3px 7px rgba(180,120,0,0.32))' }}>
+                <rect x={lx - pillW - 4} y={ly - 25} width={pillW} height="18" rx="9" fill="#E7A400" />
+              </g>
+              <rect x={lx - pillW - 4} y={ly - 25} width={pillW} height="9" rx="9" fill="#F4BE33" opacity="0.55" />
+              <text x={lx - 4 - pillW / 2} y={ly - 12.5} textAnchor="middle" fontSize="9.5" fill="#1a1405" fontWeight="900" letterSpacing="0.7">{pillLabel}</text>
               {stringency && stringency.value !== 0 && !lineDrag && (
                 <text x={lx - 4 - pillW / 2} y={ly + 12} textAnchor="middle" fontSize="9" fill="#D98005" fontWeight={700} className="num">stringency {stringency.value > 0 ? '+' : ''}{stringency.value}%</text>
               )}
@@ -373,20 +386,27 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
                 const ir = Math.max(3, rr - 2.5) // inner disc/logo radius
                 const failed = !url || logoFailed.has(p.key)
                 const mono = brandColor(p.label)
+                const clipId = `lc-clip-${p.key.replace(/[^a-zA-Z0-9]/g, '')}`
                 return (
-                  <g>
-                    {/* compliance stays legible: the STATUS ring around the identity */}
-                    <circle cx={cx} cy={cy} r={rr} fill={color} fillOpacity={0.16} stroke={color} strokeWidth={2.25} className="lc-bubble" style={{ transition: 'r .25s ease, fill .25s ease, stroke .25s ease' }} />
-                    <clipPath id={`lc-clip-${p.key.replace(/[^a-zA-Z0-9]/g, '')}`}><circle cx={cx} cy={cy} r={ir} /></clipPath>
-                    <circle cx={cx} cy={cy} r={ir} fill={failed ? mono : '#FFFDF9'} opacity={failed ? 0.92 : 0.96} />
+                  <g className="lc-bubble" style={{ transition: 'r .25s ease' }}>
+                    {/* the coin: a soft-shadowed white chip carrying the identity */}
+                    <g filter="url(#lcCoin)">
+                      <circle cx={cx} cy={cy} r={ir + 1.5} fill={failed ? mono : '#FFFFFF'} />
+                    </g>
+                    {/* status ring — compliance stays legible as a crisp halo */}
+                    <circle cx={cx} cy={cy} r={rr} fill={color} fillOpacity={active ? 0.14 : 0.09} stroke={color} strokeWidth={active ? 2.5 : 2} style={{ transition: 'r .25s ease, fill .25s ease, stroke-width .2s ease' }} />
+                    <clipPath id={clipId}><circle cx={cx} cy={cy} r={ir} /></clipPath>
                     {!failed && (
                       <image href={url!} x={cx - ir * 0.72} y={cy - ir * 0.72} width={ir * 1.44} height={ir * 1.44}
-                        clipPath={`url(#lc-clip-${p.key.replace(/[^a-zA-Z0-9]/g, '')})`} preserveAspectRatio="xMidYMid meet"
+                        clipPath={`url(#${clipId})`} preserveAspectRatio="xMidYMid meet"
                         style={{ pointerEvents: 'none' }} onError={() => failLogo(p.key)} />
                     )}
                     {failed && (
                       <text x={cx} y={cy + ir * 0.34} textAnchor="middle" fontSize={Math.max(7, ir * 0.9)} fontWeight={800} fill="#fff" style={{ pointerEvents: 'none' }} className="num">{brandInitials(p.label)}</text>
                     )}
+                    {/* hairline edge + a soft top gloss for the premium coin feel */}
+                    <circle cx={cx} cy={cy} r={ir} fill="url(#lcGloss)" opacity={0.5} style={{ pointerEvents: 'none' }} />
+                    <circle cx={cx} cy={cy} r={ir + 1.5} fill="none" stroke="#1C1812" strokeOpacity="0.07" strokeWidth="0.75" style={{ pointerEvents: 'none' }} />
                   </g>
                 )
               })()}
@@ -394,16 +414,19 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
               {(active || p.isFleet) && (() => {
                 // flip the tooltip to the left near the right edge so it never clips
                 const gapLine = `target ${fmtNum(target, 1)} · ${pGap > 0 ? `+${fmtNum(pGap, 1)} over` : `${fmtNum(Math.abs(pGap), 1)} under`}`
-                const tw = Math.max(96, p.label.length * 6.5, gapLine.length * 5.6 + 16)
-                const flip = cx + 12 + tw > W - m.r
-                const tx = flip ? cx - 12 - tw : cx + 12
-                const ty = Math.max(m.t + 2, cy - 34)
+                const tw = Math.max(112, p.label.length * 6.7 + 22, gapLine.length * 5.8 + 22)
+                const flip = cx + 14 + tw > W - m.r
+                const tx = flip ? cx - 14 - tw : cx + 14
+                const ty = Math.max(m.t + 2, cy - 36)
                 return (
-                  <g>
-                    <rect x={tx} y={ty} width={tw} height={50} rx="6" fill="#FFFDF9" stroke="#DBD2BF" style={{ filter: 'drop-shadow(0 3px 8px rgba(60,45,20,0.14))' }} />
-                    <text x={tx + 8} y={ty + 14} fontSize="11" fill="#1C1812" fontWeight="600">{p.label}</text>
-                    <text x={tx + 8} y={ty + 28} fontSize="10" fill="#8C8273" className="num">{fmtNum(p.metric, 1)} {pack.metricUnit} · {fmtInt(p.units)} u</text>
-                    <text x={tx + 8} y={ty + 42} fontSize="10" fill={pGap > 0 ? '#E0484D' : '#0E9F6E'} fontWeight={600} className="num">{gapLine}</text>
+                  <g className="lc-tip">
+                    <g style={{ filter: 'drop-shadow(0 8px 20px rgba(40,28,10,0.18))' }}>
+                      <rect x={tx} y={ty} width={tw} height={54} rx="10" fill="#FFFFFF" stroke="#1C1812" strokeOpacity="0.06" />
+                    </g>
+                    <rect x={tx} y={ty + 8} width={3} height={38} rx="1.5" fill={color} />
+                    <text x={tx + 13} y={ty + 17} fontSize="11" fill="#1C1812" fontWeight="700">{p.label.length > 30 ? p.label.slice(0, 29) + '…' : p.label}</text>
+                    <text x={tx + 13} y={ty + 31} fontSize="10" fill="#8C8273" className="num">{fmtNum(p.metric, 1)} {pack.metricUnit} · {fmtInt(p.units)} units</text>
+                    <text x={tx + 13} y={ty + 45} fontSize="10" fill={pGap > 0 ? '#E0484D' : '#0E9F6E'} fontWeight={700} className="num">{gapLine}</text>
                   </g>
                 )
               })()}

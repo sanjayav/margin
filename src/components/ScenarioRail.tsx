@@ -24,26 +24,26 @@ function Group({ title, icon, owner, children, defaultOpen = true, modified, sub
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className={`rounded-xl border bg-white/40 transition-colors ${modified ? 'border-brand/20' : 'border-black/[0.06]'}`}>
+    <div className={`rounded-xl border bg-white/[0.035] transition-colors ${modified ? 'border-brand/20' : 'border-white/[0.08]'}`}>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between px-3 py-2.5">
-        <span className="flex min-w-0 items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-ink-300">
+        <span className="flex min-w-0 items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-white/70">
           <Icon name={icon} size={13} className="text-brand" />
           <span className="truncate">{title}</span>
           {modified && <i className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
         </span>
         <div className="flex shrink-0 items-center gap-2">
-          {subtitle && !open && <span className="text-[10px] normal-case text-ink-500">{subtitle}</span>}
-          <Icon name="chevron" size={13} className={`text-ink-500 transition-transform ${open ? 'rotate-90' : ''}`} />
+          {subtitle && !open && <span className="text-[10px] normal-case text-white/45">{subtitle}</span>}
+          <Icon name="chevron" size={13} className={`text-white/45 transition-transform ${open ? 'rotate-90' : ''}`} />
         </div>
       </button>
       {open && (
         <div className="space-y-3.5 px-3 pb-3.5">
           {/* who owns these decisions — the hierarchy made visible */}
           {(owner || (modified && onReset)) && (
-            <div className="-mt-1 flex items-center justify-between gap-2 border-b border-black/[0.05] pb-2">
-              <span className="text-[9.5px] leading-snug text-ink-500">{owner}</span>
+            <div className="-mt-1 flex items-center justify-between gap-2 border-b border-white/[0.07] pb-2">
+              <span className="text-[9.5px] leading-snug text-white/45">{owner}</span>
               {modified && onReset && (
-                <button onClick={onReset} className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold text-ink-500 transition hover:bg-danger/10 hover:text-danger">
+                <button onClick={onReset} className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold text-white/45 transition hover:bg-danger/10 hover:text-danger">
                   <Icon name="reset" size={10} /> Reset group
                 </button>
               )}
@@ -71,9 +71,9 @@ function NumSlider({ label, value, min, max, step, onChange, unit, hint, baselin
         <div className="flex items-center gap-1">
           <input type="number" value={shown} min={min} max={max} step={step}
             onChange={(e) => { const v = parseFloat(e.target.value); if (!Number.isNaN(v)) onChange(Math.max(min, Math.min(max, v))) }}
-            className={`num w-14 rounded-md border px-1.5 py-0.5 text-right text-xs font-bold outline-none focus:border-brand/40 ${modified ? 'border-brand/30 bg-brand/[0.06] text-brand' : 'border-black/10 bg-black/[0.03] text-ink-300'}`} />
-          {unit && <span className="text-[10px] text-ink-500">{unit}</span>}
-          {modified && <button onClick={() => onChange(baseline!)} title={`back to ${baseline}`}><Icon name="reset" size={11} className="text-ink-500 hover:text-ink-100" /></button>}
+            className={`num w-14 rounded-md border px-1.5 py-0.5 text-right text-xs font-bold outline-none focus:border-brand/40 ${modified ? 'border-brand/30 bg-brand/[0.06] text-brand' : 'border-white/12 bg-white/[0.05] text-white/70'}`} />
+          {unit && <span className="text-[10px] text-white/45">{unit}</span>}
+          {modified && <button onClick={() => onChange(baseline!)} title={`back to ${baseline}`}><Icon name="reset" size={11} className="text-white/45 hover:text-white" /></button>}
         </div>
       </div>
       <div className="relative mt-2">
@@ -82,20 +82,20 @@ function NumSlider({ label, value, min, max, step, onChange, unit, hint, baselin
           onChange={(e) => onChange(parseFloat(e.target.value))} />
         {/* the as-sold baseline, always visible on the track */}
         {baseline != null && baseline >= min && baseline <= max && (
-          <span className="pointer-events-none absolute top-1/2 h-[11px] w-[2px] -translate-y-[54%] rounded-full bg-ink-400/60"
+          <span className="pointer-events-none absolute top-1/2 h-[11px] w-[2px] -translate-y-[54%] rounded-full bg-white/25"
             style={{ left: `calc(${pct(baseline)}% )` }} title={`as-sold ${baseline}`} />
         )}
       </div>
-      {hint && <div className="mt-1 text-[10px] text-ink-500">{hint}</div>}
+      {hint && <div className="mt-1 text-[10px] text-white/45">{hint}</div>}
     </div>
   )
 }
 
 function Toggle({ label, checked, onChange, hint, right }: { label: string; checked: boolean; onChange: (b: boolean) => void; hint?: string; right?: ReactNode }) {
   return (
-    <button onClick={() => onChange(!checked)} className="flex w-full items-center justify-between rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-left transition hover:border-black/20">
-      <div className="min-w-0"><div className="flex items-center gap-1.5 text-xs font-semibold text-ink-100">{label}{right}</div>{hint && <div className="text-[10px] text-ink-500">{hint}</div>}</div>
-      <div className={`relative h-5 w-9 shrink-0 rounded-full transition ${checked ? 'bg-brand' : 'bg-ink-700'}`}>
+    <button onClick={() => onChange(!checked)} className="flex w-full items-center justify-between rounded-lg border border-white/12 bg-white/[0.03] px-3 py-2 text-left transition hover:border-white/20">
+      <div className="min-w-0"><div className="flex items-center gap-1.5 text-xs font-semibold text-white">{label}{right}</div>{hint && <div className="text-[10px] text-white/45">{hint}</div>}</div>
+      <div className={`relative h-5 w-9 shrink-0 rounded-full transition ${checked ? 'bg-brand' : 'bg-white/15'}`}>
         <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${checked ? 'left-[18px]' : 'left-0.5'}`} />
       </div>
     </button>
@@ -105,7 +105,7 @@ function Toggle({ label, checked, onChange, hint, right }: { label: string; chec
 function Delta({ from, to, money, currency = '' }: { from: number; to: number; money?: boolean; currency?: string }) {
   const d = to - from
   const eps = money ? 1 : 0.05
-  if (Math.abs(d) < eps) return <span className="text-[10px] text-ink-500">— no change</span>
+  if (Math.abs(d) < eps) return <span className="text-[10px] text-white/45">— no change</span>
   const better = d < 0
   return (
     <span className={`num text-[10px] font-bold ${better ? 'text-safe' : 'text-danger'}`}>
@@ -120,7 +120,7 @@ function PositionBar({ fleet, limit }: { fleet: number; limit: number }) {
   const lw = Math.min(100, (limit / scale) * 100)
   const over = fleet > limit
   return (
-    <div className="relative mt-2.5 h-2 w-full rounded-full bg-black/[0.06]">
+    <div className="relative mt-2.5 h-2 w-full rounded-full bg-white/[0.08]">
       <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-300" style={{ width: `${fw}%`, background: over ? '#E0484D' : '#0E9F6E' }} />
       <div className="absolute -inset-y-[3px] w-[2px] rounded bg-[#C9A227]" style={{ left: `${lw}%` }} title={`limit ${limit.toFixed(1)}`} />
     </div>
@@ -231,6 +231,20 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     return { pts, shares, total }
   }, [raw, scenario.year, level, pool, maker, model, variant]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The RESULTING powertrain mix in scope, read off the already-applied drill
+  // tree — so hypothetical variants AND the mix / EV-share levers are all
+  // reflected (mixInfo above is the as-sold, reweightable baseline only).
+  const appliedMix = useMemo(() => {
+    const node = nodeAt(drillTree, drillPath)
+    const by: Record<string, number> = {}
+    let total = 0
+    for (const v of node.vehicles ?? []) { by[v.powertrain] = (by[v.powertrain] ?? 0) + v.sales; total += v.sales }
+    const pts = Object.keys(by).sort((a, b) => by[b] - by[a])
+    const shares: Record<string, number> = {}
+    pts.forEach((p) => (shares[p] = total ? (by[p] / total) * 100 : 0))
+    return { pts, shares, total }
+  }, [drillTree, path]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Monte-Carlo €-at-risk for the current scope — deferred so dragging stays smooth.
   const defScenario = useDeferredValue(scenario)
   const defOv = useDeferredValue(makerOverrides)
@@ -303,8 +317,18 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const otherScopes = Object.entries(makerOverrides).filter(([k, v]) => k !== scope && v && Object.keys(v).length > 0)
   if (otherScopes.length > 0) assumptions.push({ label: `+${otherScopes.length} other scope${otherScopes.length > 1 ? 's' : ''} touched`, title: otherScopes.map(([k]) => k).join(' · ') })
 
+  // No-pool markets (India) hide the redundant 1:1 pool tier from the breadcrumb.
+  const skipPool = !pack.pooling.enabled
+  const scopeChips = skipPool
+    ? [{ name: 'Market', val: 'Market' }, ...drillPath.slice(1).map((seg, j) => ({ name: ['Manufacturer', 'Model', 'Variant'][j] ?? 'Scope', val: seg }))]
+    : SCOPE_NAME.slice(0, level + 1).map((seg, i) => ({ name: seg, val: i === 0 ? 'Market' : (drillPath[i - 1] ?? seg) }))
   const isVariantLevel = level >= 4
-  const showMix = !isVariantLevel && mixInfo.pts.length > 1
+  // Show the mix whenever the RESULTING fleet has more than one powertrain — so a
+  // hypothetical variant that introduces a new powertrain surfaces the control.
+  const showMix = !isVariantLevel && Math.max(mixInfo.pts.length, appliedMix.pts.length) > 1
+  // Powertrains present only because a hypothetical variant added them (no as-sold
+  // volume to reweight) — shown read-only under the sliders.
+  const extraPts = appliedMix.pts.filter((p) => !mixInfo.pts.includes(p))
   // scope for the variant builder follows the drill depth
   const addScope: ShareScope = level >= 3 ? 'model' : level === 2 ? 'manufacturer' : 'market'
 
@@ -313,24 +337,25 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     : 1
 
   return (
-    <aside className="flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-black/[0.06] bg-ink-900/30 p-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-bold text-ink-100"><Icon name="sliders" size={16} className="text-brand" /> Assumptions</div>
+    <aside className="rail-dark relative flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.06] p-4" style={{ background: 'linear-gradient(178deg, #221B17 0%, #1B1714 42%, #17130F 100%)' }}>
+      <div aria-hidden className="pointer-events-none absolute -right-14 -top-8 h-52 w-52 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.15), transparent 64%)' }} />
+      <div className="relative flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-bold text-white"><Icon name="sliders" size={16} className="text-brand-400" /> Assumptions</div>
         {(fleetModified || policyModified || variants.length > 0) && (
-          <button onClick={reset} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-ink-500 transition hover:bg-black/5 hover:text-ink-100"><Icon name="reset" size={12} /> Reset</button>
+          <button onClick={reset} className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white/45 transition hover:bg-white/[0.06] hover:text-white"><Icon name="reset" size={12} /> Reset</button>
         )}
       </div>
 
       {/* scope chips */}
       <div className="flex flex-wrap items-center gap-0.5">
-        {SCOPE_NAME.slice(0, level + 1).map((seg, i) => (
+        {scopeChips.map((chip, i) => (
           <span key={i} className="flex items-center gap-0.5">
-            {i > 0 && <Icon name="chevron" size={10} className="text-ink-600" />}
-            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${i === level ? 'bg-brand/12 text-brand' : 'text-ink-500'}`}>{i === 0 ? 'Market' : (drillPath[i - 1] ?? seg).split(' ')[0]}</span>
+            {i > 0 && <Icon name="chevron" size={10} className="text-white/30" />}
+            <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${i === scopeChips.length - 1 ? 'bg-brand/12 text-brand' : 'text-white/45'}`}>{chip.val.split(' ')[0]}</span>
           </span>
         ))}
       </div>
-      <div className="-mt-1.5 text-[10px] leading-relaxed text-ink-500">{levelHint}</div>
+      <div className="-mt-1.5 text-[10px] leading-relaxed text-white/45">{levelHint}</div>
 
       {/* the assumption ledger — what exactly is being assumed right now */}
       {assumptions.length > 0 ? (
@@ -339,17 +364,17 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           <div className="flex flex-wrap gap-1.5">
             {assumptions.map((a) => (
               <span key={a.label} title={a.title}
-                className="flex items-center gap-1 rounded-full border border-brand/25 bg-white/70 py-0.5 pl-2 pr-1 text-[10px] font-semibold text-ink-200">
+                className="flex items-center gap-1 rounded-full border border-brand/25 bg-white/[0.08] py-0.5 pl-2 pr-1 text-[10px] font-semibold text-white/85">
                 {a.label}
                 {a.revert
-                  ? <button onClick={a.revert} title="Revert this assumption" className="grid h-3.5 w-3.5 place-items-center rounded-full text-ink-500 transition hover:bg-danger/10 hover:text-danger"><Icon name="close" size={8} /></button>
-                  : <Icon name="dot" size={8} className="mr-1 text-ink-500" />}
+                  ? <button onClick={a.revert} title="Revert this assumption" className="grid h-3.5 w-3.5 place-items-center rounded-full text-white/45 transition hover:bg-danger/10 hover:text-danger"><Icon name="close" size={8} /></button>
+                  : <Icon name="dot" size={8} className="mr-1 text-white/45" />}
               </span>
             ))}
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-black/[0.05] bg-black/[0.02] px-2.5 py-2 text-[10px] leading-relaxed text-ink-500">
+        <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] px-2.5 py-2 text-[10px] leading-relaxed text-white/45">
           <span className="font-semibold text-safe">As sold.</span> No assumptions applied — every number is the official registration data.
         </div>
       )}
@@ -365,7 +390,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
             const draft = pack.regimeFor?.(y)?.draft
             return (
               <button key={y} onClick={() => patch({ year: y })}
-                className={`num relative rounded-lg px-2 py-1 text-xs font-semibold transition ${scenario.year === y ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>
+                className={`num relative rounded-lg px-2 py-1 text-xs font-semibold transition ${scenario.year === y ? 'bg-brand text-white' : 'bg-white/[0.06] text-white/45 hover:text-white'}`}>
                 {y}
                 {draft && <i className={`absolute right-0.5 top-0.5 h-1 w-1 rounded-full ${scenario.year === y ? 'bg-white/80' : 'bg-warn'}`} title="draft regime" />}
               </button>
@@ -375,12 +400,12 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       </div>
 
       {/* live outcome — pinned while the levers scroll */}
-      <div className="sticky top-0 z-10 rounded-2xl border border-black/[0.07] bg-[#F6F0E3] p-3.5 shadow-[0_10px_18px_-14px_rgba(60,45,20,0.35)]">
+      <div className="sticky top-0 z-10 rounded-2xl border border-white/10 bg-white/[0.055] p-3.5 shadow-[0_16px_30px_-18px_rgba(0,0,0,0.6)] backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <span className="label">Outcome · {outcomeName}</span>
           <div className="flex items-center gap-1.5">
             {three && (
-              <button onClick={() => setShow3yr((v) => !v)} className={`num rounded-md px-1.5 py-0.5 text-[9px] font-bold transition ${show3yr ? 'bg-brand text-white' : 'bg-black/5 text-ink-500 hover:text-ink-100'}`}>{show3yr ? '3-yr' : '1-yr'}</button>
+              <button onClick={() => setShow3yr((v) => !v)} className={`num rounded-md px-1.5 py-0.5 text-[9px] font-bold transition ${show3yr ? 'bg-brand text-white' : 'bg-white/[0.06] text-white/45 hover:text-white'}`}>{show3yr ? '3-yr' : '1-yr'}</button>
             )}
             <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${cur.gap > 0 ? 'bg-danger/12 text-danger' : 'bg-safe/12 text-safe'}`}>
               <i className={`h-1.5 w-1.5 rounded-full ${cur.gap > 0 ? 'bg-danger' : 'bg-safe'}`} />{cur.gap > 0 ? 'Over' : 'Under'}
@@ -389,26 +414,26 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         </div>
         <div className="mt-2 flex items-end justify-between">
           <div>
-            <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">fleet {pack.metricUnit}</div>
-            <div className="dnum text-[30px] font-bold leading-none text-ink-100">{fmtNum(cur.metric, 1)}</div>
-            <div className="mt-1 text-[10px] text-ink-500">limit {fmtNum(cur.limit, 1)}</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-white/45">fleet {pack.metricUnit}</div>
+            <div className="dnum text-[30px] font-bold leading-none text-white">{fmtNum(cur.metric, 1)}</div>
+            <div className="mt-1 text-[10px] text-white/45">limit {fmtNum(cur.limit, 1)}</div>
           </div>
           <div className="text-right">
-            <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">gap</div>
+            <div className="text-[9px] font-semibold uppercase tracking-wide text-white/45">gap</div>
             <div className={`dnum text-[20px] font-bold leading-none ${cur.gap > 0 ? 'text-danger' : 'text-safe'}`}>{cur.gap > 0 ? '+' : ''}{fmtNum(cur.gap, 1)}</div>
             <div className="mt-1"><Delta from={base.gap} to={cur.gap} /></div>
           </div>
         </div>
         <PositionBar fleet={cur.metric} limit={cur.limit} />
-        <div className="mt-3 border-t border-black/[0.06] pt-2.5">
+        <div className="mt-3 border-t border-white/[0.08] pt-2.5">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium text-ink-400">{riskLabel} <span className="text-ink-500">· P50</span></span>
+            <span className="text-[11px] font-medium text-white/55">{riskLabel} <span className="text-white/45">· P50</span></span>
             <div className="flex items-center gap-2">
               <span className={`dnum text-[15px] font-bold ${risk.p50 > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(riskFine, pack.currency)}</span>
               <span className={`num rounded-full px-1.5 py-0.5 text-[9px] font-bold ${risk.probOver > 0.05 ? 'bg-danger/12 text-danger' : 'bg-safe/12 text-safe'}`}>{Math.round(risk.probOver * 100)}% over</span>
             </div>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-ink-500">
+          <div className="mt-1 flex items-center justify-between text-[10px] text-white/45">
             <span>P10–P90</span>
             <span className="num">{fmtMoney(risk.p10, pack.currency)} – {fmtMoney(risk.p90, pack.currency)}</span>
           </div>
@@ -418,7 +443,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
 
       {/* quick presets */}
       <div>
-        <div className="label mb-1.5 text-ink-400">Quick scenarios</div>
+        <div className="label mb-1.5 text-white/55">Quick scenarios</div>
         <div className="flex flex-wrap gap-1.5">
           {([
             ['As-sold', reset],
@@ -426,7 +451,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
             ...(scope && showMix && mixInfo.pts.includes('BEV') && cur.gap > 0 ? [['⚡ To the line', solveToLine]] as [string, () => void][] : []),
             ...(pack.massBasedLimit !== false ? [['Heavier +100kg', () => patch({ massShiftKg: 100 })]] as [string, () => void][] : []),
           ] as [string, () => void][]).map(([label, fn]) => (
-            <button key={label} onClick={fn} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition hover:-translate-y-px ${label.startsWith('⚡') ? 'border-brand/40 bg-brand/10 text-brand' : 'border-black/[0.07] bg-white/50 text-ink-400 hover:border-brand/40 hover:text-brand'}`}>{label}</button>
+            <button key={label} onClick={fn} className={`rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition hover:-translate-y-px ${label.startsWith('⚡') ? 'border-brand/40 bg-brand/10 text-brand' : 'border-white/[0.08] bg-white/[0.06] text-white/55 hover:border-brand/40 hover:text-brand'}`}>{label}</button>
           ))}
         </div>
       </div>
@@ -443,25 +468,32 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           <div>
             <div className="flex items-center justify-between">
               <span className="label flex items-center gap-1.5">Powertrain mix{mixModified && <i className="h-1.5 w-1.5 rounded-full bg-brand" />}</span>
-              {ownMix && <button onClick={() => patch({ mix: null })} className="text-[10px] font-semibold text-ink-500 hover:text-ink-100">as-sold</button>}
+              {ownMix && <button onClick={() => patch({ mix: null })} className="text-[10px] font-semibold text-white/45 hover:text-white">as-sold</button>}
             </div>
-            <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-ink-800 ring-1 ring-black/[0.04]">
-              {mixInfo.pts.map((p) => <div key={p} className="transition-all duration-300" style={{ width: `${resultShare(p)}%`, background: ptColor(p) }} title={`${p} ${Math.round(resultShare(p))}%`} />)}
+            <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-white/10 ring-1 ring-white/[0.06]">
+              {appliedMix.pts.map((p) => <div key={p} className="transition-all duration-300" style={{ width: `${appliedMix.shares[p] ?? 0}%`, background: ptColor(p) }} title={`${p} ${Math.round(appliedMix.shares[p] ?? 0)}%`} />)}
             </div>
             <div className="mt-3 space-y-2.5">
               {mixInfo.pts.map((p) => (
                 <div key={p} className="flex items-center gap-2.5">
-                  <span className="flex w-[52px] shrink-0 items-center gap-1.5 text-[11px] font-medium text-ink-100"><i className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(p) }} />{p}</span>
+                  <span className="flex w-[52px] shrink-0 items-center gap-1.5 text-[11px] font-medium text-white"><i className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(p) }} />{p}</span>
                   <input type="range" className="w-full flex-1" min={0} max={100} step={1} value={Math.round(weights[p] ?? 0)}
                     style={{ ['--fill' as string]: `${Math.round(weights[p] ?? 0)}%` }}
                     onChange={(e) => setWeight(p, parseFloat(e.target.value))} />
-                  <span className="num w-7 shrink-0 text-right text-[11px] font-bold" style={{ color: ptColor(p) }}>{Math.round(resultShare(p))}%</span>
+                  <span className="num w-7 shrink-0 text-right text-[11px] font-bold" style={{ color: ptColor(p) }}>{Math.round(appliedMix.shares[p] ?? 0)}%</span>
+                </div>
+              ))}
+              {extraPts.map((p) => (
+                <div key={p} className="flex items-center gap-2.5" title="Added by a hypothetical variant — adjust it in Build a variant below">
+                  <span className="flex w-[52px] shrink-0 items-center gap-1.5 text-[11px] font-medium text-white"><i className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(p) }} />{p}</span>
+                  <span className="flex-1 text-[10px] text-white/45">added variant</span>
+                  <span className="num w-7 shrink-0 text-right text-[11px] font-bold" style={{ color: ptColor(p) }}>{Math.round(appliedMix.shares[p] ?? 0)}%</span>
                 </div>
               ))}
             </div>
           </div>
         ) : isVariantLevel ? (
-          <div className="rounded-lg bg-black/[0.02] px-2.5 py-2 text-[10px] text-ink-500">Single variant — adjust its volume and mass below; switch powertrain mix at the model level.</div>
+          <div className="rounded-lg bg-white/[0.03] px-2.5 py-2 text-[10px] text-white/45">Single variant — adjust its volume and mass below; switch powertrain mix at the model level.</div>
         ) : null}
 
         {/* Eco-innovation certificates belong to the manufacturer (Art 11) — the
@@ -500,7 +532,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
         {country === 'EU' && (
           <Toggle label="PHEV utility factor" checked={scenario.phevUF !== false} onChange={(b) => patch({ phevUF: b })}
             hint={`2025+ WLTP correction · ×${fmtNum(scenario.phevUF === false ? 1 : ufNow, 2)} on PHEV CO₂`}
-            right={<span className="num rounded bg-black/10 px-1 text-[9px] font-bold text-ink-400">×{fmtNum(ufNow, 2)}</span>} />
+            right={<span className="num rounded bg-white/10 px-1 text-[9px] font-bold text-white/55">×{fmtNum(ufNow, 2)}</span>} />
         )}
         {pack.pooling.enabled && <Toggle label="Pooling" checked={scenario.poolingEnabled} onChange={(b) => patch({ poolingEnabled: b })} hint="combine makers, share one average" />}
         {pack.id === 'IN' && <Toggle label="Super-credits" checked={scenario.superCreditsEnabled} onChange={(b) => patch({ superCreditsEnabled: b })} hint="BEV ×3, PHEV ×2.5" />}
@@ -530,7 +562,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
       <Group title="Saved scenarios" icon="layers" defaultOpen={false} subtitle={myScenarios.length ? `${myScenarios.length} saved` : undefined}
         owner="A saved scenario captures every assumption above — reload it anytime, or compare scenarios side-by-side">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] text-ink-500">Capture the current assumptions</span>
+          <span className="text-[10px] text-white/45">Capture the current assumptions</span>
           {!naming && <button onClick={() => setNaming(true)} className="text-[10px] font-semibold text-brand transition hover:underline">+ Save current</button>}
         </div>
         {naming && (
@@ -538,23 +570,23 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
             <input autoFocus value={scenarioName} onChange={(e) => setScenarioName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') commitSave(); else if (e.key === 'Escape') { setNaming(false); setScenarioName('') } }}
               placeholder="Name this scenario…"
-              className="w-full min-w-0 flex-1 rounded-lg border border-black/10 bg-ink-850 px-2 py-1.5 text-[11px] text-ink-100 outline-none placeholder:text-ink-600 focus:border-brand/40" />
+              className="w-full min-w-0 flex-1 rounded-lg border border-white/12 bg-white/[0.06] px-2 py-1.5 text-[11px] text-white outline-none placeholder:text-white/30 focus:border-brand/40" />
             <button onClick={commitSave} disabled={!scenarioName.trim()} className="shrink-0 rounded-lg bg-brand px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:brightness-105 disabled:opacity-40">Save</button>
-            <button onClick={() => { setNaming(false); setScenarioName('') }} className="shrink-0 text-ink-500 transition hover:text-ink-100"><Icon name="close" size={12} /></button>
+            <button onClick={() => { setNaming(false); setScenarioName('') }} className="shrink-0 text-white/45 transition hover:text-white"><Icon name="close" size={12} /></button>
           </div>
         )}
         {myScenarios.length === 0
-          ? <div className="text-[10px] text-ink-500">None yet — capture the current assumptions to reuse or compare.</div>
+          ? <div className="text-[10px] text-white/45">None yet — capture the current assumptions to reuse or compare.</div>
           : (
             <div className="space-y-1">
               {myScenarios.slice(0, 6).map((s) => {
                 const stale = s.datasetVersion != null && s.datasetVersion !== meta.datasetVersion
                 return (
-                  <div key={s.id} className="flex items-center gap-2 rounded-lg border border-black/[0.06] bg-black/[0.02] px-2 py-1">
-                    <button onClick={() => loadScenario(s.id)} title="Load" className="flex flex-1 items-center gap-1.5 truncate text-left text-[11px] font-medium text-ink-200 transition hover:text-brand"><Icon name="reset" size={10} className="shrink-0 rotate-180" /> {s.label}</button>
+                  <div key={s.id} className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1">
+                    <button onClick={() => loadScenario(s.id)} title="Load" className="flex flex-1 items-center gap-1.5 truncate text-left text-[11px] font-medium text-white/85 transition hover:text-brand"><Icon name="reset" size={10} className="shrink-0 rotate-180" /> {s.label}</button>
                     {stale && <span title={`Seeded from dataset v${String(s.datasetVersion).slice(-6)} — the ${country} dataset has since changed (now v${String(meta.datasetVersion).slice(-6)}). Numbers will re-run on the new data when loaded.`}
                       className="shrink-0 rounded-full border border-warn/40 bg-warn/10 px-1.5 py-px text-[8.5px] font-black uppercase tracking-wide text-warn">stale</span>}
-                    <button onClick={() => deleteScenario(s.id)} title="Delete" className="shrink-0 text-ink-500 transition hover:text-danger"><Icon name="close" size={11} /></button>
+                    <button onClick={() => deleteScenario(s.id)} title="Delete" className="shrink-0 text-white/45 transition hover:text-danger"><Icon name="close" size={11} /></button>
                   </div>
                 )
               })}
@@ -591,8 +623,12 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
   const [units, setUnits] = useState('5000')
   const [share, setShare] = useState('10')
 
-  useEffect(() => { setModel(defaultModel) }, [defaultModel])
+  useEffect(() => { setModel('') }, [defaultModel, addScope])
   const isBev = pt === 'BEV'
+  // At model scope the input names a VARIANT of the drilled model; higher up it
+  // names a NEW model. Either way the added row gets a distinct `variant`
+  // descriptor so it nests as its own node instead of merging into a powertrain.
+  const isVarScope = addScope === 'model'
   const choosePt = (p: string) => { setPt(p); setCo2(String(DEFAULT_CO2[p] ?? 0)) }
 
   // India: typing (or picking) a real model prefills its powertrain, CO₂ and mass
@@ -612,8 +648,12 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
   const sharePct = Math.max(0, Math.min(95, parseFloat(share) || 0))
   const projectedUnits = volMode === 'share' ? Math.round(scopeTotal * (sharePct / 100)) : (parseInt(units) || 0)
 
+  const typed = (model || '').trim()
+  const auto = `New ${pt}${variants.length ? ` ${variants.length + 1}` : ''}` // unique fallback → own drill node
+  const finalModel = isVarScope ? (defaultModel || typed || auto) : (typed || auto)
+  const finalVariant = typed || auto
   const draft: Vehicle = {
-    parent, pool: '', brand: parent, make: parent, model: model || defaultModel || `New ${pt}`,
+    parent, pool: '', brand: parent, make: parent, model: finalModel, variant: finalVariant,
     year: scenario.year, powertrain: pt, fuel: FUEL_FOR[pt] ?? 'Petrol',
     co2: isBev ? 0 : parseFloat(co2) || 0, mass: parseFloat(mass) || 1500,
     sales: volMode === 'units' ? (parseInt(units) || 0) : 0,
@@ -626,30 +666,37 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
   return (
     <div>
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between text-left">
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-ink-100">{open ? 'Close' : 'New hypothetical variant'}</span>
-        <Icon name={open ? 'close' : 'arrow-right'} size={13} className="text-ink-500" />
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-white">{open ? 'Close' : isVarScope ? 'New variant' : 'New model'}</span>
+        <Icon name={open ? 'close' : 'arrow-right'} size={13} className="text-white/45" />
       </button>
+      {open && (
+        <div className="mt-2 text-[10px] leading-snug text-white/45">
+          {isVarScope
+            ? <>Adds a variant under <b className="text-white/70">{defaultModel || 'the model'}</b> in {parent.split(' ')[0]}.</>
+            : <>Adds a new model under <b className="text-white/70">{parent.split(' ')[0]}</b>{addScope === 'market' ? ' — drill into a maker or model to scope it tighter' : ''}.</>}
+        </div>
+      )}
       {variants.length > 0 && (
         <div className="mt-2 space-y-1">
           {variants.map((v, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-lg bg-black/[0.03] px-2 py-1 text-[11px]">
+            <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.05] px-2 py-1 text-[11px]">
               <i className="inline-block h-2 w-2 rounded-full" style={{ background: ptColor(v.powertrain) }} />
-              <span className="flex-1 truncate text-ink-100">{v.model}</span>
-              <span className="num text-ink-500">{v.co2}g · {v.share != null ? `${Math.round(v.share * 100)}%` : `${v.sales.toLocaleString()}u`}</span>
-              <button onClick={() => onRemove(i)} className="text-ink-500 hover:text-danger"><Icon name="close" size={11} /></button>
+              <span className="flex-1 truncate text-white">{v.model}</span>
+              <span className="num text-white/45">{v.co2}g · {v.share != null ? `${Math.round(v.share * 100)}%` : `${v.sales.toLocaleString()}u`}</span>
+              <button onClick={() => onRemove(i)} className="text-white/45 hover:text-danger"><Icon name="close" size={11} /></button>
             </div>
           ))}
         </div>
       )}
       {open && (
         <div className="mt-2 space-y-2">
-          <input value={model} onChange={(e) => applyModel(e.target.value)} list={inCatalog ? 'india-catalog-models' : undefined}
-            placeholder={inCatalog ? 'Model name — pick a real India model to prefill' : 'Model / variant name'}
-            className="w-full rounded-lg border border-black/10 bg-ink-850 px-2 py-1.5 text-xs text-ink-100 outline-none placeholder:text-ink-600" />
+          <input value={model} onChange={(e) => applyModel(e.target.value)} list={inCatalog && !isVarScope ? 'india-catalog-models' : undefined}
+            placeholder={isVarScope ? 'Variant name (e.g. Long Range)' : inCatalog ? 'Model name — pick a real India model to prefill' : 'New model name'}
+            className="w-full rounded-lg border border-white/12 bg-white/[0.06] px-2 py-1.5 text-xs text-white outline-none placeholder:text-white/30" />
           {inCatalog && <datalist id="india-catalog-models">{INDIA_MODELS.map((m) => <option key={m} value={m} />)}</datalist>}
           <div className="flex flex-wrap gap-1">
             {['BEV', 'PHEV', 'HEV', 'MHEV', 'ICE'].map((p) => (
-              <button key={p} onClick={() => choosePt(p)} className={`rounded-md px-2 py-1 text-[10px] font-semibold ${pt === p ? 'bg-ink-100 text-white' : 'bg-black/5 text-ink-400'}`}>{p}</button>
+              <button key={p} onClick={() => choosePt(p)} className={`rounded-md px-2 py-1 text-[10px] font-semibold ${pt === p ? 'bg-white text-[#1B1714]' : 'bg-white/[0.06] text-white/55'}`}>{p}</button>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-1.5">
@@ -658,31 +705,31 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
           </div>
 
           {/* volume: proportional %-share or absolute units */}
-          <div className="rounded-lg border border-black/[0.06] bg-black/[0.02] p-2">
-            <div className="mb-1.5 flex items-center gap-1 rounded-md bg-black/[0.04] p-0.5">
-              <button onClick={() => setVolMode('share')} className={`flex-1 rounded px-2 py-1 text-[10px] font-semibold transition ${volMode === 'share' ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500'}`}>% share</button>
-              <button onClick={() => setVolMode('units')} className={`flex-1 rounded px-2 py-1 text-[10px] font-semibold transition ${volMode === 'units' ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500'}`}>Units</button>
+          <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2">
+            <div className="mb-1.5 flex items-center gap-1 rounded-md bg-white/[0.06] p-0.5">
+              <button onClick={() => setVolMode('share')} className={`flex-1 rounded px-2 py-1 text-[10px] font-semibold transition ${volMode === 'share' ? 'bg-white text-[#1B1714] shadow-sm' : 'text-white/45'}`}>% share</button>
+              <button onClick={() => setVolMode('units')} className={`flex-1 rounded px-2 py-1 text-[10px] font-semibold transition ${volMode === 'units' ? 'bg-white text-[#1B1714] shadow-sm' : 'text-white/45'}`}>Units</button>
             </div>
             {volMode === 'share' ? (
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-ink-500">share of {SCOPE_LABEL[addScope]}</span>
+                  <span className="text-[10px] text-white/45">share of {SCOPE_LABEL[addScope]}</span>
                   <span className="num text-xs font-bold text-brand">{sharePct}%</span>
                 </div>
                 <input type="range" className="mt-1.5 w-full" min={0} max={60} step={1} value={sharePct} style={{ ['--fill' as string]: `${(sharePct / 60) * 100}%` }} onChange={(e) => setShare(e.target.value)} />
-                <div className="mt-1 text-[10px] text-ink-500">≈ <span className="num text-ink-300">{projectedUnits.toLocaleString()}</span> units, taken proportionally from existing volume (total held constant).</div>
+                <div className="mt-1 text-[10px] text-white/45">≈ <span className="num text-white/70">{projectedUnits.toLocaleString()}</span> units, taken proportionally from existing volume (total held constant).</div>
               </div>
             ) : (
               <div>
                 <Field label="units (added on top)" value={units} onChange={setUnits} />
-                <div className="mt-1 text-[10px] text-ink-500">adds <span className="num text-ink-300">{(parseInt(units) || 0).toLocaleString()}</span> units on top of the fleet.</div>
+                <div className="mt-1 text-[10px] text-white/45">adds <span className="num text-white/70">{(parseInt(units) || 0).toLocaleString()}</span> units on top of the fleet.</div>
               </div>
             )}
           </div>
 
-          <div className="rounded-lg bg-ink-950/50 px-2 py-1.5 text-[10px] text-ink-500">
+          <div className="rounded-lg bg-black/30 px-2 py-1.5 text-[10px] text-white/45">
             Counts as <span className="num font-bold text-brand">{fmtNum(counts, 1)} {pack.metricUnit}</span>{isBev ? ' · zero-emission' : ''}
-            <div className="mt-0.5">Appears under <span className="text-ink-300">{(defaultModel || model || parent).split(' ')[0]}</span> · {parent.split(' ')[0]}</div>
+            <div className="mt-0.5">Appears as <span className="text-white/70">{finalVariant}</span> under <span className="text-white/70">{finalModel}</span> · {parent.split(' ')[0]}</div>
           </div>
           <button onClick={add} className="btn-primary w-full py-1.5 text-xs">Add variant</button>
         </div>
@@ -693,8 +740,8 @@ function AddVariant({ pack, scenario, parent, defaultModel, addScope, scopeTotal
 
 const Field = ({ label, value, onChange, disabled }: { label: string; value: string; onChange: (v: string) => void; disabled?: boolean }) => (
   <label className="block">
-    <span className="text-[9px] uppercase tracking-wide text-ink-500">{label}</span>
+    <span className="text-[9px] uppercase tracking-wide text-white/45">{label}</span>
     <input value={value} onChange={(e) => onChange(e.target.value)} inputMode="numeric" disabled={disabled}
-      className={`num w-full rounded-md border border-black/10 bg-ink-850 px-1.5 py-1 text-xs text-ink-100 outline-none ${disabled ? 'opacity-40' : ''}`} />
+      className={`num w-full rounded-md border border-white/12 bg-white/[0.06] px-1.5 py-1 text-xs text-white outline-none ${disabled ? 'opacity-40' : ''}`} />
   </label>
 )

@@ -205,12 +205,25 @@ export function recommend(raw: Vehicle[], pack: RulePack, scenario: Scenario, pa
     fineAfter = 0
   }
 
+  // The greedy loop can pick the SAME lever across several iterations (e.g. a
+  // volume trim on the worst model each pass). Consolidate by title so the plan
+  // reads as a handful of distinct decisions — and every consumer (table, board
+  // pack, bridge) gets unique, summed steps instead of a wall of duplicates.
+  const mergedMap = new Map<string, Action>()
+  const order: string[] = []
+  for (const a of actions) {
+    const e = mergedMap.get(a.title)
+    if (e) { e.gramsCleared += a.gramsCleared; e.cost += a.cost; e.fineAvoided += a.fineAvoided }
+    else { mergedMap.set(a.title, { ...a }); order.push(a.title) }
+  }
+  const merged = order.map((t) => mergedMap.get(t)!)
+
   return {
     parent,
     before,
     after,
-    actions,
-    totalCost: actions.reduce((a, x) => a + x.cost, 0),
+    actions: merged,
+    totalCost: merged.reduce((a, x) => a + x.cost, 0),
     fineBefore,
     fineAfter,
     cleared: after.gap <= 0.001,

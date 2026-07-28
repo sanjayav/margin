@@ -30,14 +30,35 @@ export default function GapWaterfall({ startGap, steps, endGap, unit, currency, 
   const iw = W - m.l - m.r
   const ih = H - m.t - m.b
 
+  // The optimiser can propose the SAME lever across several iterations (e.g.
+  // "Cut X volume 25%" four times), each clearing a sliver. Merge those into one
+  // move and cap the bridge to the material steps, bucketing the long tail — so
+  // it reads as a handful of distinct decisions rather than a wall of −0.0 bars.
+  const shown = useMemo(() => {
+    const byLabel = new Map<string, WaterfallStep>()
+    for (const s of steps) {
+      const e = byLabel.get(s.label)
+      if (e) { e.grams += s.grams; e.cost += s.cost } else byLabel.set(s.label, { ...s })
+    }
+    let list = [...byLabel.values()]
+    const MAX = 6
+    if (list.length > MAX) {
+      const keep = new Set([...list].sort((a, b) => Math.abs(b.grams) - Math.abs(a.grams)).slice(0, MAX - 1).map((s) => s.label))
+      const head = list.filter((s) => keep.has(s.label))
+      const tail = list.filter((s) => !keep.has(s.label))
+      list = [...head, { label: `Other ${tail.length} levers`, grams: tail.reduce((a, s) => a + s.grams, 0), cost: tail.reduce((a, s) => a + s.cost, 0) }]
+    }
+    return list
+  }, [steps])
+
   const cats = useMemo(() => {
     const out: { label: string; from: number; to: number; kind: 'start' | 'step' | 'end'; cost?: number; difficulty?: string }[] = []
     out.push({ label: 'Gap today', from: 0, to: startGap, kind: 'start' })
     let run = startGap
-    for (const s of steps) { out.push({ label: s.label, from: run, to: run - s.grams, kind: 'step', cost: s.cost, difficulty: s.difficulty }); run -= s.grams }
+    for (const s of shown) { out.push({ label: s.label, from: run, to: run - s.grams, kind: 'step', cost: s.cost, difficulty: s.difficulty }); run -= s.grams }
     out.push({ label: 'After the plan', from: 0, to: endGap, kind: 'end' })
     return out
-  }, [startGap, steps, endGap])
+  }, [startGap, shown, endGap])
 
   const yMax = Math.max(startGap, 0.1) * 1.15
   const yMin = Math.min(endGap, 0) * 1.6 - yMax * 0.05
@@ -103,10 +124,12 @@ export default function GapWaterfall({ startGap, steps, endGap, unit, currency, 
               {/* value above the bar (clamped clear of the axis title) */}
               <text x={sx(i) + bw / 2} y={Math.max(yTop - 6, 24)} textAnchor="middle" fontSize="11" fontWeight="700" className="num"
                 fill={c.kind === 'step' ? '#C41730' : under ? '#0E9F6E' : '#E0484D'}>{valText}</text>
-              {/* category label */}
-              <text x={sx(i) + bw / 2} y={H - m.b + 16} textAnchor="middle" fontSize="9.5" fill="#4A4438" fontWeight="600">
-                {c.label.length > 16 ? c.label.slice(0, 15) + '…' : c.label}
-              </text>
+              {/* category label — truncated to the slot so bars never collide */}
+              {(() => { const maxChars = Math.max(6, Math.floor(slot / 6.3)); return (
+                <text x={sx(i) + bw / 2} y={H - m.b + 16} textAnchor="middle" fontSize="9.5" fill="#4A4438" fontWeight="600">
+                  {c.label.length > maxChars ? c.label.slice(0, maxChars - 1) + '…' : c.label}
+                </text>
+              ) })()}
               {/* cost under label for steps */}
               {c.kind === 'step' && (
                 <text x={sx(i) + bw / 2} y={H - m.b + 29} textAnchor="middle" fontSize="9" fill="#8C8273" className="num">{fmtMoney(c.cost ?? 0, currency)}</text>

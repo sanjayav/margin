@@ -117,14 +117,23 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
     status: it.status, powertrain: it.powertrain, isFleet: it.selected,
   }))
 
+  // Markets without pooling (India) have a redundant 1:1 pool tier — hide it, so
+  // the hierarchy reads Market → Manufacturer → Model → Variant.
+  const skipPool = !pack.pooling.enabled
   const drillInto = (key: string) => {
     if (level === 4) { if (key !== drill[3]) setDrill([...drill.slice(0, 3), key]); return } // switch sibling variant
     const child = node.children?.find((c) => c.label === key)
     if (!child) return
-    const next = [...drill, key]
+    let next = [...drill, key]
+    // step straight through the sole-member pool to the manufacturer beneath it
+    if (skipPool && level === 0 && child.children?.length === 1) { next = [...next, child.children[0].label]; setParent(child.children[0].label) }
+    else if (next.length === 2) setParent(key) // manufacturer level → keep selectedParent in sync
     setDrill(next)
-    if (next.length === 2) setParent(key) // manufacturer level → keep selectedParent in sync
   }
+  // breadcrumb without the pool segment for no-pool markets
+  const SCOPES = skipPool ? ['Market', 'Manufacturer', 'Model', 'Variant'] : SCOPE_NAME
+  const crumbLen = (i: number) => (skipPool ? (i === 0 ? 0 : i + 1) : i) // display index → real drill length
+  const goUp = () => { let next = drill.slice(0, -1); if (skipPool && next.length === 1) next = []; setDrill(next) }
 
   const over = node.gap > 0
   const maxGap = Math.max(...items.map((it) => Math.abs(it.gap)), 1)
@@ -218,9 +227,14 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
 
   // Trajectory: this node's gap across every compliance year (the ICCT framing —
   // "are we on track", not just "where are we this year").
+  // Plan is the book of record, so it only offers the ACTUAL (monitored) years —
+  // years at/before the dataset vintage. The forward CAFE III / draft years live
+  // in Forecast and Scenario. In the Model workbench (not actuals) every year shows.
+  const vintageYear = pack.actualsThroughYear ?? (meta.lastRefreshed ? new Date(meta.lastRefreshed).getFullYear() : new Date().getFullYear())
+  const yearsShown = actuals ? pack.years.filter((y) => y <= vintageYear) : pack.years
   const glide = useMemo(
-    () => pack.years.map((y) => { const a = aggFor({ ...scenario, year: y }); return { year: y, gap: a.gap, units: a.rawUnits } }),
-    [raw, pack, scenario, overrides, drill], // eslint-disable-line react-hooks/exhaustive-deps
+    () => yearsShown.map((y) => { const a = aggFor({ ...scenario, year: y }); return { year: y, gap: a.gap, units: a.rawUnits } }),
+    [raw, pack, scenario, overrides, drill, actuals, vintageYear], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   // The most actionable number when over: the zero-emission mix that just clears
@@ -267,13 +281,14 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
 
   const gapA = useCountUp(node.gap), avgA = useCountUp(node.avgMetric), fineA = useCountUp(fineValue)
   const regA = useCountUp(node.rawUnits), unitsA = useCountUp(node.units), massA = useCountUp(node.avgMass)
-  const crumbs = [drillTree.label, ...drill]
+  const crumbs = [drillTree.label, ...(skipPool ? drill.slice(1) : drill)]
   const reportParent = drill[1] ?? tree.children?.[0]?.label ?? node.label
   const exportReport = () => openPrintReport(`AiRE · ${node.label}`, buildMakerReport(node, pack, scenario, meta, recommend(raw, pack, scenario, reportParent, overrides), new Date().toISOString().slice(0, 10)))
   const [copied, setCopied] = useState(false)
   const copyLink = async () => { const url = buildShareUrl(); try { await navigator.clipboard.writeText(url) } catch { /* ignore */ } setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
-  const sectionLabel = LEVEL_NAME[Math.min(level, 3)]
+  // India shows manufacturers at the market level (the pool tier is hidden).
+  const sectionLabel = (skipPool ? ['Manufacturers', 'Manufacturers', 'Models', 'Variants'] : LEVEL_NAME)[Math.min(level, 3)]
   const hint = mode === 'model' && level <= 1
     ? 'drag a bubble to set a target and the engine solves the levers · click to drill'
     : level < 2 ? 'click a bubble to drill in' : level === 2 ? 'click a model to open it' : level === 3 ? 'click a variant to inspect' : 'size = sales · colour = powertrain'
@@ -284,15 +299,15 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       <div className="flex flex-wrap items-center gap-1.5">
         {crumbs.map((c, i) => (
           <span key={i} className="flex items-center gap-1.5">
-            <button onClick={() => setDrill(drill.slice(0, i))}
+            <button onClick={() => setDrill(drill.slice(0, crumbLen(i)))}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-semibold transition ${i === crumbs.length - 1 ? 'bg-ink-100 text-white' : 'text-ink-400 hover:text-ink-100'}`}>
-              <span className="text-[9px] font-bold uppercase tracking-wider opacity-50">{SCOPE_NAME[i]}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider opacity-50">{SCOPES[i]}</span>
               <span className="max-w-[12rem] truncate">{c}</span>
             </button>
             {i < crumbs.length - 1 && <Icon name="chevron" size={13} className="text-ink-600" />}
           </span>
         ))}
-        {drill.length > 0 && <button onClick={() => setDrill(drill.slice(0, -1))} className="ml-1 flex items-center gap-1 rounded-lg border border-black/[0.08] px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100"><Icon name="reset" size={12} /> Up</button>}
+        {drill.length > 0 && <button onClick={goUp} className="ml-1 flex items-center gap-1 rounded-lg border border-black/[0.08] px-2 py-1 text-[11px] text-ink-400 hover:text-ink-100"><Icon name="reset" size={12} /> Up</button>}
         <div className="ml-auto flex items-center gap-2">
           {pack.coverageNote && (
             <span className="flex items-center gap-1.5 rounded-full border border-warn/30 bg-warn/10 px-2.5 py-1 text-[11px] font-semibold text-warn" title={pack.coverageNote}>
@@ -356,7 +371,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
               transition from FY27-28). Only drawn when the market transitions. */}
           {pack.regimeFor && (() => {
             const eras: { name: string; draft?: boolean; cycle?: string; cycleNote?: string; n: number }[] = []
-            for (const y of pack.years) {
+            for (const y of yearsShown) {
               const r = pack.regimeFor(y)
               const last = eras[eras.length - 1]
               if (last && last.name === r.name) last.n += 1
@@ -423,7 +438,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       </div>
 
       {/* Bubble chart with drill */}
-      <Section className="rise [animation-delay:300ms]" title={chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`} right={
+      <Section className="rise [animation-delay:300ms] scn-lightcard" title={chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`} right={
         <span className="flex items-center gap-3">
           <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5" title="Line = the classic mass-indexed chart. Gap = distance to the line as the axis, so under the line is literally below zero, and gaps compare across masses.">
             {(['line', 'gap'] as const).map((v) => (
@@ -506,15 +521,26 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         </Section>
       </div>
 
-      {/* Explore — the heat and mix views, scoped to the current drill */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Section className="rise [animation-delay:480ms]" title={`Gap heatmap · ${exploreFocus ? 'models' : 'makers'} × year`} right={<span className="text-[11px] text-ink-500">click → drill</span>}>
-          <GapHeatmap data={heat} unit={pack.metricUnit} onPick={openExplore} />
-        </Section>
-        <Section className="rise [animation-delay:540ms]" title="Volume × mix" right={<span className="text-[11px] text-ink-500">width = units · colour = powertrain</span>}>
-          <Mekko cols={mekko} onPick={openExplore} />
-        </Section>
-      </div>
+      {/* Explore — the heat and mix views, scoped to the current drill.
+          Secondary, so folded away by default (progressive disclosure). */}
+      <Section className="rise [animation-delay:480ms]" collapsible defaultOpen={false} title="Explore the mix" subtitle="gap heatmap · volume × mix">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="text-[13px] font-bold text-ink-200">Gap heatmap · {exploreFocus ? 'models' : 'makers'} × year</h4>
+              <span className="text-[11px] text-ink-500">click → drill</span>
+            </div>
+            <GapHeatmap data={heat} unit={pack.metricUnit} onPick={openExplore} />
+          </div>
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="text-[13px] font-bold text-ink-200">Volume × mix</h4>
+              <span className="text-[11px] text-ink-500">width = units · colour = powertrain</span>
+            </div>
+            <Mekko cols={mekko} onPick={openExplore} />
+          </div>
+        </div>
+      </Section>
 
       {/* catalog variants for the drilled model — specs from the master file
           (volumes live at model level until the master fills variant volume) */}
@@ -522,7 +548,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         const specs = INDIA_CATALOG.filter((c) => c.parent === drill[1] && c.model === drill[2])
         if (!specs.length) return null
         return (
-          <Section className="rise" title={`Catalog variants · ${drill[2]}`} right={<span className="text-[11px] text-ink-500">master-file specs · sales are recorded at model level</span>}>
+          <Section className="rise" collapsible defaultOpen={false} title={`Catalog variants · ${drill[2]}`} subtitle={`${specs.length} specs`} right={<span className="text-[11px] text-ink-500">master-file specs · sales are recorded at model level</span>}>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs" data-testid="catalog-variants">
                 <thead><tr className="border-b border-black/[0.08] text-[10px] font-semibold uppercase tracking-wide text-ink-500">
@@ -551,7 +577,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
       {country === 'IN' && <CafeLedger basis={actuals ? 'actuals' : 'live'} />}
 
       {threeYr && (
-        <Section className="rise" title="EU three-year averaging · 2025–2027"
+        <Section className="rise" collapsible defaultOpen={false} title="EU three-year averaging · 2025–2027" subtitle="2025/1214 flexibility"
           right={<span className="chip"><Icon name="scale" size={12} /> Reg (EU) 2025/1214</span>}>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div>
@@ -599,7 +625,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         {actuals ? (
           <button className="btn-primary" onClick={() => setScreen('model')}><Icon name="sliders" size={16} /> Model this scope</button>
         ) : (
-          <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Get me under the line</button>
+          <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Build the action plan</button>
         )}
         <button className="btn-ghost" onClick={() => setScreen('pool')}><Icon name="handshake" size={15} /> Pooling & trading</button>
         <button className="btn-ghost" onClick={() => setScreen('forecast')}><Icon name="trending" size={15} /> Forecast</button>

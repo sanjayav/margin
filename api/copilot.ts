@@ -9,7 +9,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import Anthropic from '@anthropic-ai/sdk'
 
-const MODEL = 'claude-fable-5'
+const MODEL = 'claude-opus-4-8' // the most capable Claude — the co-pilot's brain
 const SYSTEM = `You are AiRE, a senior emissions-compliance analyst. You are handed a FINDING that a deterministic engine has ALREADY computed — a headline, engine-verified metrics (label: value), a severity and a recommendation.
 
 Write a crisp 2–3 sentence analyst take for a compliance lead: what it means, what to weigh, and the first move. Add judgment and framing, not new facts.

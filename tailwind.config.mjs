@@ -82,16 +82,16 @@ export default {
   		},
   		fontFamily: {
   			sans: [
-  				'Aptos',
   				'Geist',
+  				'Aptos',
   				'Inter',
   				'system-ui',
   				'-apple-system',
   				'sans-serif'
   			],
   			display: [
-  				'Aptos',
   				'Geist',
+  				'Aptos',
   				'Inter',
   				'system-ui',
   				'sans-serif'

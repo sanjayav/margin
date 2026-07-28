@@ -56,6 +56,9 @@ export default function CafeLedger({ basis }: { basis: Basis }) {
   return (
     <Section
       className="rise"
+      collapsible
+      defaultOpen={false}
+      subtitle="per-maker CAFE II/III ledger"
       title={<span className="flex items-center gap-2"><Icon name="scale" size={15} className="text-brand" /> CAFE ledger · {scenario.year}</span>}
       right={
         <span className="flex items-center gap-2">

@@ -80,7 +80,7 @@ export default function CommandK() {
         { label: 'Plan', icon: 'scatter', go: () => setScreen('analyse'), sub: 'actuals — the book of record, market → variant' },
         { label: 'Forecast', icon: 'trending', go: () => setScreen('forecast'), sub: 'multi-year scenario studio' },
         { label: 'Scenario · Model', icon: 'sliders' as IconName, go: () => setScreen('model'), sub: 'the workbench — levers on the live drill' },
-        { label: 'Scenario · Get under the line', icon: 'target', go: () => setScreen('under'), sub: 'cheapest path to compliance' },
+        { label: 'Scenario · Action plan', icon: 'target', go: () => setScreen('under'), sub: 'cheapest path to compliance' },
         { label: 'Scenario · Compare', icon: 'layers', go: () => setScreen('compare'), sub: 'saved scenarios side-by-side' },
         { label: 'Credit book', icon: 'scale' as IconName, go: () => setScreen('creditbook'), sub: 'positions, banking & trades' },
         { label: 'Pricing', icon: 'card' as IconName, go: () => setScreen('pricing'), sub: 'compliance cost per car · price & tax' },

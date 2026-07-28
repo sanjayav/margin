@@ -10,6 +10,7 @@ export default function Pooling() {
   const { pack, raw, scenario, country } = useCompliance()
   const dataVersion = useStore((s) => s.dataVersion)
   const setScreen = useStore((s) => s.setScreen)
+  const setParent = useStore((s) => s.setParent)
   const overrides = useStore((s) => s.makerOverrides)
 
   // China: no pooled averages at all — the whole clearing mechanism (own surplus,
@@ -76,23 +77,34 @@ export default function Pooling() {
   if (!pack.pooling.enabled) {
     // No pooled averages in this regime. Where credit TRADING exists instead
     // (India's draft CAFE III), the Credit book is the statutory surface — a
-    // pool optimiser here would model something the law doesn't allow.
+    // pool optimiser here would model something the law doesn't allow. We show a
+    // standalone standings board and route credit clearing to the Credit book.
+    const overCount = shortMakers.length
+    const board = [...rows].sort((a, b) => b.fine - a.fine || b.gap - a.gap)
     return (
       <div className="space-y-5 animate-slidein">
-        <div className="card flex items-start gap-3 p-5">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-black/10 bg-black/[0.03] text-warn"><Icon name="alert" size={18} /></div>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-semibold text-ink-100">No pooled averages in {pack.name}</h3>
-            <p className="mt-1 text-sm text-ink-400">{pack.pooling.note} Each maker is assessed standalone — the registered groups and standings are below.</p>
-            {pack.creditPrice != null && (
-              <button onClick={() => setScreen('creditbook')} className="btn-primary mt-3 px-3 py-1.5 text-xs">
-                <Icon name="scale" size={14} /> This regime trades credits — open the Credit book
-              </button>
-            )}
+        {/* premium hero */}
+        <div className="relative overflow-hidden rounded-[22px] border border-black/[0.06] px-8 py-8" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 48%, #17130F 100%)' }}>
+          <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.28), transparent 62%)' }} />
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.4]" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '26px 26px', maskImage: 'radial-gradient(120% 130% at 92% 0%, #000 30%, transparent 74%)', WebkitMaskImage: 'radial-gradient(120% 130% at 92% 0%, #000 30%, transparent 74%)' }} />
+          <div className="relative flex flex-wrap items-end justify-between gap-6">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45"><Icon name="handshake" size={13} className="text-brand-400" /> Pooling · {pack.name}</div>
+              <h1 className="font-display mt-3 text-[30px] font-extrabold leading-[1.06] tracking-[-0.03em] text-white">{pack.name} assesses every maker standalone.</h1>
+              <p className="mt-2.5 text-[13.5px] leading-relaxed text-white/55">{pack.pooling.note} There are no shared averages to optimise, so each maker clears its own line — or trades credits.</p>
+              {pack.creditPrice != null && (
+                <button onClick={() => setScreen('creditbook')} className="btn-primary mt-5"><Icon name="scale" size={15} /> Clear &amp; trade credits in the Credit book</button>
+              )}
+            </div>
+            <div className="flex gap-6">
+              <HeroStat label="Over the line" value={`${overCount}/${rows.length}`} tone={overCount ? '#FF8A83' : '#7FD8AC'} sub="makers with a fine" />
+              <HeroStat label="Standalone exposure" value={fmtMoney(standaloneTotal, pack.currency)} tone={standaloneTotal > 0 ? '#FF8A83' : '#7FD8AC'} sub={`${scenario.year} · no pooling relief`} />
+              <HeroStat label="Surplus headroom" value={fmtInt(surplusTotal)} tone="#7FD8AC" sub="g·units to sell as credits" />
+            </div>
           </div>
         </div>
-        <PoolGroups groups={groups} pack={pack} />
-        <Standings rows={rows} pack={pack} maxAbs={maxAbs} pmap={pmap} />
+
+        <StandaloneBoard rows={board} maxAbs={maxAbs} pack={pack} onModel={(p) => { setParent(p); setScreen('analyse') }} />
       </div>
     )
   }
@@ -357,6 +369,70 @@ function Standings({ rows, pack, maxAbs, pmap }: any) {
             })}
           </tbody>
         </table>
+      </div>
+    </Section>
+  )
+}
+
+function HeroStat({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: string }) {
+  return (
+    <div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/40">{label}</div>
+      <div className="dnum mt-1.5 text-[22px] font-black leading-none tracking-[-0.02em]" style={{ color: tone }}>{value}</div>
+      <div className="mt-1 text-[10.5px] text-white/40">{sub}</div>
+    </div>
+  )
+}
+
+// Premium standalone standings board — one card per maker (no pool framing, since
+// no-pool regimes never combine fleets). Fleet vs its own line, gap, fine, credits.
+function StandaloneBoard({ rows, maxAbs, pack, onModel }: { rows: any[]; maxAbs: number; pack: any; onModel: (p: string) => void }) {
+  return (
+    <Section title="Where each maker stands" right={<span className="text-[11px] text-ink-500">standalone · every maker clears its own line</span>}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((r) => {
+          const over = r.gap > 0
+          const hex = over ? '#E0484D' : '#0E9F6E'
+          const surplus = r.creditBalance > 0
+          const scaleMax = Math.max(r.avgMetric, r.limit, 1) * 1.14
+          const fleetPct = (r.avgMetric / scaleMax) * 100
+          const limitPct = (r.limit / scaleMax) * 100
+          return (
+            <div key={r.parent} className="group relative overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-4 transition hover:border-black/[0.12]">
+              <span aria-hidden className="absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, ${hex}, ${hex}00 82%)` }} />
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 pr-1">
+                  <div className="truncate text-[13.5px] font-bold text-ink-100" title={r.parent}>{r.parent}</div>
+                  <div className="text-[10.5px] text-ink-500">{fmtInt(r.units)} units · {pack.name}</div>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: `${hex}14`, color: hex }}>
+                  <Icon name={over ? 'alert' : 'check'} size={10} /> {over ? 'Over' : 'Under'}
+                </span>
+              </div>
+
+              <div className="mt-3.5">
+                <div className="relative h-2 rounded-full bg-black/[0.05]">
+                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, fleetPct)}%`, background: hex }} />
+                  <div className="absolute -top-1 h-4 w-[2px] rounded" style={{ left: `${Math.min(100, limitPct)}%`, background: '#1C1812' }} title="the line" />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between text-[10.5px]">
+                  <span className="num text-ink-400">fleet <span className="font-bold text-ink-100">{fmtNum(r.avgMetric, 1)}</span></span>
+                  <span className="num text-ink-400">line {fmtNum(r.limit, 1)} {pack.metricUnit}</span>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2 border-t border-black/[0.05] pt-3 text-center">
+                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">Gap</div><div className="dnum mt-0.5 text-[12.5px] font-bold" style={{ color: over ? hex : '#0E9F6E' }}>{over ? '+' : ''}{fmtNum(r.gap, 1)}</div></div>
+                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">Fine</div><div className="dnum mt-0.5 text-[12.5px] font-bold" style={{ color: r.fine > 0 ? hex : '#8C8273' }}>{r.fine > 0 ? fmtMoney(r.fine, pack.currency) : '—'}</div></div>
+                <div><div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">Credits</div><div className={`dnum mt-0.5 text-[12.5px] font-bold ${surplus ? 'text-safe' : r.creditBalance < 0 ? 'text-danger' : 'text-ink-400'}`}>{r.creditBalance > 0 ? '+' : ''}{fmtInt(r.creditBalance)}</div></div>
+              </div>
+
+              <button onClick={() => onModel(r.parent)} className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-black/[0.07] bg-black/[0.015] py-1.5 text-[11px] font-semibold text-ink-400 transition hover:border-brand/30 hover:text-brand">
+                <Icon name="scatter" size={12} /> Open in Plan
+              </button>
+            </div>
+          )
+        })}
       </div>
     </Section>
   )

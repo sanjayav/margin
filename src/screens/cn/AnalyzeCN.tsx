@@ -650,7 +650,7 @@ export default function AnalyzeCN({ mode = 'model' }: { mode?: 'actuals' | 'mode
         {actuals ? (
           <button className="btn-primary" onClick={() => setScreen('model')}><Icon name="sliders" size={16} /> Model this scope</button>
         ) : (
-          <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Get me under the line</button>
+          <button className="btn-primary" onClick={() => setScreen('under')}><Icon name="target" size={16} /> Clear the credits</button>
         )}
         <button className="btn-ghost" onClick={() => setScreen('pool')}><Icon name="handshake" size={15} /> Pooling & trading</button>
         <button className="btn-ghost" onClick={() => setScreen('forecast')}><Icon name="trending" size={15} /> Forecast</button>

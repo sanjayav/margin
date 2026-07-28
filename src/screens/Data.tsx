@@ -147,6 +147,9 @@ export default function Data() {
   const [groupBy, setGroupBy] = useState<GroupKey>('none')
   const [gSort, setGSort] = useState<keyof GroupRow>('units')
   const [gDir, setGDir] = useState<'asc' | 'desc'>('desc')
+  // compare tray — pick any models (across manufacturers) and line them up
+  const [compare, setCompare] = useState<Vehicle[]>([])
+  const [compareOpen, setCompareOpen] = useState(false)
 
   const myScenarios = useMemo(() => savedScenarios.filter((s) => s.country === country), [savedScenarios, country])
   const activeScenario = view !== 'ACTUAL' ? myScenarios.find((s) => s.id === view) : undefined
@@ -232,7 +235,7 @@ export default function Data() {
   const COLS = useMemo<Col[]>(() => [
     { k: 'parent', label: 'Manufacturer' },
     { k: 'model', label: 'Model' },
-    { k: 'variant', label: 'Variant', get: (r) => variantLabel(r) },
+    { k: 'variant', label: 'Variant', get: (r: Vehicle) => variantLabel(r) },
     { k: 'powertrain', label: 'Powertrain' },
     { k: 'year', label: 'Year', num: true },
     { k: 'co2', label: 'CO₂ g/km', num: true },
@@ -294,6 +297,15 @@ export default function Data() {
 
   const totalUnits = rows.reduce((a, r) => a + r.sales, 0)
   const makers = new Set(rows.map((r) => r.parent)).size
+
+  // ── compare tray ──────────────────────────────────────────────────────────
+  const cmpKey = (r: Vehicle) => `${r.parent}|${r.model}|${variantLabel(r)}|${r.year}`
+  const inCompare = (r: Vehicle) => compare.some((c) => cmpKey(c) === cmpKey(r))
+  const toggleCompare = (r: Vehicle) => setCompare((prev) => {
+    const k = cmpKey(r)
+    if (prev.some((c) => cmpKey(c) === k)) return prev.filter((c) => cmpKey(c) !== k)
+    return prev.length >= 5 ? prev : [...prev, r] // up to 5 side by side
+  })
   // sales-weighted CO₂ (and after-credits metric in scenario mode) of the view
   const wCo2 = totalUnits ? rows.reduce((a, r) => a + r.co2 * r.sales, 0) / totalUnits : 0
   const wMetric = totalUnits ? rows.reduce((a, r) => a + metricOf(r) * r.sales, 0) / totalUnits : 0
@@ -642,6 +654,7 @@ export default function Data() {
             <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.4)]" style={{ background: '#211C16' }}>
                 <tr>
+                  <th className="w-9 px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.06em] text-white/45" title="Add models to compare">⇄</th>
                   {cols.map((c) => (
                     <th key={c.k} onClick={() => sort(c.k)}
                       className={`cursor-pointer select-none whitespace-nowrap px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors ${c.k === 'metric' ? 'text-brand-400' : sortKey === c.k ? 'text-white' : 'text-white/45'} hover:text-white ${c.num ? 'text-right' : 'text-left'}`}>
@@ -684,8 +697,15 @@ export default function Data() {
                       }
                     }
                   }
+                  const picked = inCompare(r)
                   return (
-                    <tr key={i} className="group border-b border-black/[0.03] transition-colors odd:bg-black/[0.022] hover:bg-brand/[0.06]">
+                    <tr key={i} className={`group border-b border-black/[0.03] transition-colors ${picked ? 'bg-brand/[0.05]' : 'odd:bg-black/[0.022]'} hover:bg-brand/[0.06]`}>
+                      <td className="px-2 py-2 text-center">
+                        <button onClick={() => toggleCompare(r)} title={picked ? 'Remove from compare' : 'Add to compare'}
+                          className={`grid h-[18px] w-[18px] place-items-center rounded-md border transition ${picked ? 'border-brand bg-brand text-white' : 'border-black/20 text-transparent hover:border-brand/50'}`}>
+                          <Icon name="check" size={11} />
+                        </button>
+                      </td>
                       {cols.map(td)}
                       {!scenarioMode && !library && (
                         <td className="whitespace-nowrap px-2 py-1.5 text-right">
@@ -702,13 +722,30 @@ export default function Data() {
                   )
                 })}
                 {rows.length === 0 && (
-                  <tr><td colSpan={cols.length + (scenarioMode || library ? 0 : 1)} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
+                  <tr><td colSpan={cols.length + 1 + (scenarioMode || library ? 0 : 1)} className="px-3 py-12 text-center text-sm text-ink-500">No rows match the current filters.</td></tr>
                 )}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* compare tray — a floating bar with the picked models */}
+      {compare.length > 0 && !compareOpen && (
+        <div className="fixed bottom-5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/10 px-4 py-2.5 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.6)] animate-slidein" style={{ background: 'linear-gradient(120deg,#211C16,#17130F)' }}>
+          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-white"><Icon name="layers" size={14} className="text-brand-400" /> {compare.length} model{compare.length > 1 ? 's' : ''} to compare</span>
+          <div className="hidden items-center gap-1 sm:flex">
+            {compare.map((r) => (
+              <span key={cmpKey(r)} className="flex items-center gap-1 rounded-full bg-white/[0.08] py-0.5 pl-2 pr-1 text-[10.5px] text-white/80">
+                {r.model}<button onClick={() => toggleCompare(r)} className="grid h-3.5 w-3.5 place-items-center rounded-full text-white/45 hover:text-white"><Icon name="close" size={8} /></button>
+              </span>
+            ))}
+          </div>
+          <button onClick={() => setCompareOpen(true)} disabled={compare.length < 2} className="rounded-xl bg-brand px-3.5 py-1.5 text-[12px] font-bold text-white transition hover:bg-brand/90 disabled:opacity-40">Compare →</button>
+          <button onClick={() => setCompare([])} className="text-[11px] font-semibold text-white/45 transition hover:text-white">Clear</button>
+        </div>
+      )}
+      {compareOpen && <CompareModal items={compare} pack={pack} metricOf={metricOf} onRemove={toggleCompare} onClose={() => setCompareOpen(false)} />}
 
       {importing && <ImportStudio country={country} pack={pack} onClose={() => setImporting(false)} />}
       {editor && (
@@ -719,6 +756,82 @@ export default function Data() {
     </div>
   )
 }
+
+// ── Compare models across manufacturers — side-by-side spec sheet ────────────
+function CompareModal({ items, pack, metricOf, onRemove, onClose }: {
+  items: Vehicle[]; pack: any; metricOf: (r: Vehicle) => number; onRemove: (r: Vehicle) => void; onClose: () => void
+}) {
+  const specs: { label: string; get: (r: Vehicle) => number | string | null; num?: boolean; lowerBetter?: boolean; dec?: number; pill?: boolean }[] = [
+    { label: 'Manufacturer', get: (r: Vehicle) => r.parent.split(' ').slice(0, 2).join(' ') },
+    { label: 'Powertrain', get: (r: Vehicle) => r.powertrain, pill: true },
+    { label: 'Fuel', get: (r: Vehicle) => r.fuel || '—' },
+    { label: 'CO₂ (g/km)', get: (r: Vehicle) => r.co2, num: true, lowerBetter: true, dec: 0 },
+    { label: `${pack.metricLabel} (${pack.metricUnit})`, get: (r: Vehicle) => metricOf(r), num: true, lowerBetter: true, dec: 1 },
+    { label: `${pack.massLabel} (kg)`, get: (r: Vehicle) => r.mass, num: true, lowerBetter: true, dec: 0 },
+    { label: 'Sales (units)', get: (r: Vehicle) => r.sales, num: true, dec: 0 },
+    { label: 'Segment', get: (r: Vehicle) => r.segment || '—' },
+    { label: 'Body style', get: (r: Vehicle) => r.bodyStyle || '—' },
+    { label: 'Battery (kWh)', get: (r: Vehicle) => r.battery ?? null, num: true, dec: 0 },
+    { label: 'Range (km)', get: (r: Vehicle) => r.range ?? null, num: true, dec: 0 },
+    { label: 'Year', get: (r: Vehicle) => String(r.year) },
+  ].filter((s) => items.some((r) => { const v = s.get(r); return v != null && v !== '' && v !== '—' }))
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="max-h-[88vh] w-full max-w-[900px] overflow-hidden rounded-[20px] bg-[#FFFDF9] shadow-[0_30px_80px_-30px_rgba(0,0,0,0.6)] screen-in" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-black/[0.06] px-6 py-4">
+          <div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name="layers" size={15} /></span><h2 className="font-display text-[16px] font-bold text-ink-100">Compare {items.length} models</h2></div>
+          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg text-ink-500 transition hover:bg-black/5 hover:text-ink-100"><Icon name="close" size={16} /></button>
+        </div>
+        <div className="max-h-[calc(88vh-64px)] overflow-auto p-4">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-[#FFFDF9] px-3 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-ink-500">Spec</th>
+                {items.map((r) => (
+                  <th key={`${r.parent}|${r.model}|${r.year}`} className="min-w-[150px] px-3 py-3 text-left align-top">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-bold text-ink-100" title={r.model}>{r.model}</div>
+                        <div className="truncate text-[10.5px] font-medium text-ink-500" title={r.parent}>{r.parent.split(' ')[0]}{variantLabel(r) && variantLabel(r) !== r.powertrain ? ` · ${variantLabel(r)}` : ''}</div>
+                      </div>
+                      <button onClick={() => { if (items.length <= 2) onClose(); onRemove(r) }} className="grid h-5 w-5 shrink-0 place-items-center rounded text-ink-500 transition hover:bg-danger/10 hover:text-danger"><Icon name="close" size={11} /></button>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {specs.map((s) => {
+                const nums = s.num ? items.map((r) => Number(s.get(r))).filter((x) => !Number.isNaN(x)) : []
+                const best = s.lowerBetter && nums.length > 1 ? Math.min(...nums) : null
+                return (
+                  <tr key={s.label} className="border-t border-black/[0.05]">
+                    <td className="sticky left-0 z-10 bg-[#FFFDF9] px-3 py-2.5 text-[11px] font-semibold text-ink-500">{s.label}</td>
+                    {items.map((r) => {
+                      const v = s.get(r)
+                      if (v == null || v === '') return <td key={cmpCol(r)} className="px-3 py-2.5 text-ink-600">—</td>
+                      if (s.pill) return <td key={cmpCol(r)} className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(String(v))}40`, background: `${ptColor(String(v))}14`, color: ptColor(String(v)) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(String(v)) }} />{String(v)}</span></td>
+                      const isBest = best != null && Number(v) === best
+                      return (
+                        <td key={cmpCol(r)} className={`px-3 py-2.5 ${s.num ? 'num font-semibold' : ''} ${isBest ? 'text-safe' : 'text-ink-200'}`}>
+                          {s.num ? ((s.dec ?? 1) === 0 ? fmtInt(Number(v)) : fmtNum(Number(v), s.dec ?? 1)) : String(v)}
+                          {isBest && <span className="ml-1 text-[9px] font-bold uppercase text-safe">best</span>}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          <p className="mt-3 px-3 text-[11px] text-ink-500"><span className="font-semibold text-safe">Best</span> = lowest CO₂ / fuel use / mass across the selected models. Pick models from any manufacturer.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+const cmpCol = (r: Vehicle) => `${r.parent}|${r.model}|${variantLabel(r)}|${r.year}`
 
 // ── Row editor — add or correct one record of the market database ───────────
 // Kept deliberately schema-first: the core engine fields up top, the master

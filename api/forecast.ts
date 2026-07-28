@@ -28,7 +28,7 @@ import { buildTree } from '../src/engine/engine.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
 
-const MODEL = 'claude-fable-5'
+const MODEL = 'claude-opus-4-8' // the most capable Claude — consistent with the co-pilot & analyst
 type Fleets = Record<CountryId, Vehicle[]>
 
 const COLORS = ['emerald', 'amber', 'violet', 'sky', 'rose', 'teal', 'orange'] as const

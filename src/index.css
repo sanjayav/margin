@@ -86,9 +86,9 @@ body {
     radial-gradient(900px 480px at -6% 108%, rgba(246, 104, 100, 0.05), transparent 55%),
     var(--bg);
   color: #1C1812;
-  font-family: 'Aptos', 'Geist', 'Inter', system-ui, sans-serif;
+  font-family: 'Geist', 'Aptos', 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv01', 'ss03';
-  letter-spacing: -0.006em;
+  letter-spacing: -0.011em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -98,7 +98,7 @@ body {
 *::-webkit-scrollbar-thumb { background: #DBD2BF; border-radius: 8px; }
 *::-webkit-scrollbar-thumb:hover { background: #C7BBA3; }
 
-h1, h2, h3 { font-family: 'Aptos', 'Geist', 'Inter', sans-serif; letter-spacing: -0.03em; font-feature-settings: 'ss03'; }
+h1, h2, h3 { font-family: 'Geist', 'Aptos', 'Inter', sans-serif; letter-spacing: -0.032em; font-feature-settings: 'ss03'; }
 
 /* Keyboard-visible focus — brand ring, no ring on mouse click. Text fields keep
    their own focus-within border treatment instead of a second ring. */
@@ -107,8 +107,8 @@ input:not([type='range']):not([type='checkbox']):not([type='radio']):focus-visib
 textarea:focus-visible, select:focus-visible { outline: none; }
 ::-moz-focus-inner { border: 0; }
 
-/* hero numbers: Geist, tabular, tight — premium data display */
-.dnum { font-family: 'Aptos', 'Geist', 'Inter', sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'ss03'; letter-spacing: -0.03em; }
+/* hero numbers: Geist, tabular, tight — the Vercel data-display look */
+.dnum { font-family: 'Geist', 'Aptos', 'Inter', sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'ss03'; letter-spacing: -0.03em; }
 .text-gradient {
   background: linear-gradient(100deg, #F66864 0%, #E8223B 55%, #C41730 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -203,6 +203,71 @@ input[type="range"]::-moz-range-thumb {
   width: 14px; height: 14px; border-radius: 50%; background: #ffffff;
   border: 3px solid #FBF7EF; box-shadow: 0 0 0 1.5px #E8223B;
 }
+
+/* ── Dark assumptions rail — a premium control panel on the light workspace ── */
+.rail-dark .label { color: rgba(255, 255, 255, 0.42); }
+.rail-dark .text-brand { color: #F66864; }
+.rail-dark .text-safe { color: #34D399; }
+.rail-dark .text-danger { color: #FF8A83; }
+.rail-dark .text-warn { color: #F0B049; }
+.rail-dark input[type="range"] {
+  background: linear-gradient(90deg, #F66864, #E8223B) no-repeat, rgba(255, 255, 255, 0.13);
+  background-size: var(--fill, 0%) 100%;
+}
+.rail-dark input[type="range"]::-webkit-slider-thumb { border-color: #221B17; box-shadow: 0 0 0 1.5px #E8223B, 0 2px 6px rgba(0, 0, 0, 0.55); }
+.rail-dark input[type="range"]::-moz-range-thumb { border-color: #221B17; }
+/* number-steppers and native controls read light on the dark rail */
+.rail-dark input[type="number"] { color-scheme: dark; }
+.rail-dark select { color-scheme: dark; }
+
+/* ── Scenario dark workspace — card surfaces + text darkened (a scoped override
+   so the shared Analyse components don't need per-class edits; SVG charts keep
+   their own panels and stay readable). ──────────────────────────────────────── */
+.scn-dark { background: radial-gradient(1100px 620px at 12% -10%, rgba(232, 34, 59, 0.055), transparent 58%), #18140F; }
+.scn-dark .card { background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.022)); border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 16px 36px -24px rgba(0, 0, 0, 0.72); color: rgba(255, 255, 255, 0.82); }
+.scn-dark .label { color: rgba(255, 255, 255, 0.42); }
+.scn-dark .text-ink-100 { color: #ffffff; }
+.scn-dark .text-ink-200 { color: rgba(255, 255, 255, 0.85); }
+.scn-dark .text-ink-300 { color: rgba(255, 255, 255, 0.72); }
+.scn-dark .text-ink-400 { color: rgba(255, 255, 255, 0.55); }
+.scn-dark .text-ink-500 { color: rgba(255, 255, 255, 0.45); }
+.scn-dark .text-ink-600 { color: rgba(255, 255, 255, 0.32); }
+.scn-dark [class*="text-ink-100/"] { color: rgba(255, 255, 255, 0.82); }
+.scn-dark .text-brand { color: #F66864; }
+.scn-dark .text-safe { color: #34D399; }
+.scn-dark .text-danger { color: #FF8A83; }
+.scn-dark .text-warn { color: #F0B049; }
+.scn-dark .bg-white\/40, .scn-dark .bg-white\/50, .scn-dark .bg-white\/60, .scn-dark .bg-white\/70 { background-color: rgba(255, 255, 255, 0.05); }
+.scn-dark .bg-black\/5, .scn-dark .bg-black\/\[0\.02\], .scn-dark .bg-black\/\[0\.015\], .scn-dark .bg-black\/\[0\.022\], .scn-dark .bg-black\/\[0\.03\], .scn-dark .bg-black\/\[0\.035\], .scn-dark .bg-black\/\[0\.04\], .scn-dark .bg-black\/\[0\.045\], .scn-dark .bg-black\/\[0\.05\], .scn-dark .bg-black\/\[0\.06\] { background-color: rgba(255, 255, 255, 0.05); }
+.scn-dark .border-black\/\[0\.04\], .scn-dark .border-black\/\[0\.05\], .scn-dark .border-black\/\[0\.06\], .scn-dark .border-black\/\[0\.07\], .scn-dark .border-black\/\[0\.08\] { border-color: rgba(255, 255, 255, 0.08); }
+.scn-dark .border-black\/10, .scn-dark .border-black\/20 { border-color: rgba(255, 255, 255, 0.14); }
+/* active "white pill" toggles (chart Line/Gap/Auto…): a crisp light chip */
+.scn-dark .bg-white { background-color: #F2ECE1; color: #1C1812; }
+/* the selected breadcrumb/scope chip: a subtle glass chip with light text, not
+   a bright cream blob — reads as "selected" on the dark workspace. */
+.scn-dark .bg-ink-100 { background-color: rgba(255, 255, 255, 0.12); }
+.scn-dark input, .scn-dark select, .scn-dark textarea { color-scheme: dark; }
+
+/* Light ISLAND inside the dark Scenario — the bubble chart stays fully light so
+   its zones, logos and axis text read exactly as designed. Restores the light
+   theme locally (higher specificity than the .scn-dark overrides above). */
+.scn-dark .scn-lightcard.card { background: #FFFEFB; border-color: rgba(0, 0, 0, 0.05); color: #1C1812; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 8px 20px -14px rgba(120, 90, 50, 0.16), 0 24px 48px -32px rgba(120, 90, 50, 0.22); }
+.scn-dark .scn-lightcard .label { color: #8C8273; }
+.scn-dark .scn-lightcard .text-ink-100 { color: #1C1812; }
+.scn-dark .scn-lightcard .text-ink-200 { color: #2E2A22; }
+.scn-dark .scn-lightcard .text-ink-300 { color: #4A4438; }
+.scn-dark .scn-lightcard .text-ink-400 { color: #6C6454; }
+.scn-dark .scn-lightcard .text-ink-500 { color: #8C8273; }
+.scn-dark .scn-lightcard .text-ink-600 { color: #B3A892; }
+.scn-dark .scn-lightcard [class*="text-ink-100/"] { color: rgba(28, 24, 18, 0.85); }
+.scn-dark .scn-lightcard .text-brand { color: #E8223B; }
+.scn-dark .scn-lightcard .text-safe { color: #0E9F6E; }
+.scn-dark .scn-lightcard .text-danger { color: #E0484D; }
+.scn-dark .scn-lightcard .text-warn { color: #D98005; }
+.scn-dark .scn-lightcard .bg-white { background-color: #ffffff; color: #1C1812; }
+.scn-dark .scn-lightcard .bg-black\/5, .scn-dark .scn-lightcard .bg-black\/\[0\.02\], .scn-dark .scn-lightcard .bg-black\/\[0\.03\], .scn-dark .scn-lightcard .bg-black\/\[0\.04\], .scn-dark .scn-lightcard .bg-black\/\[0\.045\], .scn-dark .scn-lightcard .bg-black\/\[0\.05\], .scn-dark .scn-lightcard .bg-black\/\[0\.06\] { background-color: rgba(0, 0, 0, 0.04); }
+.scn-dark .scn-lightcard .border-black\/\[0\.04\], .scn-dark .scn-lightcard .border-black\/\[0\.05\], .scn-dark .scn-lightcard .border-black\/\[0\.06\], .scn-dark .scn-lightcard .border-black\/\[0\.07\], .scn-dark .scn-lightcard .border-black\/\[0\.08\] { border-color: rgba(0, 0, 0, 0.06); }
+.scn-dark .scn-lightcard .border-black\/10, .scn-dark .scn-lightcard .border-black\/20 { border-color: rgba(0, 0, 0, 0.12); }
 
 ::selection { background: rgba(232, 34, 59, 0.20); }
 
