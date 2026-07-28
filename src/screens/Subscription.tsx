@@ -46,7 +46,7 @@ export default function Subscription() {
                     <div className="text-[13px] font-semibold text-ink-100">{m.name}</div>
                     <div className="truncate text-[11px] text-ink-500">{m.tagline} · {m.regulation}</div>
                   </div>
-                  <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{m.priceGBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
+                  <div className="shrink-0 rounded-full border border-black/[0.08] px-2 py-0.5 text-right text-[10px] font-semibold uppercase tracking-wide text-ink-500">Custom</div>
                   <Switch on={on} onClick={() => (on ? unsubscribe(c) : subscribe(c))} />
                 </div>
               )
@@ -59,7 +59,7 @@ export default function Subscription() {
             <Icon name="spark" size={16} className="text-brand" />
             <h2 className="font-display text-[15px] font-bold tracking-tight text-ink-100">Add-ons</h2>
           </div>
-          <p className="mb-4 text-[11px] text-ink-500">Cross-cutting capabilities — priced once, used inside every module you own.</p>
+          <p className="mb-4 text-[11px] text-ink-500">Cross-cutting capabilities — used inside every module you own.</p>
           <div className="divide-y divide-black/[0.05]">
             <div className="flex items-center gap-3 py-3">
               <span className="grid h-9 w-10 place-items-center rounded-lg text-white" style={{ background: 'linear-gradient(160deg,#F66864,#E8223B)' }}><Icon name="spark" size={16} /></span>
@@ -67,7 +67,7 @@ export default function Subscription() {
                 <div className="text-[13px] font-semibold text-ink-100">AI Analyst</div>
                 <div className="truncate text-[11px] text-ink-500">Ask AiRE in plain English — numbers from the live engine.</div>
               </div>
-              <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{AI_PRICE_GBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
+              <div className="shrink-0 rounded-full border border-black/[0.08] px-2 py-0.5 text-right text-[10px] font-semibold uppercase tracking-wide text-ink-500">Custom</div>
               <Switch on={ai} onClick={() => setAi(!ai)} />
             </div>
             <div className="flex items-center gap-3 py-3">
@@ -76,7 +76,7 @@ export default function Subscription() {
                 <div className="text-[13px] font-semibold text-ink-100">Pooling & credit market</div>
                 <div className="truncate text-[11px] text-ink-500">Cheapest legal pool, fair value-split & credit trading where the regime allows.</div>
               </div>
-              <div className="dnum shrink-0 text-right text-[12px] font-bold text-ink-300">£{POOLING_PRICE_GBP}<span className="text-[10px] font-normal text-ink-500">/mo</span></div>
+              <div className="shrink-0 rounded-full border border-black/[0.08] px-2 py-0.5 text-right text-[10px] font-semibold uppercase tracking-wide text-ink-500">Custom</div>
               <Switch on={pooling} onClick={() => setPooling(!pooling)} />
             </div>
           </div>
@@ -87,33 +87,22 @@ export default function Subscription() {
       <div className="space-y-4">
         <div className="card sticky top-6 p-5">
           <div className="label text-ink-500">Your plan</div>
-          <div className="dnum mt-1 text-[30px] font-bold leading-none text-ink-100">£{total}<span className="text-[13px] font-semibold text-ink-500">/mo</span></div>
+          <div className="font-display mt-1 text-[24px] font-extrabold leading-none tracking-tight text-ink-100">Custom pricing</div>
+          <div className="mt-1.5 text-[11px] text-ink-500">Tailored to your markets, entities and scale.</div>
           <div className="mt-4 space-y-2 border-t border-black/[0.05] pt-4 text-[12px]">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-ink-500">Included</div>
             {owned.length === 0 && <div className="text-ink-500">No modules selected.</div>}
             {owned.map((c) => (
-              <div key={c} className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> {MODULE_META[c].name}</span>
-                <span className="dnum text-ink-400">£{MODULE_META[c].priceGBP}</span>
-              </div>
+              <div key={c} className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> {MODULE_META[c].name}</div>
             ))}
-            {ai && (
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> AI Analyst</span>
-                <span className="dnum text-ink-400">£{AI_PRICE_GBP}</span>
-              </div>
-            )}
-            {pooling && (
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> Pooling & credit market</span>
-                <span className="dnum text-ink-400">£{POOLING_PRICE_GBP}</span>
-              </div>
-            )}
+            {ai && <div className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> AI Analyst</div>}
+            {pooling && <div className="flex items-center gap-1.5 text-ink-200"><Icon name="check" size={12} className="text-safe" /> Pooling & credit market</div>}
           </div>
-          <a href="mailto:sales@marklytics.co.uk?subject=AiRE%20subscription" className="btn-ghost mt-5 w-full"><Icon name="card" size={15} /> Talk to sales</a>
+          <a href="mailto:sales@marklytics.co.uk?subject=AiRE%20subscription" className="btn-primary mt-5 w-full"><Icon name="card" size={15} /> Talk to sales</a>
           {owned.length > 0 && (
-            <button onClick={() => enter(owned[0])} className="btn-primary mt-2 w-full"><Icon name="scatter" size={15} /> Open {MODULE_META[owned[0]].name}</button>
+            <button onClick={() => enter(owned[0])} className="btn-ghost mt-2 w-full"><Icon name="scatter" size={15} /> Open {MODULE_META[owned[0]].name}</button>
           )}
-          <p className="mt-3 text-[10px] leading-relaxed text-ink-500">Prices illustrative. Entitlements are mocked locally until billing is connected — see docs/PACKAGING.md.</p>
+          <p className="mt-3 text-[10px] leading-relaxed text-ink-500">Pricing is bespoke and agreed with sales. Entitlements are mocked locally until billing is connected.</p>
         </div>
       </div>
     </div>
