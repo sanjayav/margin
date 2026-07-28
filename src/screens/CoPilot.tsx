@@ -13,10 +13,11 @@ import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { ask, applyActions, type ChatMessage, type DashboardAction } from '../lib/assistant'
 import { runCoPilot, type Severity } from '../engine/copilot'
-import { fmtMoney } from '../engine/engine'
+import { fmtMoney, fmtNum } from '../engine/engine'
+import type { Aggregate } from '../engine/types'
 import Icon, { type IconName } from '../components/Icon'
 
-type Msg = ChatMessage & { nav?: DashboardAction | null }
+type Msg = ChatMessage & { nav?: DashboardAction | null; scope?: string | null }
 
 const greeting = (): string => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening' }
 const SCREEN_LABEL: Record<string, string> = { analyse: 'Plan', forecast: 'Forecast', scenario: 'Scenario', model: 'Scenario', under: 'Action plan', compare: 'Compare', creditbook: 'Credit book', pricing: 'Pricing', pooling: 'Pooling', data: 'Data', intel: 'Intelligence' }
@@ -39,6 +40,9 @@ export default function CoPilot() {
   const worst = [...over].sort((a, b) => b.fine - a.fine)[0]
   const worstName = worst?.label
   const first = worstName ? worstName.split(' ')[0] : (makers[0]?.label.split(' ')[0] ?? 'the market')
+  // Resolve a maker the answer scoped to, so we can draw its live engine position.
+  const makerNode = (name: string): Aggregate | undefined =>
+    (tree.children ?? []).find((c) => c.label === name || c.label.split(' ')[0] === name.split(' ')[0])
 
   const suggestions = useMemo(() => [
     { icon: 'alert' as IconName, text: worstName ? `Why is ${first} over the line?` : `Where is ${pack.name} exposed?` },
@@ -59,7 +63,11 @@ export default function CoPilot() {
       // the conversation isn't yanked away mid-thought.
       const dataActions = (actions ?? []).filter((a) => !a.screen)
       if (dataActions.length) applyActions(dataActions)
-      setMsgs([...next, { role: 'assistant', content: answer || 'Done.', nav: actions?.find((a) => a.screen) ?? null }])
+      setMsgs([...next, {
+        role: 'assistant', content: answer || 'Done.',
+        nav: actions?.find((a) => a.screen) ?? null,
+        scope: actions?.find((a) => a.parent)?.parent ?? null,
+      }])
     } catch (e: any) {
       setError(e?.message || 'Something went wrong.')
       setMsgs(next)
@@ -132,15 +140,19 @@ export default function CoPilot() {
         // ── CONVERSATION ───────────────────────────────────────────────────
         <>
           <div ref={scrollRef} className="flex-1 space-y-5 overflow-y-auto py-4 pr-1">
-            {msgs.map((m, i) => (
-              <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex items-start gap-3'}>
-                {m.role === 'assistant' && <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name="spark" size={14} /></span>}
-                <div className={m.role === 'user'
-                  ? 'max-w-[75%] rounded-2xl rounded-br-md bg-ink-100 px-4 py-2.5 text-[13.5px] leading-relaxed text-white'
-                  : 'max-w-[82%]'}>
-                  <div className={m.role === 'assistant' ? 'whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink-200' : 'whitespace-pre-wrap'}>{m.content}</div>
-                  {m.role === 'assistant' && m.nav?.screen && (
-                    <button onClick={() => applyActions([m.nav!])} className="btn-primary mt-3 px-3.5 py-2 text-xs">
+            {msgs.map((m, i) => m.role === 'user' ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[74%] rounded-2xl rounded-br-md bg-ink-100 px-4 py-2.5 text-[13.5px] font-medium leading-relaxed text-white shadow-[0_6px_18px_-10px_rgba(40,30,15,0.4)]">{m.content}</div>
+              </div>
+            ) : (
+              <div key={i} className="flex items-start gap-3">
+                <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'radial-gradient(circle at 34% 28%, #FF7B81, #E8223B 72%)', boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.32), 0 4px 12px -4px rgba(232,34,59,0.4)' }}><Icon name="spark" size={15} /></span>
+                <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-black/[0.06] bg-white px-4.5 py-3.5 shadow-[0_1px_2px_rgba(40,30,15,0.03),0_18px_44px_-30px_rgba(120,90,50,0.28)]" style={{ paddingLeft: '18px', paddingRight: '18px' }}>
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-500">AiRE</div>
+                  <RichText text={m.content} />
+                  {m.scope && makerNode(m.scope) && <PositionCard node={makerNode(m.scope)!} pack={pack} />}
+                  {m.nav?.screen && (
+                    <button onClick={() => applyActions([m.nav!])} className="btn-primary mt-3.5 px-3.5 py-2 text-xs">
                       <Icon name="arrow-right" size={14} /> Open {SCREEN_LABEL[m.nav.screen] ?? m.nav.screen}
                     </button>
                   )}
@@ -149,8 +161,8 @@ export default function CoPilot() {
             ))}
             {busy && (
               <div className="flex items-start gap-3">
-                <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name="spark" size={14} /></span>
-                <div className="flex items-center gap-1 pt-2"><span className="inline-flex gap-1">{[0, 1, 2].map((d) => <span key={d} className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-400" style={{ animationDelay: `${d * 150}ms` }} />)}</span></div>
+                <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl text-white" style={{ background: 'radial-gradient(circle at 34% 28%, #FF7B81, #E8223B 72%)' }}><Icon name="spark" size={15} /></span>
+                <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border border-black/[0.06] bg-white px-4 py-3.5"><span className="inline-flex gap-1">{[0, 1, 2].map((d) => <span key={d} className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand/50" style={{ animationDelay: `${d * 150}ms` }} />)}</span> <span className="ml-1 text-[11.5px] text-ink-500">Reading the engine…</span></div>
               </div>
             )}
             {error && <div className="rounded-lg border border-danger/40 bg-danger/[0.08] px-3 py-2 text-xs text-danger">{error}{/ANTHROPIC_API_KEY/i.test(error) && <span className="text-ink-500"> · set the key on the server; the workspace still works.</span>}</div>}
@@ -188,5 +200,84 @@ function PromptBar({ value, onChange, onSend, busy, placeholder, className = '' 
         {busy ? <span className="inline-flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1 w-1 animate-pulse rounded-full bg-white" style={{ animationDelay: `${d * 150}ms` }} />)}</span> : <Icon name="arrow-up" size={16} />}
       </button>
     </form>
+  )
+}
+
+// ── premium answer typography — light markdown (bold · code · bullets) ───────
+function inline(t: string): (JSX.Element | string)[] {
+  return t.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((p, i) => {
+    if (p.startsWith('**') && p.endsWith('**')) return <strong key={i} className="font-bold text-ink-100">{p.slice(2, -2)}</strong>
+    if (p.startsWith('`') && p.endsWith('`')) return <code key={i} className="num rounded-md bg-brand/[0.08] px-1.5 py-0.5 text-[12.5px] font-bold text-brand">{p.slice(1, -1)}</code>
+    return <span key={i}>{p}</span>
+  })
+}
+function RichText({ text }: { text: string }) {
+  const blocks: JSX.Element[] = []
+  let list: string[] = []
+  const flush = (k: string) => {
+    if (!list.length) return
+    const items = list
+    blocks.push(<ul key={k} className="my-1 space-y-1.5">{items.map((li, i) => (
+      <li key={i} className="flex gap-2.5 text-[13.5px] leading-[1.6] text-ink-200"><span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" />{inline(li)}</li>
+    ))}</ul>)
+    list = []
+  }
+  text.split('\n').forEach((ln, i) => {
+    const t = ln.trim()
+    if (/^([-*•]|\d+[.)])\s+/.test(t)) { list.push(t.replace(/^([-*•]|\d+[.)])\s+/, '')); return }
+    flush('u' + i)
+    if (!t) return
+    if (/^#{1,3}\s+/.test(t)) { blocks.push(<div key={i} className="mt-1 font-display text-[14px] font-bold text-ink-100">{inline(t.replace(/^#{1,3}\s+/, ''))}</div>); return }
+    blocks.push(<p key={i} className="text-[13.5px] leading-[1.65] text-ink-200">{inline(t)}</p>)
+  })
+  flush('uend')
+  return <div className="space-y-2">{blocks}</div>
+}
+
+// ── engine-grounded position card — a live chart of the scoped maker ─────────
+function CopCell({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div>
+      <div className="text-[9px] font-semibold uppercase tracking-wide text-ink-500">{label}</div>
+      <div className="dnum mt-0.5 text-[13.5px] font-bold" style={{ color: tone ?? '#1C1812' }}>{value}</div>
+    </div>
+  )
+}
+function PositionCard({ node, pack }: { node: Aggregate; pack: any }) {
+  const over = node.gap > 0
+  const hex = over ? '#E0484D' : '#0E9F6E'
+  const scaleMax = Math.max(node.avgMetric, node.limit, 1) * 1.14
+  const fleetPct = Math.min(100, (node.avgMetric / scaleMax) * 100)
+  const limitPct = Math.min(100, (node.limit / scaleMax) * 100)
+  const ze = Math.round((node.zlevShare ?? 0) * 100)
+  return (
+    <div className="mt-3.5 overflow-hidden rounded-2xl border border-black/[0.06] bg-[#FBF8F2]">
+      <div className="flex items-center justify-between border-b border-black/[0.05] px-4 py-2.5">
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500"><Icon name="gauge" size={12} className="text-brand" /> {node.label.split(' ').slice(0, 2).join(' ')} · live position</span>
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: `${hex}14`, color: hex }}><Icon name={over ? 'alert' : 'check'} size={10} /> {over ? 'Over' : 'Under'}</span>
+      </div>
+      <div className="grid gap-4 p-4 sm:grid-cols-[1.5fr_1fr]">
+        <div>
+          <div className="relative h-2.5 rounded-full bg-black/[0.06]">
+            <div className="absolute inset-y-0 left-0 rounded-full transition-all" style={{ width: `${fleetPct}%`, background: hex }} />
+            <div className="absolute w-[2px] rounded" style={{ left: `${limitPct}%`, background: '#1C1812', height: '18px', top: '-4px' }} title="the line" />
+          </div>
+          <div className="mt-2.5 flex items-center justify-between text-[11px]">
+            <span className="num text-ink-400">fleet <b className="text-ink-100">{fmtNum(node.avgMetric, 1)}</b> {pack.metricUnit}</span>
+            <span className="num text-ink-400">line {fmtNum(node.limit, 1)}</span>
+          </div>
+          {/* ZE mini bar */}
+          <div className="mt-3">
+            <div className="mb-1 flex items-center justify-between text-[10px] text-ink-500"><span>Zero-emission share</span><span className="num font-bold text-ink-300">{ze}%</span></div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-black/[0.06]"><div className="h-full rounded-full bg-safe" style={{ width: `${Math.min(100, ze)}%` }} /></div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-1 sm:border-l sm:border-black/[0.06] sm:pl-4">
+          <CopCell label="Gap" value={`${node.gap > 0 ? '+' : ''}${fmtNum(node.gap, 1)} ${pack.metricUnit}`} tone={hex} />
+          <CopCell label="Fine at risk" value={node.fine > 0 ? fmtMoney(node.fine, pack.currency) : '—'} tone={node.fine > 0 ? hex : undefined} />
+          <CopCell label="Registrations" value={new Intl.NumberFormat().format(node.rawUnits)} />
+        </div>
+      </div>
+    </div>
   )
 }
