@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import type { Aggregate, Scenario, Vehicle } from '../engine/types'
-import { aggregate, applyScenario, monthlyCompliance, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
+import { aggregate, applyScenario, buildDrillTree, buildTree, monthlyCompliance, scopeToMonth, unscopedVolume, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
+import type { MonthScope } from '../engine/engine'
 import LimitChart, { type ChartPoint, type DragConfig } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
 import { GapHeatmap, Mekko } from '../components/Charts'
@@ -38,7 +39,21 @@ const SCOPE_NAME = ['Market', 'Pool', 'Manufacturer', 'Model', 'Variant']
  *  under the working assumptions, with the rail alongside. */
 export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model' }) {
   const actuals = mode === 'actuals'
-  const { pack, raw, tree, drillTree, scenario, overrides, country, meta } = useCompliance(actuals ? 'actuals' : 'live')
+  const c = useCompliance(actuals ? 'actuals' : 'live')
+  const { pack, scenario, overrides, country, meta } = c
+  // ── Plan reads the book of record at a point in the compliance year ────────
+  // Registrations file monthly, so "the year so far" is a real reading, not a
+  // sub-view. Scoping `raw` here means the verdict, the stat cards, the bubble
+  // chart and the scoreboard all move together — they are all derived from it.
+  // Scoped on Plan ONLY: the Scenario module uses the same actuals basis as its
+  // comparison baseline, and a part-year baseline against a full-year model
+  // would make every delta a lie.
+  const planScope = useStore((s) => s.planScope)
+  const scope: MonthScope = actuals ? planScope : { through: null, mode: 'ytd' }
+  const raw = useMemo(() => scopeToMonth(c.raw, scenario.year, scope), [c.raw, scenario.year, scope])
+  const scoped = scope.through != null
+  const tree = useMemo(() => (scoped ? buildTree(raw, pack, scenario, overrides) : c.tree), [scoped, raw, pack, scenario, overrides, c.tree])
+  const drillTree = useMemo(() => (scoped ? buildDrillTree(raw, pack, scenario, overrides) : c.drillTree), [scoped, raw, pack, scenario, overrides, c.drillTree])
   const drill = useStore((s) => s.drillPath)
   const setDrill = useStore((s) => s.setDrill)
   const setParent = useStore((s) => s.setParent)
@@ -275,17 +290,32 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   // pool, a maker, a model. `node.vehicles` already carries exactly that scope,
   // so the monthly view can never disagree with the headline above it.
   const monthly = useMemo(() => {
-    const pts = actuals ? monthlyCompliance(node.vehicles, pack, scenario) : []
+    // The panel is the year's FILING HISTORY, so it must read the unscoped rows
+    // for this node. Feeding it the month-scoped set would drop any model that
+    // happened to sell nothing in the selected month, and silently rewrite the
+    // history to match the filter.
+    const src = scoped ? nodeAt(c.drillTree, drill) : node
+    const pts = actuals ? monthlyCompliance(src.vehicles, pack, scenario) : []
     // volume in scope that the source files annually only — surfaced so the
     // monthly total visibly reconciles with the headline registrations
-    const covered = node.vehicles.filter((v) => v.monthly?.length).reduce((a, v) => a + v.sales, 0)
+    const covered = src.vehicles.filter((v) => v.monthly?.length).reduce((a, v) => a + v.sales, 0)
     // a compliance year that starts mid-calendar straddles two years, so name it
     // the way the regulator does (India: FY 2025-26)
     const fy = (pack.fiscalYearStartMonth ?? 1) > 1
       ? `FY ${scenario.year}-${(scenario.year + 1) % 100}`
       : String(scenario.year)
-    return { points: pts, unreported: Math.round(node.rawUnits - covered), fyLabel: fy }
-  }, [actuals, node, pack, scenario])
+    return { points: pts, unreported: Math.round(src.rawUnits - covered), fyLabel: fy }
+  }, [actuals, scoped, c.drillTree, drill, node, pack, scenario])
+
+  // What period the screen is actually showing — every headline says so, so a
+  // part-year reading can never be mistaken for the settled year.
+  const periodLabel = useMemo(() => {
+    const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const name = (i: number) => MO[((pack.fiscalYearStartMonth ?? 1) - 1 + i) % 12]
+    if (!scoped) return String(scenario.year)
+    const m = name(scope.through! - 1)
+    return scope.mode === 'month' ? `${m} ${scenario.year}` : `${scenario.year} · through ${m}`
+  }, [scoped, scope, scenario.year, pack])
 
   // Chart measure control (S&P cube convention: the analyst picks the encoding).
   const [colorMode, setColorMode] = useState<'auto' | 'status' | 'powertrain'>('auto')
@@ -353,7 +383,15 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full opacity-[0.06] blur-3xl" style={{ background: sc }} />
         </> })()}
         <div className="min-w-[280px] flex-1">
-          <div className="label">The verdict · {scenario.year}</div>
+          <div className="label flex flex-wrap items-center gap-2">
+            <span>The verdict · {periodLabel}</span>
+            {scoped && (
+              <span className={`rounded-full border px-2 py-0.5 text-[9.5px] font-bold normal-case tracking-normal ${
+                scope.mode === 'ytd' ? 'border-warn/30 bg-warn/10 text-warn' : 'border-ink-100/20 bg-ink-100/[0.06] text-ink-400'}`}>
+                {scope.mode === 'ytd' ? 'part-year · compliance position so far' : 'single month · diagnostic, not the position'}
+              </span>
+            )}
+          </div>
           <p className="mt-1.5 max-w-xl text-[15px] leading-relaxed text-ink-300">
             <b className="text-ink-100">{node.label}</b>{' '}
             {node.status === 'exempt' ? (
@@ -516,7 +554,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             YTD {monthly.points[monthly.points.length - 1].ytdGap > 0 ? 'over' : 'under'} the line
           </span>}>
           <MonthlyCompliance points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
-            fyLabel={monthly.fyLabel} unreported={monthly.unreported} />
+            fyLabel={monthly.fyLabel} unreported={monthly.unreported} selected={scope.through} />
         </Section>
       )}
 

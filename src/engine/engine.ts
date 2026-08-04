@@ -444,6 +444,48 @@ export interface ThreeYear {
 // raises its own target. Both readings therefore carry their own limit.
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+/** How far through the compliance year a Plan reading stands.
+ *  through = null → the whole year (every row, monthly or not).
+ *  'ytd'   → months 1..through, the cumulative compliance position.
+ *  'month' → that month alone, the diagnostic reading. */
+export interface MonthScope { through: number | null; mode: 'ytd' | 'month' }
+
+/**
+ * Rescale a fleet to a point in the compliance year. Rows for OTHER years pass
+ * through untouched (the tree filters by year anyway).
+ *
+ * Rows in the scoped year with no monthly split are DROPPED, not carried at
+ * their annual volume — a brand-total row cannot be attributed to June, and
+ * holding it whole would inflate whichever month you looked at. `unscoped()`
+ * reports how much volume that is, so a screen can say so rather than quietly
+ * losing it.
+ */
+export function scopeToMonth(rows: Vehicle[], year: number, scope: MonthScope): Vehicle[] {
+  if (scope.through == null) return rows
+  const t = scope.through
+  const out: Vehicle[] = []
+  for (const v of rows) {
+    if (v.year !== year) { out.push(v); continue }
+    const m = v.monthly
+    if (!m?.length) continue
+    const sales = scope.mode === 'month' ? (m[t - 1] ?? 0) : m.slice(0, t).reduce((a, b) => a + b, 0)
+    if (sales > 0) out.push({ ...v, sales })
+  }
+  return out
+}
+
+/** Volume in `year` that carries no monthly split, so it sits outside a
+ *  month-scoped reading. 0 when the whole year is in view. */
+export function unscopedVolume(rows: Vehicle[], year: number, scope: MonthScope): number {
+  if (scope.through == null) return 0
+  return rows.filter((v) => v.year === year && !v.monthly?.length).reduce((a, v) => a + v.sales, 0)
+}
+
+/** The months a year has actually filed — drives the period selector. */
+export function monthsFiled(rows: Vehicle[], year: number): number {
+  return Math.max(0, ...rows.filter((v) => v.year === year).map((v) => v.monthly?.length ?? 0))
+}
+
 export interface MonthPoint {
   /** 1-based index within the compliance year (1 = fiscalYearStartMonth). */
   month: number

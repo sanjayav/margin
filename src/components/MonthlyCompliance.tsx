@@ -26,11 +26,14 @@ const UNDER = '#0E9F6E'
 const LIMIT = '#E0A100'
 const YTD = '#E8223B'
 
-export default function MonthlyCompliance({ points, unit, currency, fyLabel, unreported }: {
+export default function MonthlyCompliance({ points, unit, currency, fyLabel, unreported, selected }: {
   points: MonthPoint[]
   unit: string
   currency: string
   fyLabel: string
+  /** 1-based month the screen is currently scoped to, so the panel shows which
+   *  row the headline above it is reading */
+  selected?: number | null
   /** registrations in the year that carry no monthly split — shown so the
    *  monthly total visibly reconciles with the annual one */
   unreported?: number
@@ -130,7 +133,8 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
 
         {points.map((p, i) => (
           <g key={i} onMouseEnter={() => setH(i)} onMouseLeave={() => setH(null)}>
-            <rect x={x(i) - iw / points.length / 2} y={m.t} width={iw / points.length} height={ih} fill="transparent" />
+            <rect x={x(i) - iw / points.length / 2} y={m.t} width={iw / points.length} height={ih}
+              fill={selected === p.month ? YTD : 'transparent'} fillOpacity={selected === p.month ? 0.07 : 0} />
             {/* the month on its own — hollow, so it never reads as the position */}
             <circle cx={x(i)} cy={y(p.metric)} r={h === i ? 5 : 3.6}
               fill="#FBF7EF" stroke={p.gap > 0 ? OVER : UNDER} strokeWidth="2" />
@@ -191,10 +195,11 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
           <tbody>
             {points.map((p, i) => (
               <tr key={i} onMouseEnter={() => setH(i)} onMouseLeave={() => setH(null)}
-                className={`border-b border-line/50 transition ${h === i ? 'bg-ink-100/[0.04]' : ''} ${i === points.length - 1 ? 'font-semibold' : ''}`}>
+                className={`border-b border-line/50 transition ${selected === p.month ? 'bg-brand/[0.07]' : h === i ? 'bg-ink-100/[0.04]' : ''} ${i === points.length - 1 ? 'font-semibold' : ''}`}>
                 <td className="whitespace-nowrap px-3 py-1.5 text-ink-200">
                   {p.label} <span className="text-ink-500">{String(p.calendarYear).slice(2)}</span>
                   {i === points.length - 1 && !full && <span className="ml-2 rounded-full border border-warn/30 bg-warn/10 px-1.5 py-0.5 text-[9px] font-bold text-warn">latest</span>}
+                  {selected === p.month && <span className="ml-2 rounded-full border border-brand/40 bg-brand/10 px-1.5 py-0.5 text-[9px] font-bold text-brand">on screen</span>}
                 </td>
                 <td className="num px-3 py-1.5 text-right text-ink-200">{fmtInt(p.units)}</td>
                 <td className={`num px-3 py-1.5 text-right ${p.gap > 0 ? 'text-danger' : 'text-safe'}`}>{fmtNum(p.metric, 2)}</td>

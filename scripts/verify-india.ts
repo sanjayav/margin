@@ -142,6 +142,62 @@ for (const y of [2025, 2026, 2027, 2031, 2032]) {
   })())
 }
 
+// ── Plan's month scope ──────────────────────────────────────────────────────
+// Picking a month rescopes the WHOLE screen (verdict, stats, chart, scoreboard)
+// because they all derive from the same rows. The scoped tree must therefore
+// agree exactly with the month-by-month panel beside it, or the screen shows
+// two numbers for one thing.
+{
+  const { scopeToMonth, unscopedVolume, monthsFiled, monthlyCompliance, buildTree } = await import('../src/engine/engine.js')
+  check('months filed: 2025 → 12 · 2026 → 3 · plan years → 0',
+    monthsFiled(IN, 2025) === 12 && monthsFiled(IN, 2026) === 3 && monthsFiled(IN, 2030) === 0)
+  check('no month scope leaves the fleet untouched',
+    scopeToMonth(IN, 2026, { through: null, mode: 'ytd' }) === IN)
+
+  for (const y of [2025, 2026] as const) {
+    const mc = monthlyCompliance(IN, pack, base(y))
+    const filed = monthsFiled(IN, y)
+    let agree = true
+    for (const mode of ['ytd', 'month'] as const)
+      for (let t = 1; t <= filed; t++) {
+        const tr = buildTree(scopeToMonth(IN, y, { through: t, mode }), pack, base(y), {})
+        const ref = mode === 'ytd' ? mc[t - 1].ytdMetric : mc[t - 1].metric
+        const refU = mode === 'ytd' ? mc[t - 1].ytdUnits : mc[t - 1].units
+        const refL = mode === 'ytd' ? mc[t - 1].ytdLimit : mc[t - 1].limit
+        if (Math.abs(tr.avgMetric - ref) > 1e-9 || tr.rawUnits !== refU || Math.abs(tr.limit - refL) > 1e-9) agree = false
+      }
+    check(`${y} · every scoped reading agrees with the monthly panel (${filed * 2} combinations)`, agree)
+  }
+
+  // a month-scoped screen must never carry annual-only volume into one month
+  check('rows with no monthly split are excluded, not held at their annual volume', (() => {
+    const sc = scopeToMonth(IN, 2025, { through: 1, mode: 'month' })
+    return !sc.some((v) => v.year === 2025 && v.salesBasis)
+  })())
+  check('…and the excluded volume is reported so it is not silently lost',
+    unscopedVolume(IN, 2025, { through: 1, mode: 'ytd' }) === 6170 &&
+    unscopedVolume(IN, 2026, { through: 1, mode: 'ytd' }) === 2964,
+    `2025 ${unscopedVolume(IN, 2025, { through: 1, mode: 'ytd' })} · 2026 ${unscopedVolume(IN, 2026, { through: 1, mode: 'ytd' })}`)
+  check('full-year scope reports nothing excluded', unscopedVolume(IN, 2025, { through: null, mode: 'ytd' }) === 0)
+
+  // YTD through the last filed month == that year's fleet minus the annual-only rows
+  {
+    const t = buildTree(scopeToMonth(IN, 2026, { through: 3, mode: 'ytd' }), pack, base(2026), {})
+    const whole = buildTree(IN, pack, base(2026), {})
+    check('YTD through the final filed month + the annual-only rows = the whole year',
+      t.rawUnits + unscopedVolume(IN, 2026, { through: 3, mode: 'ytd' }) === whole.rawUnits,
+      `${t.rawUnits.toLocaleString()} + 2,964 = ${whole.rawUnits.toLocaleString()}`)
+  }
+  check('a single month is never larger than the YTD that contains it',
+    [1, 2, 3].every((t) => {
+      const m = buildTree(scopeToMonth(IN, 2026, { through: t, mode: 'month' }), pack, base(2026), {}).rawUnits
+      const c = buildTree(scopeToMonth(IN, 2026, { through: t, mode: 'ytd' }), pack, base(2026), {}).rawUnits
+      return m <= c
+    }))
+  check('scoping a year with no monthly filing yields nothing rather than the whole year',
+    scopeToMonth(IN, 2030, { through: 1, mode: 'ytd' }).filter((v) => v.year === 2030).length === 0)
+}
+
 // ── parallel powertrain launches ────────────────────────────────────────────
 // 5 models are offered by the source as mutually-exclusive launches (each
 // powertrain family listed at the FULL model volume). The row must ship as the

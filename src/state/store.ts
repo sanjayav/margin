@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { CountryId, Scenario, Vehicle } from '../engine/types'
+import type { MonthScope } from '../engine/engine'
 import { getPack, PACK_LIST } from '../engine/rulepacks'
 import { getMeta, parentsFor, setLiveFleet } from '../data/fleet'
 
@@ -28,6 +29,12 @@ interface UIState {
   drillPath: string[] // chart explorer drill (parent/model/powertrain keys)
   dataVersion: number // bumps when live data loads, to recompute views
   scenarioTab: ScenarioTab
+  /** How far through the compliance year Plan reads the book of record.
+   *  through=null is the whole year. PLAN ONLY — the Scenario module uses the
+   *  actuals basis as its comparison baseline, so scoping that globally would
+   *  compare a part-year against a full-year model and the deltas would lie. */
+  planScope: MonthScope
+  setPlanScope: (s: MonthScope) => void
   /** Per-maker scenario overrides (mix/mass/sales/EV) layered on the global scenario when drilled into a maker. */
   makerOverrides: Record<string, Partial<Scenario>>
 
@@ -190,6 +197,7 @@ export const useStore = create<UIState>((set, get) => ({
   drillPath: [],
   dataVersion: 0,
   scenarioTab: 'under',
+  planScope: { through: null, mode: 'ytd' },
   makerOverrides: BOOT.makerOverrides,
 
   view: 'platform',
@@ -315,8 +323,11 @@ export const useStore = create<UIState>((set, get) => ({
     set({ makerOverrides: next })
     persistAssumptions(country, scenario, next)
   },
+  setPlanScope: (planScope) => set({ planScope }),
   patchScenario: (p) => {
     const { drillPath, screen, scenarioTab, scenario, makerOverrides, country } = get()
+    // a month index is only meaningful within one year's filing depth
+    if (p.year !== undefined && p.year !== scenario.year) set({ planScope: { through: null, mode: 'ytd' } })
     const scope = scopeKey(screen, drillPath, scenarioTab)
     if (!scope) {
       const next = { ...scenario, ...p }

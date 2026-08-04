@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useStore, type ScreenId } from './state/store'
 import { useCompliance } from './lib/useCompliance'
-import { fmtMoney, fmtNum } from './engine/engine'
+import { buildTree, fmtMoney, fmtNum, scopeToMonth } from './engine/engine'
+import type { MonthScope } from './engine/engine'
 import { MODULE_META } from './lib/modules'
 import { StatusPill } from './components/ui'
 import Icon, { type IconName } from './components/Icon'
@@ -203,8 +204,24 @@ function TopBar() {
   const screen = useStore((s) => s.screen)
   // The header verdict states the basis of the screen below it: the book of
   // record on Analyse/Credit book, the working assumptions everywhere else.
-  const { pack, tree, scenario } = useCompliance(screen === 'analyse' || screen === 'creditbook' ? 'actuals' : 'live')
+  const c = useCompliance(screen === 'analyse' || screen === 'creditbook' ? 'actuals' : 'live')
+  const { pack, scenario } = c
   const year = useStore((s) => s.scenario.year)
+  // …and Plan can read the year at a point in its monthly filing, so the header
+  // follows it there. Anywhere else the scope is not applied, so the verdict
+  // stays the whole period.
+  const planScope = useStore((s) => s.planScope)
+  const headScope: MonthScope = screen === 'analyse' ? planScope : { through: null, mode: 'ytd' }
+  const tree = useMemo(
+    () => (headScope.through == null ? c.tree : buildTree(scopeToMonth(c.raw, scenario.year, headScope), pack, scenario, {})),
+    [headScope, c.tree, c.raw, pack, scenario],
+  )
+  const periodTag = useMemo(() => {
+    if (headScope.through == null) return String(year)
+    const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const m = MO[((pack.fiscalYearStartMonth ?? 1) - 1 + headScope.through - 1) % 12]
+    return headScope.mode === 'month' ? `${m} ${year}` : `${year} to ${m}`
+  }, [headScope, year, pack])
   const openCmdK = useCmdK((s) => s.setOpen)
   const item = NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
   // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
@@ -243,7 +260,7 @@ function TopBar() {
         <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 ${under ? 'border-safe/25 bg-safe/[0.08]' : 'border-danger/25 bg-danger/[0.08]'}`}>
           <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger animate-pulse'}`} />
           <div className="leading-tight">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9A9082]">{pack.name} {year} · {isCN ? `${dc!.totals.makers - dc!.totals.makersOver} of ${dc!.totals.makers} credit-clear` : under ? 'Under the line' : 'Over the line'}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9A9082]">{pack.name} {periodTag} · {isCN ? `${dc!.totals.makers - dc!.totals.makersOver} of ${dc!.totals.makers} credit-clear` : under ? 'Under the line' : 'Over the line'}</div>
             <div className="num text-[13px] font-bold text-white">
               {isCN ? (
                 <>CAFC <span className={dc!.totals.cafcCredit >= 0 ? 'text-safe' : 'text-[#FF7A6B]'}>{cr(dc!.totals.cafcCredit)}</span><span className="font-medium text-[#9A9082]"> · NEV </span><span className={dc!.totals.nevBalance >= 0 ? 'text-safe' : 'text-[#FF7A6B]'}>{cr(dc!.totals.nevBalance)}</span></>

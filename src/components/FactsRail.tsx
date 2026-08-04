@@ -7,14 +7,28 @@
 import { useEffect, useMemo } from 'react'
 import { useStore } from '../state/store'
 import { useCompliance } from '../lib/useCompliance'
-import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { buildTree, fmtInt, fmtMoney, fmtNum, monthsFiled, scopeToMonth, unscopedVolume } from '../engine/engine'
 import { buildDualCredit } from '../engine/china/dualcredit'
 import { BasisChip } from './ui'
 import Icon from './Icon'
 
 export default function FactsRail() {
-  const { pack, raw, tree, scenario, meta, country } = useCompliance('actuals')
+  const c = useCompliance('actuals')
+  const { pack, scenario, meta, country } = c
   const patch = useStore((s) => s.patchScenario)
+  // The rail states the facts for whatever period Plan is reading, so it scopes
+  // with the screen — a verdict beside a part-year chart must be that part-year.
+  const planScope = useStore((s) => s.planScope)
+  const setPlanScope = useStore((s) => s.setPlanScope)
+  const raw = useMemo(() => scopeToMonth(c.raw, scenario.year, planScope), [c.raw, scenario.year, planScope])
+  const tree = useMemo(
+    () => (planScope.through == null ? c.tree : buildTree(raw, pack, scenario, {})),
+    [planScope.through, raw, pack, scenario, c.tree],
+  )
+  const filed = useMemo(() => monthsFiled(c.raw, scenario.year), [c.raw, scenario.year])
+  const outside = useMemo(() => unscopedVolume(c.raw, scenario.year, planScope), [c.raw, scenario.year, planScope])
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const mName = (i: number) => MONTHS[((pack.fiscalYearStartMonth ?? 1) - 1 + i) % 12]
   const setScreen = useStore((s) => s.setScreen)
   // China verdict is a credit balance (积分), not a "line".
   const isCN = pack.id === 'CN'
@@ -66,6 +80,50 @@ export default function FactsRail() {
           })}
         </div>
         <p className="mt-1.5 text-[10px] leading-snug text-white/45">Actuals only. Forward years — the CAFE III / draft horizon — live in <button onClick={() => setScreen('forecast')} className="font-semibold text-brand hover:underline">Forecast</button> and Scenario.</p>
+
+        {/* Registrations file monthly, so the year has a "so far". Only offered
+            for a year that actually filed monthly — everything on Plan follows
+            this, not just a panel. */}
+        {filed > 0 && (
+          <div className="mt-3 border-t border-white/[0.07] pt-3">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="label text-white/55">Through month</span>
+              {planScope.through != null && (
+                <span className="flex items-center gap-0.5 rounded-md bg-white/[0.06] p-0.5">
+                  {(['ytd', 'month'] as const).map((m) => (
+                    <button key={m} onClick={() => setPlanScope({ ...planScope, mode: m })}
+                      title={m === 'ytd' ? 'Cumulative from the first month — the compliance position' : 'That month on its own — the diagnostic reading'}
+                      className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold transition ${planScope.mode === m ? 'bg-white text-[#1B1714]' : 'text-white/45 hover:text-white'}`}>
+                      {m === 'ytd' ? 'YTD' : 'Month'}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <button onClick={() => setPlanScope({ through: null, mode: planScope.mode })}
+                title="The whole compliance year"
+                className={`rounded-lg px-2 py-1 text-[10.5px] font-bold transition ${planScope.through == null ? 'bg-white text-[#1B1714]' : 'bg-white/[0.06] text-white/45 hover:text-white'}`}>
+                {filed >= 12 ? 'Full year' : 'All filed'}
+              </button>
+              {Array.from({ length: filed }, (_, i) => i + 1).map((m) => (
+                <button key={m} onClick={() => setPlanScope({ through: m, mode: planScope.mode })}
+                  title={`${planScope.mode === 'month' ? mName(m - 1) + ' alone' : `Year to date through ${mName(m - 1)}`}`}
+                  className={`num rounded-lg px-2 py-1 text-[10.5px] font-bold transition ${planScope.through === m ? 'bg-white text-[#1B1714]' : 'bg-white/[0.06] text-white/45 hover:text-white'}`}>
+                  {mName(m - 1)}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10px] leading-snug text-white/45">
+              {planScope.through == null
+                ? `${filed} of 12 months filed. Every number on this screen is the whole period.`
+                : planScope.mode === 'ytd'
+                  ? <>Every number is <b className="text-white/70">cumulative through {mName(planScope.through - 1)}</b> — the compliance position so far.</>
+                  : <>Every number is <b className="text-white/70">{mName(planScope.through - 1)} alone</b> — diagnostic, not the compliance position.</>}
+              {outside > 0 && ` ${fmtInt(outside)} units carry no monthly split at source and sit outside this reading.`}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* verdict — credit standing for China, the line for CO₂/FC markets */}
