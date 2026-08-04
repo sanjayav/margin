@@ -48,6 +48,28 @@ export interface Vehicle {
   driveCycle?: string      // homologation cycle (MIDC / WLTC / NEDC …)
   powerKW?: number         // rated power, kW
   co2Estimated?: boolean   // co2 was back-filled from siblings/mass fit, not measured
+  /** Months of the year the source actually recorded (1–11 on a part-year
+   *  pull; absent means a complete year). A sales-weighted average is
+   *  volume-invariant, so compliance is unaffected — but the year's absolute
+   *  volume and fine exposure are partial, and surfaces should say so. */
+  monthsRecorded?: number
+  /** Registrations per month of the compliance year, index 0 = the first month
+   *  (see `RulePack.fiscalYearStartMonth`). Its length is how far the year has
+   *  been REPORTED, so a 0 inside it is a real zero-sales month while anything
+   *  past the end simply has not been filed yet. Always sums to `sales`. */
+  monthly?: number[]
+  /** Set when the row's volume is not a model-level figure — e.g. a parent
+   *  whose source records only a brand total with no model split. */
+  salesBasis?: string
+  /** Which parallel powertrain launch this row currently assumes. Set only on
+   *  rows whose source lists several MUTUALLY EXCLUSIVE options (see below). */
+  powertrainOption?: string
+  /** The alternative launches the source offers for this model, richest-CO₂
+   *  first. The row ships as `powertrainOptions[0]` — the conservative choice,
+   *  since a compliance plan must not book clean-tech credit for a product
+   *  decision the maker has not committed to. `scenario.powertrainOptionMode`
+   *  switches the fleet onto another option. */
+  powertrainOptions?: PowertrainOption[]
   // ── the India master-file structure (every heading has a home; empty
   //    columns are captured so they light up the moment the file fills them) ──
   ftCode?: string          // fuel-type code (G/D/C/E/H/L)
@@ -64,6 +86,18 @@ export interface Vehicle {
   // ── added-variant volume control (only used on Scenario.extraVariants) ──
   share?: number           // 0–1: this variant's target share of its scope (proportional)
   shareScope?: 'market' | 'manufacturer' | 'model'
+}
+
+/** One candidate launch for a model whose source lists parallel, mutually
+ *  exclusive powertrains rather than an additive variant mix. */
+export interface PowertrainOption {
+  powertrain: string
+  fuel: string
+  co2: number
+  mass?: number
+  battery?: number
+  /** this family's share of the source's combined variant volume */
+  share?: number
 }
 
 /** Live, user-controlled assumptions. Moving any of these recomputes everything. */
@@ -95,6 +129,13 @@ export interface Scenario {
    *  (the cycle change typically raises the measured number ~18%). Stress-tests
    *  the FY2027-28 transition cliff while the limit stays MIDC-based. */
   cycleWltp?: boolean
+  /** Which of a model's parallel powertrain launches to assume, for the rows
+   *  whose source offers several mutually-exclusive options (`Vehicle
+   *  .powertrainOptions`). 'conservative' (default) takes the highest-CO₂
+   *  option — no uncommitted clean-tech credit; 'electrified' takes the
+   *  lowest; 'blended' volume-weights them, which is a portfolio view rather
+   *  than any single achievable launch. Rows without options are untouched. */
+  powertrainOptionMode?: 'conservative' | 'electrified' | 'blended'
   // ── China dual-credit (双积分) — second-axis levers, read only by the CN
   //    dual-credit ledger. null/undefined = statutory value for the year. ──
   /** Override the NEV credit RATIO requirement (% of the conventional-car base
@@ -148,6 +189,10 @@ export interface RulePack {
    *  data-refresh year when omitted; set it when the dataset blends actuals with
    *  forward years (e.g. China: 2024–25 settled, 2026–27 Phase-6 planning). */
   actualsThroughYear?: number
+  /** Calendar month (1–12) the compliance year starts on. India's CAFE year is
+   *  the fiscal year, so FY2025-26 runs Apr 2025 → Mar 2026 and month 1 of a
+   *  monthly filing is April. Defaults to 1 (calendar year). */
+  fiscalYearStartMonth?: number
   classes: string[]
   smallVolumeThreshold: number
   pooling: { enabled: boolean; note: string }

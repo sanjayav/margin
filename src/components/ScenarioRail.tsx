@@ -102,6 +102,27 @@ function Toggle({ label, checked, onChange, hint, right }: { label: string; chec
   )
 }
 
+/** Small segmented choice — for levers that are a pick, not a dial or a switch. */
+function Choice<T extends string>({ label, value, options, onChange, hint }: {
+  label: string; value: T; options: { v: T; label: string }[]; onChange: (v: T) => void; hint?: string
+}) {
+  return (
+    <div className="w-full rounded-lg border border-white/12 bg-white/[0.03] px-3 py-2">
+      <div className="text-xs font-semibold text-white">{label}</div>
+      {hint && <div className="mb-1.5 text-[10px] text-white/45">{hint}</div>}
+      <div className="flex gap-1">
+        {options.map((o) => (
+          <button key={o.v} onClick={() => onChange(o.v)}
+            className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${
+              value === o.v ? 'bg-brand text-white' : 'bg-white/8 text-white/55 hover:bg-white/15'}`}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function Delta({ from, to, money, currency = '' }: { from: number; to: number; money?: boolean; currency?: string }) {
   const d = to - from
   const eps = money ? 1 : 0.05
@@ -155,6 +176,12 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
   const loadScenario = useStore((s) => s.loadScenario)
   const deleteScenario = useStore((s) => s.deleteScenario)
   const myScenarios = savedScenarios.filter((s) => s.country === country)
+  // Models whose source offers several mutually-exclusive powertrain launches,
+  // in the year on screen — drives whether the "Undecided launches" lever shows.
+  const undecided = useMemo(() => {
+    const m = new Set(raw.filter((v) => v.year === scenario.year && v.powertrainOptions?.length).map((v) => v.model))
+    return { models: m.size }
+  }, [raw, scenario.year])
 
   // Drill path: [pool, manufacturer, model, variantKey] — lever scoping is a
   // Model-workbench concept (Analyse is actuals-only and has no rail at all).
@@ -464,6 +491,19 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
           : level === 3 ? `${model} decisions within ${maker.split(' ')[0]}`
           : `Spec-level tuning of the ${variant} variant`}
         onReset={() => { if (scope) reset(); else patch({ mix: null, massShiftKg: 0, salesMultiplier: 1, evSharePct: null, ecoBoostG: 0 }) }}>
+        {/* A product decision the maker has not taken yet — which powertrain a
+            model launches as. Lives with the fleet levers, not the regulator
+            ones, and only appears when the loaded fleet actually has such
+            models: a lever with nothing to act on is worse than no lever. */}
+        {undecided.models > 0 && (
+          <div className="mb-3">
+            <Choice label="Undecided launches"
+              value={scenario.powertrainOptionMode ?? 'conservative'}
+              options={[{ v: 'conservative', label: 'Combustion' }, { v: 'electrified', label: 'Electrified' }, { v: 'blended', label: 'Blended' }]}
+              onChange={(v) => patch({ powertrainOptionMode: v })}
+              hint={`${undecided.models} model${undecided.models === 1 ? '' : 's'} the source leaves undecided — which launch to assume. Ships as the combustion option: no clean-tech credit for an uncommitted decision.`} />
+          </div>
+        )}
         {showMix ? (
           <div>
             <div className="flex items-center justify-between">

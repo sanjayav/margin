@@ -1,6 +1,102 @@
 # India — "Scenario Planning Tool" workbook → platform mapping
 
-> **2026-07-14 — MASTER FILE ERA.** India now sources **exclusively** from
+> **2026-08-05 — DEMO DATA_SHARED ERA (current).** India now sources
+> **exclusively** from `DEMO DATA_SHARED.xlsx` (one sheet, `Plan`; header on
+> row 3; cols A→BH). Pipeline: `scripts/ingest-india-demo.py` →
+> `scripts/apply-india-extract.py` (FULL replace — the 12-OEM / 4.79M-unit
+> extract, the Maruti/Tata/Mahindra rows, the master-data file and the Ram
+> workbook are all deleted). Verify with `scripts/verify-india.ts`.
+>
+> **Shape:** 5 compliance entities (Toyota Kirloskar, Škoda-VW India, MG Motor,
+> Honda Cars India, BYD) × FY2025-26 → FY2032-33. 308 fleet rows, 303 variant
+> specs, 51 models. Brand totals reconcile 40/40 parent-years.
+>
+> **What changed structurally vs the master era:**
+>
+> - **New column layout.** Not a re-spelling of the old A→AT sheet — the
+>   Data-Mode roll-up is the same idea, but sales now live in `AV`
+>   (`M:Sales Volume`), model averages in `AG`/`AH`, and the sheet adds a
+>   monthly split (`AI`–`AT`), brand fuel-mix percentages (`AX`–`BB`) and an
+>   `R:` ledger block (`BC`–`BH`). `masterColumns.ts` tracks the new headings;
+>   OTR Price, Tax and Length/Width/Height are gone from the source.
+> - **No horizon replication.** 2027–2032 are the makers' *own* per-year plan
+>   (real, differing volumes and mix), so they are read as given and tagged
+>   `Baseline projection`. The old convention — replay the latest actual
+>   against each future line — would have overwritten real data with a copy.
+> - **`BC`–`BH` are blank throughout**, so compliance is engine-computed. There
+>   is no illustrative worked example to reconcile against any more.
+>
+> **Five source facts worth knowing:**
+>
+> 0. **The monthly filing is live in Plan.** `M1`–`M12` (cols `AI`–`AT`) are
+>    carried as `Vehicle.monthly[]`, and Plan renders **month-by-month
+>    compliance** (`monthlyCompliance()` in `src/engine/engine.ts` →
+>    `src/components/MonthlyCompliance.tsx`). Two readings: **YTD**, the running
+>    sales-weighted average from month 1 — the actual compliance position, which
+>    lands *exactly* on the annual figure once the year is fully filed — and the
+>    **month on its own**, which is what tells a good month from a bad one
+>    before the YTD moves. Both carry their own (mass-based) limit. The array's
+>    length is how far the year has been reported, so a `0` inside it is a real
+>    zero-sales month while anything past the end simply has not been filed.
+>    India's CAFE year is fiscal, so month 1 is **April**
+>    (`RulePack.fiscalYearStartMonth = 4`) and FY2025-26 runs Apr 25 → Mar 26.
+>    Actuals-basis only — the Scenario workbench does not show it, and
+>    hypothetical variants are excluded (they would otherwise count 12×).
+> 1. **FY2026-27 is a 3-month YTD part-year** (`M1`–`M3` only, ~22–31% of the
+>    2025 volume). Carried verbatim and tagged `monthsRecorded: 3`; Data's
+>    Basis column badges it *Record · YTD 3 mo*. A sales-weighted average is
+>    volume-invariant, so compliance is unaffected — only that year's absolute
+>    volume and fine exposure are partial.
+> 2. **Model rows for 2027+ carry no `AG`/`AH`**, so CO₂ and mass are derived
+>    from that model's variant specs. This reproduces the workbook's own
+>    convention: where `AG`/`AH` *do* exist (2025–26), `AG` == the mean CO₂ of
+>    the model's same-year variants and `AH` == their mean kerb weight
+>    (verified 57/60 rows). Where every variant carries a planning volume
+>    (`AU`), the mean is sales-weighted — weights only need to be internally
+>    consistent within the model, so the fact that `AU` does not sum to `AV` is
+>    irrelevant to the average.
+> 3. **5 models are offered as MUTUALLY EXCLUSIVE powertrain launches.** For
+>    MG's "Astor / ZS EV Successor" 2027 the sheet lists ICE 38,800, MHEV
+>    38,800 *and* BEV 38,800 against a model total of 38,800 — each family at
+>    the full volume, so they are alternative launch decisions, not an additive
+>    mix. Detection: >1 powertrain family whose `AU` volumes do **not** sum to
+>    the model's `AV` (25 model-years across MG, Honda ×2, Toyota ×2).
+>    Blending them would give the model a CO₂ no real launch produces (92.5
+>    g/km, versus 152.6 / 125.0 / 0 for the three actual options), so the fleet
+>    row ships as the **conservative — highest-CO₂ — option**: a compliance plan
+>    must not book clean-tech credit for a product decision the maker has not
+>    committed to, and being wrong in that direction is safe. The alternatives
+>    ride along in `Vehicle.powertrainOptions` and the Scenario rail's
+>    **"Undecided launches"** control (Combustion / Electrified / Blended,
+>    `scenario.powertrainOptionMode`) switches between them.
+>    An **explicit** choice sets `pinned` on those rows, so the powertrain-mix
+>    lever cannot undo it — without that, switching the models to BEV made the
+>    mix reweighting shrink them back to its BEV share and the metric moved the
+>    *wrong way*. `verify-india.ts` pins the lever direction under both an
+>    as-sold and a pinned custom mix.
+> 4. **BYD FY2025-26 records a brand total but no model split** (6,170 / 2,964)
+>    and its 2025-26 line-up shares no model with 2027+, so nothing in the file
+>    can attribute it. Rather than lose recorded units or invent per-model
+>    figures, the total is carried as one self-describing row
+>    (`model: "BYD range (brand total)"`, `salesBasis` set). BYD is 100% BEV,
+>    so the split cannot change its metric either way.
+>
+> **FY2032-33 sits beyond the drafted CAFE III schedule** (BEE drafts constants
+> only to FY2031-32), so `D3[2032]` holds the 2031 constant flat and
+> `regimeFor(2032)` reports *CAFE III (beyond draft)*.
+>
+> **Known defect, pre-dating this swap** (reproduced on HEAD 31b66fd): every
+> India ingest writes an explicit `"cnf": 0`, and the pack reads
+> `v.cnf ?? autoCnf(v.fuel)` — `0 ?? x` is `0`, so the E20/CNG/flex discounts
+> and the `cnfEnabled` lever are **inert** for the whole market. Fix: drop the
+> `"cnf": 0` line from the ingest and re-run. Not applied as part of a data
+> swap because it lowers every petrol maker's metric ~8% and moves compliance
+> verdicts. `verify-india.ts` pins the current behaviour so the fix is a
+> deliberate, visible change.
+
+---
+
+> **2026-07-14 — MASTER FILE ERA (superseded).** India now sources **exclusively** from
 > `SCENARIO PLANNING TOOL Master data.xlsx` (one sheet, the proven Data-Mode
 > roll-up; 4 OEMs × 2025–26; 66 variants / 28 sales rows). Pipeline:
 > `scripts/ingest-india-master.py` → `scripts/apply-india-extract.py` (FULL

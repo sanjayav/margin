@@ -257,8 +257,9 @@ export default function Data() {
   const cols = useMemo(() => {
     const present = OPT_COLS.filter((c) => base.some((r) => (r as any)[c.k] != null && (r as any)[c.k] !== ''))
     // projected horizon rows must be tellable from record rows — in the table
-    // AND in any CSV export of it
-    if (base.some((r) => r.scenario === 'Baseline projection'))
+    // AND in any CSV export of it. A part-year pull is a record too, but an
+    // incomplete one, so it earns the column just as a projection does.
+    if (base.some((r) => r.scenario === 'Baseline projection' || r.monthsRecorded))
       present.push({ k: 'scenario' as ColKey, label: 'Basis' })
     // the library is a spec catalog: no volumes, so no Units column
     const out = COLS.filter((c) => (!c.scenarioOnly || scenarioMode) && !(library && c.k === 'sales'))
@@ -685,7 +686,12 @@ export default function Data() {
                         <td key={c.k} className="whitespace-nowrap px-3 py-2">
                           {r.scenario === 'Baseline projection'
                             ? <span className="rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn">Baseline projection</span>
-                            : <span className="text-[10px] font-semibold text-ink-500">Record</span>}
+                            : r.monthsRecorded
+                              ? <span
+                                  title={`Part-year: the source recorded ${r.monthsRecorded} of 12 months. The sales-weighted average is unaffected; this year's volume and fine exposure are partial.`}
+                                  className="rounded-full border border-warn/30 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold text-warn"
+                                >Record · YTD {r.monthsRecorded} mo</span>
+                              : <span className="text-[10px] font-semibold text-ink-500">Record</span>}
                         </td>
                       )
                       default: {

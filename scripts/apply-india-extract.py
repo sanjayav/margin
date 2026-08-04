@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 # ───────────────────────────────────────────────────────────────────────────
 # Apply the India extract to the bundled fleet data — FULL REPLACE.
-# Per direction (2026-07-14): India carries ONLY the master-file data. The old
-# 2027–31 demo rows (Maruti/Tata/Mahindra dummies) and the Ram-workbook
-# catalog are gone.
+# Per direction (2026-08-05): India carries ONLY DEMO DATA_SHARED.xlsx. Every
+# earlier India source is gone — the 12-OEM / 4.79M-unit extract, the
+# Maruti/Tata/Mahindra rows, the master-data file and the Ram workbook.
 #
-#   1. IN actual years  = the extract's fleet rows as-is (2025, 2026)
-#   2. IN horizon years = the LATEST actual year's rows replicated per CAFE III
-#      year (2027–31) — the platform convention (EU does the same): the as-sold
-#      fleet held against each year's tightening statutory line. Analyse badges
-#      these years "P" (projection); the Forecast outlook evolves them properly.
-#   3. rewrite src/data/fleet_data.{json,ts} (EU/AU/UK untouched)
-#   4. rewrite src/data/india_catalog.ts from the master's variant library
+#   1. IN rows = the extract's fleet rows AS-IS, 2025–2032.
+#      No horizon replication any more: the old convention held the latest
+#      actual year against each future statutory line because the source had
+#      no forward view. DEMO DATA_SHARED carries the OEMs' own per-year plan
+#      for 2027–2032 (real, differing volumes and mix), so replicating would
+#      overwrite genuine data with a copy of 2026. The ingest already tags
+#      those years 'Baseline projection' so Data's Basis column still tells
+#      plan from record.
+#   2. rewrite src/data/fleet_data.{json,ts} (EU/AU/UK/CN untouched)
+#   3. rewrite src/data/india_catalog.ts from the workbook's variant library
 #
-# Run:  python3 scripts/ingest-india-master.py && python3 scripts/apply-india-extract.py
+# Run:  python3 scripts/ingest-india-demo.py && python3 scripts/apply-india-extract.py
 # ───────────────────────────────────────────────────────────────────────────
 import json, os
+from collections import defaultdict
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -24,8 +28,6 @@ FLEET_JSON = os.path.join(ROOT, "src", "data", "fleet_data.json")
 FLEET_TS = os.path.join(ROOT, "src", "data", "fleet_data.ts")
 CATALOG_TS = os.path.join(ROOT, "src", "data", "india_catalog.ts")
 
-# The IN rule pack horizon (src/engine/rulepacks/india.ts): 2025–2031.
-HORIZON = [2027, 2028, 2029, 2030, 2031]
 FY = lambda y: f"FY {y}-{(y + 1) % 100:02d}"
 
 TS_HEADER = (
@@ -40,16 +42,8 @@ def main():
     extract = json.load(open(EXTRACT))
     fleet = json.load(open(FLEET_JSON))
 
-    actual = extract["IN_fleet"]
-    latest = max(v["year"] for v in actual)
-    base = [v for v in actual if v["year"] == latest]
-    projected = []
-    for y in HORIZON:
-        for v in base:
-            # tagged so every surface (Data table, exports) can tell projection
-            # from record — Analyse additionally badges these years "P".
-            projected.append({**v, "year": y, "fyLabel": FY(y), "scenario": "Baseline projection"})
-    fleet["IN"] = actual + projected  # FULL replace — nothing of the old IN survives
+    rows = extract["IN_fleet"]
+    fleet["IN"] = rows  # FULL replace — nothing of the old IN survives
 
     with open(FLEET_JSON, "w") as f:
         json.dump(fleet, f, separators=(", ", ": "))
@@ -81,12 +75,21 @@ def main():
             "export const INDIA_MODELS: string[] = [...new Set(INDIA_CATALOG.map((v) => v.model!).filter(Boolean))].sort()\n"
         )
 
-    yrs = {}
+    meta = extract.get("meta", {})
+    print(f"→ IN fully replaced from {meta.get('source', '?')}: {len(fleet['IN'])} rows, read as given (no horizon replication)")
+    units = defaultdict(int)
+    makers = defaultdict(set)
     for v in fleet["IN"]:
-        yrs.setdefault(v["year"], set()).add(v["parent"])
-    print("→ IN fully replaced:", len(fleet["IN"]), "rows (actuals", sorted({v['year'] for v in actual}), "+ horizon", HORIZON, "replicated from", latest, ")")
-    for y in sorted(yrs):
-        print(f"   {y}: {len(yrs[y])} makers, {sum(1 for v in fleet['IN'] if v['year']==y)} rows")
+        units[v["year"]] += v["sales"]
+        makers[v["year"]].add(v["parent"])
+    for y in sorted(makers):
+        n = sum(1 for v in fleet["IN"] if v["year"] == y)
+        part = next((v.get("monthsRecorded") for v in fleet["IN"] if v["year"] == y and v.get("monthsRecorded")), None)
+        tag = f"  · part-year, {part}/12 months recorded" if part else ""
+        basis = "record" if all(v.get("scenario") == "Base" for v in fleet["IN"] if v["year"] == y) else "plan"
+        print(f"   {y} {FY(y)}: {len(makers[y])} makers, {n:3d} rows, {units[y]:9,d} units  ({basis}){tag}")
+    other = {k: len(v) for k, v in fleet.items() if k != "IN"}
+    print(f"   other markets untouched: {other}")
     print("→ wrote", os.path.relpath(FLEET_JSON, ROOT), "+", os.path.relpath(FLEET_TS, ROOT))
     print("→ wrote", os.path.relpath(CATALOG_TS, ROOT), f"({len(catalog)} variant specs, {len(set(v['model'] for v in catalog))} models)")
 

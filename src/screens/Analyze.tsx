@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import type { Aggregate, Scenario, Vehicle } from '../engine/types'
-import { aggregate, applyScenario, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
+import { aggregate, applyScenario, monthlyCompliance, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
 import LimitChart, { type ChartPoint, type DragConfig } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
 import { GapHeatmap, Mekko } from '../components/Charts'
@@ -10,6 +10,7 @@ import { makerYearGap, makerMekko } from '../lib/analytics'
 import { parentPoolMap } from '../engine/pooling'
 import { Section, Stat, Bar } from '../components/ui'
 import CafeLedger from '../components/CafeLedger'
+import MonthlyCompliance from '../components/MonthlyCompliance'
 import { INDIA_CATALOG } from '../data/india_catalog'
 import Icon from '../components/Icon'
 import { makeLimitAt, makeLimitAtWith } from '../lib/chart'
@@ -270,6 +271,22 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
     else { setParent(m); setDrill([pmap[m] ?? m, m]) }
   }
 
+  // Month-by-month, scoped to whatever the drill is looking at — the market, a
+  // pool, a maker, a model. `node.vehicles` already carries exactly that scope,
+  // so the monthly view can never disagree with the headline above it.
+  const monthly = useMemo(() => {
+    const pts = actuals ? monthlyCompliance(node.vehicles, pack, scenario) : []
+    // volume in scope that the source files annually only — surfaced so the
+    // monthly total visibly reconciles with the headline registrations
+    const covered = node.vehicles.filter((v) => v.monthly?.length).reduce((a, v) => a + v.sales, 0)
+    // a compliance year that starts mid-calendar straddles two years, so name it
+    // the way the regulator does (India: FY 2025-26)
+    const fy = (pack.fiscalYearStartMonth ?? 1) > 1
+      ? `FY ${scenario.year}-${(scenario.year + 1) % 100}`
+      : String(scenario.year)
+    return { points: pts, unreported: Math.round(node.rawUnits - covered), fyLabel: fy }
+  }, [actuals, node, pack, scenario])
+
   // Chart measure control (S&P cube convention: the analyst picks the encoding).
   const [colorMode, setColorMode] = useState<'auto' | 'status' | 'powertrain'>('auto')
   const colorByEff = colorMode === 'auto' ? colorBy : colorMode
@@ -486,6 +503,22 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
           </div>
         </div>
       </Section>
+
+      {/* Month by month — only on the actuals basis, and only for a year that
+          has actually filed monthly. Registrations arrive month by month, so
+          this is where "are we on track" gets answered before the year closes. */}
+      {actuals && monthly.points.length > 0 && (
+        <Section className="rise [animation-delay:340ms] scn-lightcard" title={`Month by month · ${node.label}`}
+          subtitle={`${monthly.points.length} of 12 months filed · YTD is the compliance position, the monthly dots are each month on its own`}
+          right={<span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+            monthly.points[monthly.points.length - 1].ytdGap > 0
+              ? 'border-danger/30 bg-danger/10 text-danger' : 'border-safe/30 bg-safe/10 text-safe'}`}>
+            YTD {monthly.points[monthly.points.length - 1].ytdGap > 0 ? 'over' : 'under'} the line
+          </span>}>
+          <MonthlyCompliance points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
+            fyLabel={monthly.fyLabel} unreported={monthly.unreported} />
+        </Section>
+      )}
 
       {/* Breakdown + children list */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">

@@ -7,7 +7,7 @@
 // RulePack argument. Nothing about EU/India/etc. is hard-coded below.
 // ───────────────────────────────────────────────────────────────────────────
 
-import type { Aggregate, FineMath, RulePack, Scenario, Vehicle, LimitContext } from './types.js'
+import type { Aggregate, FineMath, PowertrainOption, RulePack, Scenario, Vehicle, LimitContext } from './types.js'
 
 export const fmtInt = (n: number) =>
   Math.round(n).toLocaleString('en-US')
@@ -63,6 +63,46 @@ export function applyScenario(
     const md = modelOv(x.parent, x.model); if (md) e = { ...e, ...md }
     const vr = variantOv(x.parent, x.model, variantKey(x)); if (vr) e = { ...e, ...vr }
     return e
+  }
+
+  // 0. Parallel powertrain launches. A handful of models are offered by their
+  //    source as mutually-exclusive options ("petrol OR mild-hybrid OR
+  //    electric"), so the row's spec is a CHOICE, not a fact. Resolve it first,
+  //    before every other lever, so the whole chain sees one coherent spec.
+  //    Default (and the shipped row) is the conservative, highest-CO₂ option.
+  for (const x of v) {
+    const opts = x.powertrainOptions
+    if (!opts?.length) continue
+    const chosen = effFor(x).powertrainOptionMode
+    const mode = chosen ?? 'conservative'
+    // An EXPLICIT choice is the user's assumption about a product decision, so
+    // it is pinned — the same doctrine hypothetical variants follow. Without
+    // this a pinned powertrain mix silently undoes the choice: switching these
+    // models to BEV would make the mix lever shrink them back to its BEV share
+    // and the metric would move the WRONG way. Left unset (the default), the
+    // rows behave like any other and the fleet levers own them.
+    if (chosen) x.pinned = true
+    if (mode === 'blended') {
+      // a portfolio view: volume-weight the options. Deliberately NOT the
+      // default — the result is an average of futures, not an achievable one.
+      const w = opts.reduce((a, o) => a + (o.share ?? 1 / opts.length), 0) || 1
+      const wt = (f: (o: PowertrainOption) => number | undefined) =>
+        opts.reduce((a, o) => a + (f(o) ?? 0) * (o.share ?? 1 / opts.length), 0) / w
+      x.co2 = wt((o) => o.co2)
+      const m = wt((o) => o.mass); if (m) x.mass = m
+      x.powertrain = opts[0].powertrain
+      x.fuel = opts[0].fuel
+      x.powertrainOption = 'Blended'
+      continue
+    }
+    // opts are sorted richest-CO₂ first, so conservative = head, electrified = tail
+    const pick = mode === 'electrified' ? opts[opts.length - 1] : opts[0]
+    x.powertrain = pick.powertrain
+    x.fuel = pick.fuel
+    x.co2 = pick.co2
+    if (pick.mass != null) x.mass = pick.mass
+    x.battery = pick.battery
+    x.powertrainOption = pick.powertrain
   }
 
   // 1. Sales multiplier (per vehicle, deepest scope wins). Runs BEFORE the
@@ -388,6 +428,93 @@ export interface ThreeYear {
  * weighted average specific emissions vs its average target over 2025–2027. By
  * convexity this premium is always ≤ the sum of the per-year premiums.
  */
+// ── month-by-month compliance ───────────────────────────────────────────────
+// Compliance is settled on the FULL year, but the registrations arrive monthly,
+// so the useful question mid-year is "where do we stand, and which month moved
+// us". Two readings, both computed with the same `aggregate` the annual number
+// uses so they cannot drift from it:
+//
+//   • the month on its own — how that month's registrations performed, which is
+//     what tells you a bad month from a good one; and
+//   • YTD — the running sales-weighted average from month 1 to here, which IS
+//     the compliance position so far and lands exactly on the annual figure at
+//     the final reported month.
+//
+// The limit moves too: it is mass-based, so a month heavy in large vehicles
+// raises its own target. Both readings therefore carry their own limit.
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+export interface MonthPoint {
+  /** 1-based index within the compliance year (1 = fiscalYearStartMonth). */
+  month: number
+  label: string            // 'Apr', 'May' …
+  /** calendar year this month falls in — a fiscal year straddles two */
+  calendarYear: number
+  units: number            // registrations in the month alone
+  metric: number
+  limit: number
+  gap: number
+  status: Aggregate['status']
+  zlevShare: number
+  ytdUnits: number
+  ytdMetric: number        // running sales-weighted average, month 1 → here
+  ytdLimit: number
+  ytdGap: number
+  ytdStatus: Aggregate['status']
+  /** exposure if the year closed on this month — NOT a levied fine, which is
+   *  only assessed once the full year is filed */
+  ytdFineIfYearEnded: number
+  ytdZlevShare: number
+}
+
+/**
+ * Month-by-month + running-YTD compliance for the rows that carry a monthly
+ * split. Returns [] when the year has no monthly filing.
+ *
+ * This is an ACTUALS reading: hypothetical variants are excluded, since adding
+ * them to each month would count them twelve times.
+ */
+export function monthlyCompliance(rows: Vehicle[], pack: RulePack, s: Scenario): MonthPoint[] {
+  const yearRows = rows.filter((v) => v.year === s.year && v.monthly?.length)
+  if (!yearRows.length) return []
+  const months = Math.max(...yearRows.map((v) => v.monthly!.length))
+  const start = (pack.fiscalYearStartMonth ?? 1) - 1
+  const sc: Scenario = { ...s, extraVariants: [] }
+
+  const at = (pick: (m: number[], i: number) => number, i: number, key: string) => {
+    const slice = yearRows
+      .map((v) => ({ ...v, sales: pick(v.monthly!, i) }))
+      .filter((v) => v.sales > 0)
+    return aggregate(applyScenario(slice, sc, pack, {}), pack, sc, key, 'fleet', key)
+  }
+
+  const out: MonthPoint[] = []
+  for (let i = 0; i < months; i++) {
+    const one = at((m, k) => m[k] ?? 0, i, `m${i + 1}`)
+    const ytd = at((m, k) => m.slice(0, k + 1).reduce((a, b) => a + b, 0), i, `ytd${i + 1}`)
+    const cal = start + i
+    out.push({
+      month: i + 1,
+      label: MONTH_NAMES[cal % 12],
+      calendarYear: s.year + Math.floor(cal / 12),
+      units: one.rawUnits,
+      metric: one.avgMetric,
+      limit: one.limit,
+      gap: one.gap,
+      status: one.status,
+      zlevShare: one.zlevShare,
+      ytdUnits: ytd.rawUnits,
+      ytdMetric: ytd.avgMetric,
+      ytdLimit: ytd.limit,
+      ytdGap: ytd.gap,
+      ytdStatus: ytd.status,
+      ytdFineIfYearEnded: ytd.fine,
+      ytdZlevShare: ytd.zlevShare,
+    })
+  }
+  return out
+}
+
 export function threeYearAverage(
   raw: Vehicle[], pack: RulePack, s: Scenario, parent: string,
   years: number[] = [2025, 2026, 2027], overrides: Record<string, Partial<Scenario>> = {},

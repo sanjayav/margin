@@ -23,7 +23,13 @@ const A = 0.002          // slope, per kg
 const C3 = 1170          // kg reference (kerb / unladen mass), draft CAFE III
 const D3: Record<number, number> = {
   2027: 3.7264, 2028: 3.5737, 2029: 3.4573, 2030: 3.2224, 2031: 3.0139,
+  // The BEE draft schedule ENDS at FY2031-32. The fleet data runs one year
+  // further, so 2032 holds the 2031 constant flat rather than extrapolating a
+  // target BEE has not drafted — see `beyondDraftFrom` / the regimeFor note.
+  2032: 3.0139,
 }
+/** First year past the end of the drafted CAFE III schedule. */
+const BEYOND_DRAFT_FROM = 2032
 // CAFE II (in force): 113 gCO₂/km at 1,145 kg reference ⇒ petrol-equivalent
 const C2 = 1145
 const D2 = 113 / 23.7135 // ≈ 4.765 L/100km
@@ -67,19 +73,24 @@ export const IN: RulePack = {
   fineRateLabel: '₹25,000/car (≤0.2 L/100km over) · ₹50,000/car beyond · EC Act 2022',
   creditPrice: CREDIT_PER_L,
   creditPriceLabel: '≈₹2,500 per gCO₂/km per car (draft CAFE III trading price, FY28)',
-  // 2025 (FY2025-26) is the complete actual — the 12-OEM extract, ~4.79M units.
-  // The Jul-2026 pull of FY2026-27 was only a part-year, so 2026–31 hold the 2025
-  // fleet (mix and volume) against each year's tightening line rather than carry a
-  // part-year forward. defaultYear opens on the CAFE III headline year.
-  years: [2025, 2026, 2027, 2028, 2029, 2030, 2031],
+  // 2025 (FY2025-26) is the complete 12-month actual. 2026 (FY2026-27) is a
+  // 3-month YTD part-year — carried as recorded and badged, since a
+  // sales-weighted average is volume-invariant and so compliance is unaffected;
+  // only that year's absolute volume and fine exposure are partial. 2027–2032
+  // are the OEMs' own per-year plan from the source workbook, not a replay of a
+  // base year. defaultYear opens on the CAFE III headline year.
+  years: [2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032],
+  // CAFE is assessed on the Indian fiscal year: FY2025-26 = Apr 2025 → Mar 2026,
+  // so month 1 of a monthly filing is April.
+  fiscalYearStartMonth: 4,
   defaultYear: 2027,
   classes: ['Passenger car'],
   smallVolumeThreshold: 1000,
   pooling: { enabled: false, note: 'CAFE is assessed per manufacturer; the draft provides credit trading between makers, not pooled averages.' },
   credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
   limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',
-  source: 'Master fleet extract (Jul 2026): 12 compliance entities, model-level sales-weighted CO₂ (MIDC) and kerb mass, FY2025-26 complete actual (~4.79M units). BEE Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
-  coverageNote: 'The 12 major OEMs (Maruti Suzuki, Mahindra, Tata, Hyundai, Toyota, Kia, Škoda-VW, MG, Honda, Renault, Nissan, FCA) cover the bulk of the Indian PV market. 2026–31 hold the FY2025-26 as-sold fleet against each year’s tightening CAFE III line.',
+  source: 'DEMO DATA_SHARED.xlsx (Aug 2026): 5 compliance entities, model-level sales-weighted CO₂ (MIDC/WLTC) and kerb mass, FY2025-26 complete actual (~727k units) plus the makers’ own FY2027-28 → FY2032-33 plan. BEE Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
+  coverageNote: 'Five compliance entities — Toyota Kirloskar, Škoda-VW India, MG Motor, Honda Cars India and BYD — a demonstration panel, not the whole Indian PV market. FY2025-26 is a complete 12-month actual; FY2026-27 is a 3-month YTD part-year (badged in Data), so its volume and fine exposure are partial while its sales-weighted average is not. FY2027-28 onward are the makers’ own planned volumes and mix. FY2032-33 sits beyond the drafted CAFE III schedule and holds the FY2031-32 target line flat.',
 
   regimeFor: (year) =>
     year < CAFE3_FROM
@@ -88,8 +99,14 @@ export const IN: RulePack = {
           cycleNote: 'CAFE II is assessed on the Modified Indian Driving Cycle (NEDC-derived). Makers dual-declare MIDC + WLTP from 2026.',
         }
       : {
-          name: 'CAFE III', draft: true, cycle: 'MIDC → WLTP',
-          cycleNote: 'Draft CAFE III starts on MIDC and transitions to WLTP once MoRTH adopts it. The MIDC→WLTP conversion factor is to be notified separately (Ministry of Power).',
+          name: year >= BEYOND_DRAFT_FROM ? 'CAFE III (beyond draft)' : 'CAFE III',
+          draft: true,
+          cycle: 'MIDC → WLTP',
+          cycleNote:
+            (year >= BEYOND_DRAFT_FROM
+              ? `The drafted CAFE III schedule ends at FY2031-32; FY${year}-${(year + 1) % 100} holds that final target line flat because BEE has drafted no constant beyond it. Treat this year's headroom as indicative. `
+              : '') +
+            'Draft CAFE III starts on MIDC and transitions to WLTP once MoRTH adopts it. The MIDC→WLTP conversion factor is to be notified separately (Ministry of Power).',
         },
 
   vehicleMetric: (v: Vehicle, s) => {
@@ -128,6 +145,11 @@ export const IN: RulePack = {
   fineFor: (excess, units) => (excess <= FINE_STEP ? FINE_TIER1 : FINE_TIER2) * units,
   forecast: (year) => ({
     limit: year < CAFE3_FROM ? A * (1300 - C2) + D2 : A * (1300 - C3) + (D3[year] ?? 3.0139),
-    note: year < CAFE3_FROM ? `FY ${year}-${(year + 1) % 100} · CAFE II` : `FY ${year}-${(year + 1) % 100} · CAFE III draft`,
+    note:
+      year < CAFE3_FROM
+        ? `FY ${year}-${(year + 1) % 100} · CAFE II`
+        : year >= BEYOND_DRAFT_FROM
+          ? `FY ${year}-${(year + 1) % 100} · CAFE III beyond draft — FY2031-32 line held flat`
+          : `FY ${year}-${(year + 1) % 100} · CAFE III draft`,
   }),
 }
