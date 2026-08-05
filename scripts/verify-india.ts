@@ -15,7 +15,11 @@ const base = (year: number): Scenario => ({ year, evSharePct: null, salesMultipl
 let pass = 0, fail = 0
 const check = (n: string, c: boolean, d = '') => { console.log(`${c ? '✓' : '✗ FAIL'} ${n}${d ? ' — ' + d : ''}`); c ? pass++ : fail++ }
 
-const MAKERS = ['Build Your Dreams', 'Honda Cars India Limited', 'MG Motor', 'Skoda Auto Volkswagen India Private Limited', 'Toyota Kirloskar Motor Pvt. Ltd']
+// The 5 entities carrying their own forward plan (DEMO DATA_SHARED) …
+const PLAN_MAKERS = ['Build Your Dreams', 'Honda Cars India Limited', 'MG Motor', 'Skoda Auto Volkswagen India Private Limited', 'Toyota Kirloskar Motor Pvt. Ltd']
+// … and the 8 the full-market registrations file adds. No entity is in both.
+const ADDED_MAKERS = ['FCA India Automobiles Private Limited', 'Hyundai Motor India Limited', 'KIA India Pvt Ltd', 'Mahindra & Mahindra Limited', 'Maruti Suzuki India Limited', 'Nissan Motor India Private Limited', 'Renault India Private Limited', 'Tata Motors Passenger Vehicles Limited']
+const MAKERS = [...PLAN_MAKERS, ...ADDED_MAKERS].sort()
 const units = (y: number) => IN.filter((v) => v.year === y).reduce((a, v) => a + v.sales, 0)
 console.log('IN fleet spans', Math.min(...IN.map((v) => v.year)), '→', Math.max(...IN.map((v) => v.year)), `(${IN.length} rows)\n`)
 
@@ -23,11 +27,40 @@ console.log('IN fleet spans', Math.min(...IN.map((v) => v.year)), '→', Math.ma
 check('year strip covers 2025–2032', JSON.stringify(pack.years) === JSON.stringify([2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032]))
 check('workspace opens on CAFE III (2027)', pack.defaultYear === 2027)
 const makers = [...new Set(IN.map((v) => v.parent))].sort()
-check('exactly the 5 workbook makers — every earlier India source deleted', JSON.stringify(makers) === JSON.stringify(MAKERS), makers.join(' · '))
-check('no rows survive from the old 12-OEM extract', !IN.some((v) => /Maruti|Tata|Mahindra|Hyundai|KIA|FCA|Renault|Nissan/i.test(v.parent)))
+check('exactly the 13 merged compliance entities', JSON.stringify(makers) === JSON.stringify(MAKERS), makers.join(' · '))
+check('no entity is taken from BOTH sources (nothing double-counted)', (() => {
+  const bySrc = new Map<string, Set<string>>()
+  for (const v of IN) {
+    const s = (v as any).source ?? '?'
+    if (!bySrc.has(v.parent)) bySrc.set(v.parent, new Set())
+    bySrc.get(v.parent)!.add(s)
+  }
+  return [...bySrc.values()].every((s) => s.size === 1)
+})())
+check('the plan makers come from DEMO DATA_SHARED', PLAN_MAKERS.every((p) => IN.filter((v) => v.parent === p).every((v: any) => v.source === 'DEMO DATA_SHARED.xlsx')))
+check('the added makers come from the registrations file', ADDED_MAKERS.every((p) => IN.filter((v) => v.parent === p).every((v: any) => v.source === 'update dat india 27 july.xlsx')))
 for (const y of [2025, 2026, 2027, 2031, 2032]) {
   const m = new Set(IN.filter((v) => v.year === y).map((v) => v.parent))
-  check(`${y}: all five makers present`, m.size === 5, `${m.size}`)
+  check(`${y}: all 13 entities present`, m.size === 13, `${m.size}`)
+}
+// the market must look like the market: ~4.8M units, Maruti the largest
+{
+  const u25 = IN.filter((v) => v.year === 2025).reduce((a, v) => a + v.sales, 0)
+  check('FY2025-26 is the whole PV market, not a panel', u25 > 4.5e6 && u25 < 5.2e6, `${u25.toLocaleString()} units`)
+  const byMaker = new Map<string, number>()
+  for (const v of IN.filter((x) => x.year === 2025)) byMaker.set(v.parent, (byMaker.get(v.parent) ?? 0) + v.sales)
+  const top = [...byMaker.entries()].sort((a, b) => b[1] - a[1])
+  check('Maruti Suzuki is the largest maker', top[0][0] === 'Maruti Suzuki India Limited', `${top[0][0]} ${top[0][1].toLocaleString()}`)
+  check('Maruti FY2025-26 matches its Brand control total exactly', byMaker.get('Maruti Suzuki India Limited') === 1826798, `${byMaker.get('Maruti Suzuki India Limited')?.toLocaleString()}`)
+  check('Maruti share is ~38% of the market', Math.abs(top[0][1] / u25 - 0.38) < 0.03, `${(top[0][1] / u25 * 100).toFixed(1)}%`)
+}
+// the added makers stop at FY2026-27, so their plan years are held flat and tagged
+{
+  const m25 = IN.filter((v) => v.parent === 'Maruti Suzuki India Limited' && v.year === 2025).reduce((a, v) => a + v.sales, 0)
+  const m30 = IN.filter((v) => v.parent === 'Maruti Suzuki India Limited' && v.year === 2030).reduce((a, v) => a + v.sales, 0)
+  check('added makers hold their COMPLETE year forward, never the part-year', m30 === m25, `${m30.toLocaleString()} vs ${m25.toLocaleString()}`)
+  check('…and every held row is tagged a projection', IN.filter((v) => ADDED_MAKERS.includes(v.parent) && v.year > 2026).every((v: any) => v.scenario === 'Baseline projection'))
+  check('…and carries no monthly filing (a projection has filed nothing)', IN.filter((v) => ADDED_MAKERS.includes(v.parent) && v.year > 2026).every((v) => !v.monthly))
 }
 
 // ── the plan years are REAL data, not a replay of a base year ────────────────
@@ -209,6 +242,7 @@ for (const y of [2025, 2026, 2027, 2031, 2032]) {
     const filers = [...new Set(IN.filter((v) => v.year === 2025 && v.monthly?.length).map((v) => v.pool || v.parent))]
     check('every monthly filer appears in all 12 monthly trees (an unbroken path)',
       filers.every((f) => names.every((s) => s.has(f))), `${filers.length} filers · ${filed} months`)
+    check('the monthly filers now include Maruti and the other added makers', filers.includes('Maruti Suzuki India Limited'), `${filers.length} filers`)
     check('a maker with no monthly split never appears in a monthly tree',
       names.every((s) => !s.has('Build Your Dreams')))
     // the trajectory must actually move, or drawing it says nothing

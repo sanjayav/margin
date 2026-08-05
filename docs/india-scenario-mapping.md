@@ -1,6 +1,38 @@
 # India — "Scenario Planning Tool" workbook → platform mapping
 
-> **2026-08-05 — DEMO DATA_SHARED ERA (current).** India now sources
+> **2026-08-05b — FULL-MARKET MERGE (current).** India is assembled from **two**
+> workbooks, with **no entity taken from both**, so nothing is double-counted:
+>
+> | source | entities | years | role |
+> |---|---|---|---|
+> | `DEMO DATA_SHARED.xlsx` (sheet `Plan`) | 5 — Toyota Kirloskar, Škoda-VW, MG, Honda, BYD | FY2025-26 → FY2032-33 | authoritative; the only file with a forward plan |
+> | `update dat india 27 july.xlsx` (sheet `VIJAY`) | +8 — **Maruti Suzuki**, Hyundai, Tata, Mahindra, Kia, Renault, Nissan, FCA | FY2025-26 → FY2026-27 | the full-market registrations file |
+>
+> **Result: 13 compliance entities, ≈4.80M units in FY2025-26** — essentially
+> the whole Indian PV market. Shares sanity-check against reality: Maruti 38.0%,
+> Mahindra 13.8%, Tata 13.2%, Hyundai 12.2%, Toyota 10.0%, Kia 6.3%.
+> Every row carries a `source` field. `scripts/ingest-india-demo.py` reads both.
+>
+> **The July file is messier and is repaired against its own control totals
+> before merging** (`repair_year_stamps`). Three Model rows are stamped with the
+> wrong fiscal year — each proven, not guessed: the parent fails to reconcile to
+> its own Brand row by *exactly* the volume of one duplicated row, with the
+> offsetting error in the adjacent year. Maruti's `e VITARA` is the clearest —
+> 3,652 units sitting in fiscal months 10–12 (Jan–Mar, the tail of FY2025-26)
+> but stamped 2026, leaving 2025 short by exactly 3,652 and 2026 over by exactly
+> 3,652. Repairs applied: Maruti `e VITARA` 3,652 (2026→2025), Škoda `Golf GTI`
+> 140 (2025→2026), Kia `EV9` 2 (2026→2025). **After repair all 24 parent-years
+> reconcile exactly**; anything unresolvable is reported, never silently
+> adjusted. BMW is skipped — no volume in any year.
+>
+> **The added 8 stop at FY2026-27**, so their **complete** FY2025-26 fleet (never
+> the 3-month part-year) is held against each later statutory line and tagged
+> `Baseline projection`; their monthly filing is *not* carried forward, because a
+> projection has filed nothing.
+>
+> ---
+>
+> **2026-08-05a — DEMO DATA_SHARED ERA.** India sourced
 > **exclusively** from `DEMO DATA_SHARED.xlsx` (one sheet, `Plan`; header on
 > row 3; cols A→BH). Pipeline: `scripts/ingest-india-demo.py` →
 > `scripts/apply-india-extract.py` (FULL replace — the 12-OEM / 4.79M-unit

@@ -61,6 +61,10 @@ export interface Vehicle {
   /** Set when the row's volume is not a model-level figure — e.g. a parent
    *  whose source records only a brand total with no model split. */
   salesBasis?: string
+  /** Which workbook this row came from. A market can be assembled from more
+   *  than one source (India merges a 5-entity plan file with a full-market
+   *  registrations file), and a row must be able to say which. */
+  source?: string
   /** Which parallel powertrain launch this row currently assumes. Set only on
    *  rows whose source lists several MUTUALLY EXCLUSIVE options (see below). */
   powertrainOption?: string

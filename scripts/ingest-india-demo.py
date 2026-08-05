@@ -40,6 +40,8 @@ from xml.etree import ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DEFAULT_XLSX = os.path.normpath(os.path.join(ROOT, "..", "DEMO DATA_SHARED.xlsx"))
+# the full-market second source (12 OEMs incl. Maruti Suzuki) — see parse_vijay
+VIJAY_XLSX = os.path.normpath(os.path.join(ROOT, "..", "update dat india 27 july.xlsx"))
 OUT = os.path.join(ROOT, ".data", "india_extract.json")
 SHEET = "Plan"
 
@@ -72,8 +74,9 @@ ACTUAL_YEARS = {2025, 2026}
 NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 
 
-def read_sheet(xlsx, sheet_name):
-    """Minimal zero-dependency .xlsx reader — returns [{col_letter: value}]."""
+def read_sheet(xlsx, sheet_name, header_from=4):
+    """Minimal zero-dependency .xlsx reader — returns [{col_letter: value}].
+    `header_from` is the first DATA row (1-based); rows above it are headers."""
     z = zipfile.ZipFile(xlsx)
     shared = []
     try:
@@ -114,7 +117,7 @@ def read_sheet(xlsx, sheet_name):
             if val != "" and val is not None:
                 cells[col] = val
         out[int(row.get("r"))] = cells
-    return [out[i] for i in sorted(out) if i >= 4 and out[i]]
+    return [out[i] for i in sorted(out) if i >= header_from and out[i]]
 
 
 def num(v):
@@ -202,6 +205,213 @@ def powertrain_options(specs, model_volume):
         opts.append({k: v for k, v in rec.items() if v is not None})
     opts.sort(key=lambda o: -o["co2"])          # conservative (highest CO₂) first
     return opts, True
+
+
+
+# ── SECOND SOURCE: the full-market workbook ─────────────────────────────────
+# DEMO DATA_SHARED covers 5 compliance entities. "update dat india 27 july.xlsx"
+# (sheet VIJAY) covers 12 — the whole Indian PV market, ~4.79M units in
+# FY2025-26 — including Maruti Suzuki, Hyundai, Tata, Mahindra, Kia, Renault,
+# Nissan and FCA. It carries the same Data-Mode roll-up and, importantly, the
+# same monthly split (AV..BG = M1..M12, BH = the annual total).
+#
+# It is a MESSIER file than the primary, so it is repaired against its own
+# control totals before anything is merged (see repair_year_stamps).
+#
+# Its column layout differs from the primary — mapped here once:
+VJ = {
+    "year": "A", "market": "B", "mode": "C", "scenario": "D", "parent": "E",
+    "brand": "F", "model": "G", "variant": "H", "variantId": "I",
+    "bodyStyle": "J", "segment": "K", "powertrain": "L", "engineL": "M",
+    "fuel": "N", "powerKW": "O", "ftCode": "P", "gearbox": "Q", "driveline": "R",
+    "battery": "S", "kerb": "T", "co2": "V", "kmpl": "W", "mpg": "X",
+    "l100": "Y", "footprint": "Z", "energy": "AA", "range": "AB",
+    "refMass": "AE", "testMass": "AF", "vclass": "AH", "cycle": "AI",
+    "avgCo2": "AM", "avgMass": "AN", "volume": "BH",
+}
+VJ_MONTHS = ["AV", "AW", "AX", "AY", "AZ", "BA", "BB", "BC", "BD", "BE", "BF", "BG"]
+# BMW carries no volume in any year — an empty entity, not a compliance parent.
+VJ_SKIP = {"BMW India Pvt. Lt"}
+
+
+def repair_year_stamps(models, brands, log):
+    """The July workbook stamps a few Model rows with the wrong fiscal year.
+
+    Evidence, not guesswork: each case shows up as a parent whose model rows do
+    not sum to its own Brand row, by EXACTLY the volume of one duplicated
+    (parent, model, year) row — and the offsetting error appears in the
+    adjacent year. Maruti's e VITARA is the clearest: 3,652 units sitting in
+    fiscal months 10-12 (Jan-Mar, the tail of FY2025-26) but stamped 2026,
+    leaving 2025 short by exactly 3,652 and 2026 over by exactly 3,652.
+
+    So: for every parent-year that fails to reconcile, look for a duplicate row
+    whose volume equals the discrepancy and whose move to the adjacent year
+    fixes BOTH years. Move it. Anything that cannot be resolved this way is
+    reported and left alone — never silently adjusted.
+    """
+    want = defaultdict(float)
+    for b in brands:
+        want[(txt(b.get(VJ["parent"])), int(num(b.get(VJ["year"])) or 0))] += num(b.get(VJ["volume"])) or 0
+
+    def got():
+        g = defaultdict(float)
+        for d in models:
+            g[(txt(d.get(VJ["parent"])), int(num(d.get(VJ["year"])) or 0))] += num(d.get(VJ["volume"])) or 0
+        return g
+
+    for _ in range(8):  # a few passes; each move can only help
+        g = got()
+        off = {k: g.get(k, 0) - v for k, v in want.items() if abs(g.get(k, 0) - v) > 0.5}
+        if not off:
+            break
+        moved = False
+        for (parent, year), delta in sorted(off.items()):
+            if delta <= 0:
+                continue  # this year has too MUCH; find the row to move out
+            dup = Counter((txt(d.get(VJ["parent"])), txt(d.get(VJ["model"])), int(num(d.get(VJ["year"])) or 0))
+                          for d in models)
+            for d in models:
+                key = (txt(d.get(VJ["parent"])), txt(d.get(VJ["model"])), int(num(d.get(VJ["year"])) or 0))
+                if key != (parent, txt(d.get(VJ["model"])), year) or dup[key] < 2:
+                    continue
+                vol = num(d.get(VJ["volume"])) or 0
+                if abs(vol - delta) > 0.5:
+                    continue
+                for other in (year - 1, year + 1):
+                    if off.get((parent, other), 0) <= -delta + 0.5 and off.get((parent, other), 0) >= -delta - 0.5:
+                        filled = [i for i, c in enumerate(VJ_MONTHS, 1) if num(d.get(c))]
+                        d[VJ["year"]] = str(other)
+                        log.append(f"{parent[:26]} · {txt(d.get(VJ['model']))}: {int(vol):,} units re-stamped "
+                                   f"{year} → {other} (units sit in fiscal months {filled}; both years then reconcile)")
+                        moved = True
+                        break
+                if moved:
+                    break
+            if moved:
+                break
+        if not moved:
+            break
+    return {k: v for k, v in ((k, got().get(k, 0) - v) for k, v in want.items()) if abs(v) > 0.5}
+
+
+def parse_vijay(xlsx):
+    """→ (fleet rows, catalog rows, report). Model rows carry the sales."""
+    rows = read_sheet(xlsx, "VIJAY ", header_from=4)
+    models = [d for d in rows if d.get(VJ["mode"]) == "Model" and txt(d.get(VJ["parent"])) not in VJ_SKIP]
+    brands = [d for d in rows if d.get(VJ["mode"]) == "Brand" and txt(d.get(VJ["parent"])) not in VJ_SKIP]
+    variants = defaultdict(list)
+    for d in rows:
+        if d.get(VJ["mode"]) == "Variant" and txt(d.get(VJ["parent"])) not in VJ_SKIP:
+            variants[(txt(d.get(VJ["parent"])), txt(d.get(VJ["model"])), int(num(d.get(VJ["year"])) or 0))].append(d)
+
+    repairs = []
+    residual = repair_year_stamps(models, brands, repairs)
+
+    # after repair, how far into each year the market has actually filed
+    coverage = {}
+    for d in models:
+        y = int(num(d.get(VJ["year"])) or 0)
+        filled = [i for i, c in enumerate(VJ_MONTHS, 1) if num(d.get(c))]
+        if filled:
+            coverage[y] = max(coverage.get(y, 0), max(filled))
+    # A stray month beyond the market's filing window is a source artefact (Kia
+    # books 2 units in Oct-Nov of a year filed only to June). Fold it into the
+    # last filed month so the annual total is preserved exactly and the monthly
+    # frame stays coherent — never dropped.
+    folded = []
+
+    fleet, catalog = [], []
+    dropped = []
+    for d in models:
+        parent = txt(d.get(VJ["parent"]))
+        model = txt(d.get(VJ["model"]))
+        year = int(num(d.get(VJ["year"])) or 0)
+        vol = num(d.get(VJ["volume"])) or 0
+        if vol <= 0 or not parent or not model:
+            dropped.append(f"{year} {(parent or '?')[:24]} · {model or '(no model)'}")
+            continue
+        specs = variants.get((parent, model, year)) or variants.get((parent, model, year + 1)) or []
+        pts = [POWERTRAIN.get(txt(s.get(VJ["powertrain"])), txt(s.get(VJ["powertrain"]))) for s in specs if s.get(VJ["powertrain"])]
+        modal_pt = Counter(pts).most_common(1)[0][0] if pts else "ICE"
+        fuels = [FUEL.get(txt(s.get(VJ["fuel"])), txt(s.get(VJ["fuel"]))) for s in specs if s.get(VJ["fuel"])]
+        modal_fuel = Counter(fuels).most_common(1)[0][0] if fuels else "Petrol"
+        avg_co2 = num(d.get(VJ["avgCo2"]))
+        avg_mass = num(d.get(VJ["avgMass"]))
+        if avg_co2 is None:
+            avg_co2 = mean([num(s.get(VJ["co2"])) for s in specs])
+        if avg_mass is None:
+            avg_mass = mean([num(s.get(VJ["kerb"])) for s in specs])
+        is_ze = (avg_co2 == 0) or modal_pt in ZE_PT
+
+        cov = coverage.get(year, 0)
+        monthly = None
+        if cov:
+            raw_m = [int(num(d.get(c)) or 0) for c in VJ_MONTHS]
+            head, tail = raw_m[:cov], raw_m[cov:]
+            if sum(tail):
+                head[-1] += sum(tail)
+                folded.append(f"{year} {parent[:22]} · {model}: {sum(tail):,} units filed beyond month {cov} folded into it")
+            if sum(head):
+                monthly = head
+
+        rec = {
+            "parent": parent, "pool": parent,
+            "brand": txt(d.get(VJ["brand"])), "make": txt(d.get(VJ["brand"])),
+            "model": model, "year": year, "fyLabel": FY(year),
+            "powertrain": modal_pt,
+            "fuel": "Electric" if is_ze else modal_fuel,
+            "co2": 0.0 if is_ze else round(avg_co2, 2) if avg_co2 is not None else 0.0,
+            "mass": round(avg_mass, 1) if avg_mass is not None else None,
+            "sales": int(vol),
+            "bodyStyle": next((txt(s.get(VJ["bodyStyle"])) for s in specs if s.get(VJ["bodyStyle"])), None),
+            "segment": next((txt(s.get(VJ["segment"])) for s in specs if s.get(VJ["segment"])), None),
+            "footprint": next((num(s.get(VJ["footprint"])) for s in specs if num(s.get(VJ["footprint"]))), None),
+            "driveCycle": next((DRIVECYCLE.get(txt(s.get(VJ["cycle"])), txt(s.get(VJ["cycle"]))) for s in specs if s.get(VJ["cycle"])), None),
+            "battery": mean([num(s.get(VJ["battery"])) for s in specs
+                             if num(s.get(VJ["battery"])) and POWERTRAIN.get(txt(s.get(VJ["powertrain"])), txt(s.get(VJ["powertrain"]))) == modal_pt]),
+            "cnf": 0,
+            "vclass": "Passenger car",
+            "scenario": "Base",
+            "source": "update dat india 27 july.xlsx",
+        }
+        if monthly:
+            rec["monthly"] = monthly
+            if 0 < len(monthly) < 12:
+                rec["monthsRecorded"] = len(monthly)
+        fleet.append({k: v for k, v in rec.items() if v is not None})
+
+    for (parent, model, year), specs in variants.items():
+        for d in specs:
+            pt = POWERTRAIN.get(txt(d.get(VJ["powertrain"])), txt(d.get(VJ["powertrain"])) or "ICE")
+            is_ze = pt in ZE_PT
+            rec = {
+                "market": txt(d.get(VJ["market"])) or "IN", "parent": parent,
+                "brand": txt(d.get(VJ["brand"])), "model": model,
+                "variant": txt(d.get(VJ["variant"])), "variantId": txt(d.get(VJ["variantId"])),
+                "ftCode": txt(d.get(VJ["ftCode"])), "powertrain": pt,
+                "powerKW": num(d.get(VJ["powerKW"])), "gearbox": txt(d.get(VJ["gearbox"])),
+                "driveline": txt(d.get(VJ["driveline"])), "battery": num(d.get(VJ["battery"])),
+                "engineCC": round(num(d.get(VJ["engineL"])) * 1000) if num(d.get(VJ["engineL"])) else None,
+                "fuel": FUEL.get(txt(d.get(VJ["fuel"])), txt(d.get(VJ["fuel"]))),
+                "bodyStyle": txt(d.get(VJ["bodyStyle"])), "segment": txt(d.get(VJ["segment"])),
+                "kerbMass": num(d.get(VJ["kerb"])), "footprint": num(d.get(VJ["footprint"])),
+                "refMass": num(d.get(VJ["refMass"])), "testMass": num(d.get(VJ["testMass"])),
+                "vclass": txt(d.get(VJ["vclass"])),
+                "co2": 0.0 if is_ze else num(d.get(VJ["co2"])),
+                "fuelKmpl": num(d.get(VJ["kmpl"])), "fuelMpg": num(d.get(VJ["mpg"])),
+                "fuelL100": num(d.get(VJ["l100"])), "energy": num(d.get(VJ["energy"])),
+                "range": num(d.get(VJ["range"])),
+                "driveCycle": DRIVECYCLE.get(txt(d.get(VJ["cycle"])), txt(d.get(VJ["cycle"]))),
+                "year": year, "source": "update dat india 27 july.xlsx",
+            }
+            catalog.append({k: v for k, v in rec.items() if v is not None})
+
+    return fleet, catalog, {
+        "repairs": repairs, "residual": residual, "coverage": coverage,
+        "dropped": dropped, "folded": folded,
+        "brands": [{"parent": txt(b.get(VJ["parent"])), "year": int(num(b.get(VJ["year"])) or 0),
+                    "sales": num(b.get(VJ["volume"])) or 0} for b in brands],
+    }
 
 
 def main():
@@ -356,6 +566,7 @@ def main():
             "cnf": 0,
             "vclass": "Passenger car",
             "scenario": "Base" if year in ACTUAL_YEARS else "Baseline projection",
+            "source": "DEMO DATA_SHARED.xlsx",
         }
         # part-year actuals are tagged so the UI can badge them; a sales-weighted
         # average is volume-invariant, so only volume/fine exposure is partial.
@@ -426,6 +637,7 @@ def main():
             "cnf": 0,
             "vclass": "Passenger car",
             "scenario": "Base" if year in ACTUAL_YEARS else "Baseline projection",
+            "source": "DEMO DATA_SHARED.xlsx",
             "salesBasis": "brand total — the source records no model-level split",
         }
         if year in ACTUAL_YEARS and 0 < months < 12:
@@ -456,6 +668,41 @@ def main():
     } for g in regs]
     reg_populated = sum(1 for r in reg_rows if any(r[k] is not None for k in
                         ("P_gpkm", "CAFCS_l100", "T_gpkm", "ACAFC_l100", "credit", "compliant")))
+
+    # ── MERGE the full-market second source ─────────────────────────────────
+    # The primary is authoritative for the entities it covers — it is the newer
+    # file and the only one carrying the FY2027-28 → FY2032-33 plan. The second
+    # source contributes the entities the primary does not have at all, which is
+    # most of the Indian market: Maruti Suzuki, Hyundai, Tata, Mahindra, Kia,
+    # Renault, Nissan and FCA. No entity is ever taken from both, so nothing is
+    # double-counted.
+    vj_fleet, vj_catalog, vj = parse_vijay(VIJAY_XLSX) if os.path.exists(VIJAY_XLSX) else ([], [], None)
+    primary_parents = {v["parent"] for v in fleet}
+    added = sorted({v["parent"] for v in vj_fleet} - primary_parents)
+    vj_keep = [v for v in vj_fleet if v["parent"] in set(added)]
+    vj_cat_keep = [v for v in vj_catalog if v.get("parent") in set(added)]
+
+    # The second source stops at FY2026-27. Leaving it there would collapse the
+    # market from 13 makers to 5 the moment the plan years start, so each added
+    # maker's COMPLETE year (FY2025-26 — 2026 is only a part-year pull) is held
+    # against every later statutory line, tagged 'Baseline projection' exactly
+    # like any other projection on this screen. Their own monthly filing is not
+    # carried forward: a projection has not filed anything.
+    plan_years = sorted({v["year"] for v in fleet} - ACTUAL_YEARS)
+    # the latest COMPLETE year — never the part-year, or every plan year would
+    # inherit a 3-month volume as if it were twelve
+    complete = [y for y in sorted(ACTUAL_YEARS)
+                if any(v["year"] == y for v in vj_keep) and (vj["coverage"].get(y, 0) >= 12 if vj else False)]
+    base_year = max(complete) if complete else max(y for y in ACTUAL_YEARS if any(v["year"] == y for v in vj_keep))
+    held = []
+    for y in plan_years:
+        for v in vj_keep:
+            if v["year"] != base_year:
+                continue
+            held.append({**{k: x for k, x in v.items() if k not in ("monthly", "monthsRecorded")},
+                         "year": y, "fyLabel": FY(y), "scenario": "Baseline projection"})
+    fleet = fleet + vj_keep + held
+    catalog = catalog + vj_cat_keep
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     payload = {
@@ -520,6 +767,30 @@ def main():
     print(f"   parallel powertrain launches resolved to the conservative option : {len(fixes['powertrain_options'])}")
     for x in fixes["powertrain_options"]:
         print(f"       · {x}")
+
+    if vj:
+        print(f"\n{'='*74}\nSECOND SOURCE · update dat india 27 july.xlsx (sheet VIJAY) — the full market")
+        print(f"{'='*74}")
+        print(f"   entities added (absent from the primary) : {len(added)}")
+        for a in added:
+            u25 = sum(v['sales'] for v in vj_keep if v['parent'] == a and v['year'] == 2025)
+            u26 = sum(v['sales'] for v in vj_keep if v['parent'] == a and v['year'] == 2026)
+            print(f"       {a[:44]:44} FY25-26 {u25:>10,}   FY26-27 {u26:>9,}")
+        print(f"   entities NOT taken (primary is authoritative) : "
+              f"{sorted({v['parent'] for v in vj_fleet} & primary_parents)}")
+        print(f"   BMW skipped (no volume in any year)")
+        print(f"\n   year-stamp repairs (each proven by the file's own Brand control totals):")
+        for r in vj["repairs"]:
+            print(f"       · {r}")
+        print(f"   unresolved reconciliation residual : "
+              f"{ {k: round(v) for k, v in vj['residual'].items()} if vj['residual'] else 'NONE — every parent-year reconciles exactly'}")
+        print(f"   stray months folded into the filing window : {len(vj['folded'])}")
+        for f in vj["folded"]:
+            print(f"       · {f}")
+        print(f"   month coverage after repair : {vj['coverage']}")
+        print(f"   model rows dropped (no volume) : {len(vj['dropped'])}")
+        print(f"\n   held flat across {plan_years} from FY{base_year}-{(base_year+1)%100} "
+              f"(tagged 'Baseline projection') : {len(held)} rows")
 
     print(f"\nFleet totals by year:")
     agg = defaultdict(lambda: {"u": 0, "uco2": 0.0, "umass": 0.0})
