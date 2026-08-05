@@ -63,6 +63,32 @@ for (const y of [2025, 2026, 2027, 2031, 2032]) {
   check('…and carries no monthly filing (a projection has filed nothing)', IN.filter((v) => ADDED_MAKERS.includes(v.parent) && v.year > 2026).every((v) => !v.monthly))
 }
 
+// ── VAHAN control: are our volumes right? ───────────────────────────────────
+// VAHAN is the official registry. It cannot compute compliance (no CO₂, no
+// kerb mass) but it CAN say whether the fleet volumes are credible. A published
+// figure is a hard check; anything derived from a rounded share is reported but
+// never allowed to fail the build.
+{
+  const { VAHAN, vahanUnits, VAHAN_SOURCE } = await import('../src/data/india_benchmark.js')
+  const y = VAHAN.find((v) => v.year === 2025)!
+  const ours = units(2025)
+  const drift = ours / y.total - 1
+  check('FY2025-26 market total is within 5% of VAHAN', Math.abs(drift) < 0.05,
+    `ours ${ours.toLocaleString()} vs VAHAN ${y.total.toLocaleString()} (${(drift * 100).toFixed(1)}%)`)
+  const mar = vahanUnits(2025, 'Maruti Suzuki India Limited')!
+  const oursMar = IN.filter((v) => v.parent === 'Maruti Suzuki India Limited' && v.year === 2025).reduce((a, v) => a + v.sales, 0)
+  check('Maruti is within 5% of its PUBLISHED VAHAN figure', !mar.derived && Math.abs(oursMar / mar.units - 1) < 0.05,
+    `ours ${oursMar.toLocaleString()} vs VAHAN ${mar.units.toLocaleString()} (${((oursMar / mar.units - 1) * 100).toFixed(1)}%)`)
+  check('the benchmark states it cannot compute compliance', /no CO₂ and no kerb mass/.test(VAHAN_SOURCE.note))
+  console.log('   VAHAN drift by maker (derived-from-share figures marked ~):')
+  for (const m of y.makers) {
+    const v = vahanUnits(2025, m.parent)
+    if (!v) { console.log(`     ${m.parent.slice(0, 42).padEnd(42)} VAHAN publishes growth only`); continue }
+    const o = IN.filter((x) => x.parent === m.parent && x.year === 2025).reduce((a, x) => a + x.sales, 0)
+    console.log(`     ${m.parent.slice(0, 42).padEnd(42)} ours ${o.toLocaleString().padStart(10)}  VAHAN ${v.derived ? '~' : ' '}${v.units.toLocaleString().padStart(10)}  ${((o / v.units - 1) * 100).toFixed(1)}%`)
+  }
+}
+
 // ── the plan years are REAL data, not a replay of a base year ────────────────
 {
   const sig = (y: number) => IN.filter((v) => v.year === y).map((v) => `${v.parent}|${v.model}|${v.sales}|${v.co2}`).sort().join(';')
