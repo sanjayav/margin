@@ -34,7 +34,17 @@ const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'
 
 interface Slot { month: number; label: string; calendarYear: number; p?: MonthPoint }
 
-export default function MonthlyCompliance({ points, unit, currency, fyLabel, unreported, selected, monthsInYear = 12 }: {
+/** Which part of the panel to render. The parts are placed separately so the
+ *  screen can interleave them with other panels on one canvas — an analyst
+ *  reads the maker view and the month view together, not by switching between
+ *  them. State is lifted so the parts stay coordinated: hovering a ledger row
+ *  still lights its month in the chart even though they are siblings. */
+export type MonthlySlot = 'stats' | 'chart' | 'ledger' | 'all'
+
+export default function MonthlyCompliance({
+  points, unit, currency, fyLabel, unreported, selected, monthsInYear = 12,
+  slot = 'all', view: viewProp, onView, hover: hoverProp, onHover,
+}: {
   points: MonthPoint[]
   unit: string
   currency: string
@@ -46,12 +56,21 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
    *  headline above it is reading */
   selected?: number | null
   monthsInYear?: number
+  slot?: MonthlySlot
+  view?: 'gap' | 'position'
+  onView?: (v: 'gap' | 'position') => void
+  hover?: number | null
+  onHover?: (i: number | null) => void
 }) {
-  const [h, setH] = useState<number | null>(null)
+  const [hLocal, setHLocal] = useState<number | null>(null)
   // 'gap' answers "how did each month do" — every month against its own target,
   // which is the only way months compare. 'position' answers "where do we
   // stand" — the YTD line against the limit.
-  const [view, setView] = useState<'gap' | 'position'>('gap')
+  const [viewLocal, setViewLocal] = useState<'gap' | 'position'>('gap')
+  const h = hoverProp !== undefined ? hoverProp : hLocal
+  const setH = onHover ?? setHLocal
+  const view = viewProp ?? viewLocal
+  const setView = onView ?? setViewLocal
   if (!points.length) return null
 
   const startIdx = MO.indexOf(points[0].label)
@@ -112,10 +131,12 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
     </div>
   )
 
+  const show = (k: MonthlySlot) => slot === 'all' || slot === k
+
   return (
     <div>
       {/* ── headline band ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-b border-ink-100/[0.08] pb-5 md:grid-cols-3 xl:grid-cols-5">
+      {show('stats') && <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-b border-ink-100/[0.08] pb-5 md:grid-cols-3 xl:grid-cols-5">
         <Stat label="Filed so far"
           value={<>{filed}<span className="text-[15px] font-semibold text-ink-400">/{monthsInYear}</span></>}
           sub={<>{fyLabel} · through {last.label} {last.calendarYear}</>} />
@@ -145,10 +166,10 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── narrative: what the year actually says ────────────────────────── */}
-      <p className="mt-4 max-w-5xl text-[12.5px] leading-relaxed text-ink-300">
+      {show('stats') && <><p className="mt-4 max-w-5xl text-[12.5px] leading-relaxed text-ink-300">
         {over.length === filed
           ? <><b className="text-ink-100">Every filed month sat over its target.</b>{' '}</>
           : over.length === 0
@@ -165,9 +186,10 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
           </b> than the opening three.{' '}</>
         )}
         {!full && <span className="text-ink-500">{monthsInYear - filed} months still to file.</span>}
-      </p>
+      </p></>}
 
       {/* ── chart ─────────────────────────────────────────────────────────── */}
+      {show('chart') && <>
       <div className="mt-5 flex items-end justify-between gap-4">
         <span className="max-w-2xl text-[11px] leading-snug text-ink-500">
           {isGap
@@ -333,8 +355,10 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
         {!full && <span className="flex items-center gap-1.5"><i className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: AXIS, opacity: 0.5 }} />not yet filed</span>}
       </div>
 
+      </>}
+
       {/* ── the ledger: every month of the year, filed or not ─────────────── */}
-      <div className="mt-5 -mx-1 overflow-x-auto">
+      {show('ledger') && <><div className="mt-5 -mx-1 overflow-x-auto">
         <table className="w-full min-w-[780px] border-collapse text-[11.5px]">
           <thead>
             <tr className="border-b border-ink-100/20 text-[9.5px] uppercase tracking-[0.07em] text-ink-500">
@@ -428,7 +452,7 @@ export default function MonthlyCompliance({ points, unit, currency, fyLabel, unr
         sales-weighted average from the first month, so it lands exactly on the annual figure once the year
         is fully filed.
         {unreported ? ` ${fmtInt(unreported)} registrations in this year carry no monthly split at source and sit outside this view.` : ''}
-      </p>
+      </p></>}
     </div>
   )
 }

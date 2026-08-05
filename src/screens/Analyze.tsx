@@ -326,7 +326,10 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   const [showTrails, setShowTrails] = useState(false)
   // Which axis the master chart is cut on: WHO against the line, or WHEN the
   // year moved. One card, because they are the same question.
-  const [axis, setAxis] = useState<'maker' | 'month'>('maker')
+  // shared by the month chart and the month ledger so they stay coordinated
+  // even though they are siblings on the canvas
+  const [monthView, setMonthView] = useState<'gap' | 'position'>('gap')
+  const [monthHover, setMonthHover] = useState<number | null>(null)
   const filedMonths = useMemo(() => (actuals ? monthsFiled(c.raw, scenario.year) : 0), [actuals, c.raw, scenario.year])
   const trails = useMemo(() => {
     if (!actuals || !showTrails || filedMonths < 2) return undefined
@@ -352,7 +355,6 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
   // the user switches year to one that has not, fall back rather than render an
   // empty frame.
   const canMonths = actuals && monthly.points.length > 0
-  const axisEff: 'maker' | 'month' = canMonths ? axis : 'maker'
 
   // Chart measure control (S&P cube convention: the analyst picks the encoding).
   const [colorMode, setColorMode] = useState<'auto' | 'status' | 'powertrain'>('auto')
@@ -529,31 +531,55 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         <Stat className="rise [animation-delay:240ms]" label={pack.massLabel} value={`${fmtInt(massA)}`} sub="kg average" />
       </div>
 
-      {/* ── THE MASTER CHART ─────────────────────────────────────────────────
-          One frame, two axes of the same question: WHO is where against the
-          line (manufacturers, cross-sectional) and WHEN the year moved (months,
-          time-series). They were two cards asking one question; merging them
-          means the controls, the year badge and the drill scope are shared and
-          can never disagree. */}
+      {/* ── THE MASTER PANEL ─────────────────────────────────────────────────
+          One canvas, read top to bottom, nothing hidden behind a switch:
+            · the period's headline and what the year says, in words
+            · WHO sits where against the line (manufacturers)
+            · WHEN the year moved (every month against its own target)
+            · the month ledger underneath both
+          They are the same question from two sides, so they share one frame:
+          the drill scope, the reporting period and the regime label are one
+          object and the panels can never disagree about what is on screen.
+          Hover is shared too — a ledger row lights its month in the chart. */}
       <Section className="rise [animation-delay:300ms] scn-lightcard"
-        title={axisEff === 'month'
-          ? `${node.label} · month by month`
-          : chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`}
+        title={`${node.label} · ${pack.id === 'IN' ? `FY ${scenario.year}-${(scenario.year + 1) % 100}` : scenario.year}`}
+        subtitle={periodLabel !== String(scenario.year) ? `reading ${periodLabel}` : undefined}
         right={
-        <span className="flex items-center gap-3">
-          {canMonths && (
-            <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5"
-              title="Makers = who sits where against the line, this period. Months = how the year has filed, month by month. Same question, two axes.">
-              {(['maker', 'month'] as const).map((a) => (
-                <button key={a} data-testid={`chart-axis-${a}`} onClick={() => setAxis(a)}
-                  className={`rounded-md px-2.5 py-0.5 text-[10px] font-bold transition ${axisEff === a ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-100'}`}>
-                  {a === 'maker' ? 'Makers' : 'Months'}
-                </button>
-              ))}
-            </span>
-          )}
-          {axisEff === 'maker' && (
-            <>
+          <span className="flex items-center gap-3">
+            {canMonths && (
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+                monthly.points[monthly.points.length - 1].ytdGap > 0
+                  ? 'border-danger/30 bg-danger/10 text-danger' : 'border-safe/30 bg-safe/10 text-safe'}`}>
+                YTD {monthly.points[monthly.points.length - 1].ytdGap > 0 ? 'over' : 'under'} the line
+              </span>
+            )}
+            {pack.regimeFor && (() => {
+              const r = pack.regimeFor(scenario.year)
+              return (
+                <span className={`text-[10px] font-bold uppercase tracking-wide ${r.draft ? 'text-warn' : 'text-safe'}`}>
+                  {r.name}{r.draft ? ' · draft' : ''}{r.cycle ? ` · ${r.cycle}` : ''}
+                </span>
+              )
+            })()}
+          </span>
+        }>
+
+        {/* period headline + the sentence the year writes */}
+        {canMonths && (
+          <MonthlyCompliance slot="stats" points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
+            fyLabel={monthly.fyLabel} unreported={monthly.unreported} selected={scope.through} />
+        )}
+
+        {/* ── panel 1 · who sits where against the line ── */}
+        <div className={canMonths ? 'mt-6 border-t border-ink-100/[0.08] pt-5' : ''}>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div>
+              <h4 className="text-[13px] font-bold text-ink-100">
+                {chartView === 'gap' ? `${sectionLabel} · gap to the line` : `${sectionLabel} vs the limit`}
+              </h4>
+              <p className="text-[11px] text-ink-500">{hint}</p>
+            </div>
+            <span className="flex items-center gap-2.5">
               <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5" title="Line = the classic mass-indexed chart. Gap = distance to the line as the axis, so under the line is literally below zero, and gaps compare across masses.">
                 {(['line', 'gap'] as const).map((v) => (
                   <button key={v} data-testid={`chart-view-${v}`} onClick={() => setChartView(v)}
@@ -579,47 +605,35 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
                   </button>
                 ))}
               </span>
-              <span className="hidden items-center gap-2 text-[11px] text-ink-500 md:flex"><Icon name="scatter" size={12} /> {hint}</span>
-            </>
-          )}
-          {axisEff === 'month' && (
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold ${
-              monthly.points[monthly.points.length - 1].ytdGap > 0
-                ? 'border-danger/30 bg-danger/10 text-danger' : 'border-safe/30 bg-safe/10 text-safe'}`}>
-              YTD {monthly.points[monthly.points.length - 1].ytdGap > 0 ? 'over' : 'under'} the line
             </span>
+          </div>
+          {lastDrag && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-brand/25 bg-brand/[0.06] px-3 py-1.5 text-[11.5px]">
+              <Icon name="sliders" size={13} className="text-brand" />
+              <span className="text-ink-200">Applied to <b>{lastDrag.label.split(' ')[0]}</b>: <span className="num font-semibold">{lastDrag.desc}</span>. Scoped levers, visible in the rail.</span>
+              <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
+            </div>
           )}
-        </span>
-      }>
-        {lastDrag && axisEff === 'maker' && (
-          <div className="mb-2 flex items-center gap-2 rounded-xl border border-brand/25 bg-brand/[0.06] px-3 py-1.5 text-[11.5px]">
-            <Icon name="sliders" size={13} className="text-brand" />
-            <span className="text-ink-200">Applied to <b>{lastDrag.label.split(' ')[0]}</b>: <span className="num font-semibold">{lastDrag.desc}</span>. Scoped levers, visible in the rail.</span>
-            <button data-testid="drag-undo" onClick={undoDrag} className="ml-auto font-bold text-brand hover:underline">Undo</button>
+          <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={340} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1}
+            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} trails={trails} />
+        </div>
+
+        {/* ── panel 2 · when the year moved ── */}
+        {canMonths && (
+          <div className="mt-6 border-t border-ink-100/[0.08] pt-5">
+            <h4 className="text-[13px] font-bold text-ink-100">Month by month · every month against its own target</h4>
+            <MonthlyCompliance slot="chart" points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
+              fyLabel={monthly.fyLabel} unreported={monthly.unreported} selected={scope.through}
+              view={monthView} onView={setMonthView} hover={monthHover} onHover={setMonthHover} />
           </div>
         )}
-        {axisEff === 'month' ? (
-          <MonthlyCompliance points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
-            fyLabel={monthly.fyLabel} unreported={monthly.unreported} selected={scope.through} />
-        ) : (
-          <div className="relative">
-            <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1}
-              ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} trails={trails} />
-            {/* which year the chart is showing — always in the chart itself, with
-                the governing regime + test cycle when the pack knows them */}
-            <div data-testid="chart-year-badge" className="pointer-events-none absolute right-3 top-1.5 select-none text-right">
-              <div className="dnum text-[26px] font-bold leading-none text-ink-100/85">
-                {pack.id === 'IN' ? `FY ${scenario.year}-${(scenario.year + 1) % 100}` : scenario.year}
-              </div>
-              {pack.regimeFor && (() => {
-                const r = pack.regimeFor(scenario.year)
-                return (
-                  <div className={`mt-0.5 text-[9.5px] font-bold uppercase tracking-wide ${r.draft ? 'text-warn' : 'text-safe'}`}>
-                    {r.name}{r.draft ? ' · draft' : ''}{r.cycle ? ` · ${r.cycle}` : ''}
-                  </div>
-                )
-              })()}
-            </div>
+
+        {/* ── the ledger under both ── */}
+        {canMonths && (
+          <div className="mt-5 border-t border-ink-100/[0.08] pt-1">
+            <MonthlyCompliance slot="ledger" points={monthly.points} unit={pack.metricUnit} currency={pack.currency}
+              fyLabel={monthly.fyLabel} unreported={monthly.unreported} selected={scope.through}
+              hover={monthHover} onHover={setMonthHover} />
           </div>
         )}
       </Section>
