@@ -196,6 +196,27 @@ for (const y of [2025, 2026, 2027, 2031, 2032]) {
     }))
   check('scoping a year with no monthly filing yields nothing rather than the whole year',
     scopeToMonth(IN, 2030, { through: 1, mode: 'ytd' }).filter((v) => v.year === 2030).length === 0)
+
+  // The chart's monthly trajectory is one per-month drill tree per filed month.
+  // Each maker that files monthly must appear in every month, or its path would
+  // silently break into disconnected pieces.
+  {
+    const { buildDrillTree } = await import('../src/engine/engine.js')
+    const filed = monthsFiled(IN, 2025)
+    const perMonth = Array.from({ length: filed }, (_, i) =>
+      buildDrillTree(scopeToMonth(IN, 2025, { through: i + 1, mode: 'month' }), pack, base(2025), {}))
+    const names = perMonth.map((t) => new Set((t.children ?? []).filter((c) => c.rawUnits > 0 && c.avgMass > 0).map((c) => c.label)))
+    const filers = [...new Set(IN.filter((v) => v.year === 2025 && v.monthly?.length).map((v) => v.pool || v.parent))]
+    check('every monthly filer appears in all 12 monthly trees (an unbroken path)',
+      filers.every((f) => names.every((s) => s.has(f))), `${filers.length} filers · ${filed} months`)
+    check('a maker with no monthly split never appears in a monthly tree',
+      names.every((s) => !s.has('Build Your Dreams')))
+    // the trajectory must actually move, or drawing it says nothing
+    const mg = perMonth.map((t) => (t.children ?? []).find((c) => c.label === 'MG Motor')!)
+    const spread = Math.max(...mg.map((c) => c.avgMetric)) - Math.min(...mg.map((c) => c.avgMetric))
+    check('MG’s monthly trajectory has real movement to draw', spread > 1,
+      `${Math.min(...mg.map((c) => c.avgMetric)).toFixed(2)} → ${Math.max(...mg.map((c) => c.avgMetric)).toFixed(2)} L/100km across the year`)
+  }
 }
 
 // ── parallel powertrain launches ────────────────────────────────────────────

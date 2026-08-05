@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import type { Aggregate, Scenario, Vehicle } from '../engine/types'
-import { aggregate, applyScenario, buildDrillTree, buildTree, monthlyCompliance, scopeToMonth, unscopedVolume, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
+import { aggregate, applyScenario, buildDrillTree, buildTree, monthlyCompliance, monthsFiled, scopeToMonth, unscopedVolume, variantKey, fmtInt, fmtMoney, fmtNum, threeYearAverage } from '../engine/engine'
 import type { MonthScope } from '../engine/engine'
 import LimitChart, { type ChartPoint, type DragConfig } from '../components/LimitChart'
 import PowertrainBreakdown from '../components/PowertrainBreakdown'
@@ -317,6 +317,34 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
     return scope.mode === 'month' ? `${m} ${scenario.year}` : `${scenario.year} · through ${m}`
   }, [scoped, scope, scenario.year, pack])
 
+  // ── monthly trajectory (the connected-scatter convention) ─────────────────
+  // A scatter shows a position; a trail shows a DIRECTION. Each entity on the
+  // chart is traced through the months it has filed, so you read who is moving
+  // down the page (getting cleaner) from who is drifting up or right (heavier).
+  // Each point is that month ALONE — a cumulative trail barely moves after the
+  // first months, since it is anchored by everything before it.
+  const [showTrails, setShowTrails] = useState(false)
+  const filedMonths = useMemo(() => (actuals ? monthsFiled(c.raw, scenario.year) : 0), [actuals, c.raw, scenario.year])
+  const trails = useMemo(() => {
+    if (!actuals || !showTrails || filedMonths < 2) return undefined
+    const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const nm = (i: number) => MO[((pack.fiscalYearStartMonth ?? 1) - 1 + i) % 12]
+    const chartPath = level === 4 ? drill.slice(0, 3) : drill
+    const map = new Map<string, { mass: number; metric: number; label: string; units: number }[]>()
+    for (let mth = 1; mth <= filedMonths; mth++) {
+      const t = buildDrillTree(scopeToMonth(c.raw, scenario.year, { through: mth, mode: 'month' }), pack, scenario, overrides)
+      for (const ch of nodeAt(t, chartPath).children ?? []) {
+        if (ch.rawUnits <= 0 || ch.avgMass <= 0) continue
+        const arr = map.get(ch.label) ?? []
+        arr.push({ mass: ch.avgMass, metric: ch.avgMetric, label: nm(mth - 1), units: ch.rawUnits })
+        map.set(ch.label, arr)
+      }
+    }
+    // a single point is a dot, not a trajectory
+    for (const [k, v] of map) if (v.length < 2) map.delete(k)
+    return map.size ? map : undefined
+  }, [actuals, showTrails, filedMonths, c.raw, scenario, pack, overrides, drill, level])
+
   // Chart measure control (S&P cube convention: the analyst picks the encoding).
   const [colorMode, setColorMode] = useState<'auto' | 'status' | 'powertrain'>('auto')
   const colorByEff = colorMode === 'auto' ? colorBy : colorMode
@@ -503,6 +531,15 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
               </button>
             ))}
           </span>
+          {filedMonths >= 2 && (
+            <button onClick={() => setShowTrails((v) => !v)}
+              title={`Trace each ${sectionLabel.toLowerCase().replace(/s$/, '')} through the ${filedMonths} months filed. Each point is that month alone, so the path shows direction — down the page is cleaner, right is heavier.`}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold transition ${
+                showTrails ? 'border-brand/40 bg-brand/[0.08] text-brand' : 'border-black/[0.06] bg-black/[0.03] text-ink-500 hover:text-ink-100'}`}>
+              <Icon name="trending" size={12} />
+              Monthly path
+            </button>
+          )}
           <span className="flex items-center gap-0.5 rounded-lg bg-black/[0.04] p-0.5">
             {(['auto', 'status', 'powertrain'] as const).map((m) => (
               <button key={m} onClick={() => setColorMode(m)}
@@ -523,7 +560,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         )}
         <div className="relative">
           <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={360} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1}
-            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} />
+            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} trails={trails} />
           {/* which year the chart is showing — always in the chart itself, with
               the governing regime + test cycle when the pack knows them */}
           <div data-testid="chart-year-badge" className="pointer-events-none absolute right-3 top-1.5 select-none text-right">

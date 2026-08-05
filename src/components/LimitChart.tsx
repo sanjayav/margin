@@ -81,14 +81,21 @@ interface Props {
   /** Override the line's pill label. China isn't a pass/fail limit — the line is
    *  the CAFC target (达标值 · the zero-credit boundary), so it's relabelled. */
   limitLabel?: string
+  /** Monthly trajectory per point key, oldest → newest (the connected-scatter
+   *  convention). A scatter shows a position; the trail shows a DIRECTION —
+   *  down the page is cleaner, right is heavier. Each entry is that month
+   *  ALONE, so the path actually moves. */
+  trails?: Map<string, TrailPoint[]>
 }
+
+export interface TrailPoint { mass: number; metric: number; label: string; units: number }
 
 /**
  * Fully custom SVG chart. The limit line rises with mass; the fleet sits as a
  * marker. Below the line is safe (green), above means a fine (red). Everything
  * re-renders instantly when the scenario changes — no animation gate.
  */
-export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine, limitLabel }: Props) {
+export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine, limitLabel, trails }: Props) {
   const [hover, setHover] = useState<string | null>(null)
   const [logoFailed, setLogoFailed] = useState<Set<string>>(new Set())
   const failLogo = (key: string) => setLogoFailed((prev) => { const n = new Set(prev); n.add(key); return n })
@@ -107,6 +114,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
   const gap = view === 'gap'
   const { xMin, xMax, yLo, yHi, line } = useMemo(() => {
     const masses = points.map((p) => p.mass).filter((x) => x > 0)
+    if (trails) for (const tp of trails.values()) for (const q of tp) if (q.mass > 0) masses.push(q.mass)
     const xMin = Math.min(...masses, 1000) - 120
     const xMax = Math.max(...masses, 2000) + 120
     const samples = 40
@@ -118,6 +126,8 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     const T = (mass: number, v: number) => (gap ? v - limitAt(mass) : v)
     const vals: number[] = line.map((s) => T(s.mass, s.limit))
     for (const p of points) if (p.mass > 0) vals.push(T(p.mass, p.metric))
+    // trail points stretch the domain too, or a path would run off the plot
+    if (trails) for (const tp of trails.values()) for (const q of tp) if (q.mass > 0) vals.push(T(q.mass, q.metric))
     for (const g of ghosts ?? []) vals.push(T(xMin, g.limitAt(xMin)), T(xMax, g.limitAt(xMax)))
     if (corridor) vals.push(T(xMin, corridor.lo(xMin)), T(xMax, corridor.lo(xMax)), T(xMin, corridor.hi(xMin)), T(xMax, corridor.hi(xMax)))
     let yLo = gap ? Math.min(0, ...vals) : 0
@@ -126,7 +136,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     yHi += span * 0.16
     if (gap) yLo -= span * 0.12
     return { xMin, xMax, yLo, yHi, line }
-  }, [points, limitAt, ghosts, corridor, gap])
+  }, [points, limitAt, ghosts, corridor, gap, trails])
 
   const T = (mass: number, v: number) => (gap ? v - limitAt(mass) : v)
   const sx = (mass: number) => m.l + ((mass - xMin) / (xMax - xMin)) * iw
@@ -352,6 +362,56 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
             </g>
           )
         })()}
+
+        {/* monthly trajectory — drawn BEHIND the bubbles so the current position
+            always reads first. Older months fade, so the eye follows the path
+            forward without needing a legend. */}
+        {trails && [...trails.entries()].map(([key, tp]) => {
+          const pt = points.find((q) => q.key === key)
+          if (!pt || tp.length < 2) return null
+          const dim = hover && hover !== key
+          const on = hover === key
+          const statusColor = pt.status === 'fine' ? '#ff5d6c' : pt.status === 'compliant' ? '#3ddc97' : pt.status === 'exempt' ? '#ffb454' : '#8C8273'
+          const col = colorBy === 'powertrain' ? (PT_COLORS[pt.powertrain ?? ''] ?? '#8C8273') : statusColor
+          const xy = tp.map((q) => ({ x: sx(q.mass), y: syAt(q.mass, q.metric), q }))
+          const last = xy.length - 1
+          // How far the entity actually travelled, in pixels. A maker whose mix
+          // barely moves produces a path a few pixels long — annotating that
+          // just collides with its own bubble, so the labelling scales with the
+          // journey: short paths stay a quiet cluster until hovered.
+          const span = Math.max(
+            Math.max(...xy.map((v) => v.x)) - Math.min(...xy.map((v) => v.x)),
+            Math.max(...xy.map((v) => v.y)) - Math.min(...xy.map((v) => v.y)),
+          )
+          const showRing = on || span > 14
+          const showStartLabel = on || span > 34
+          return (
+            <g key={`tr-${key}`} opacity={dim ? 0.1 : 1} style={{ transition: 'opacity .15s' }} className="pointer-events-none">
+              {/* segment-by-segment opacity ramp: the path fades in toward the
+                  present, so direction of travel reads without an arrowhead */}
+              {xy.slice(0, -1).map((v, i) => (
+                <line key={i} x1={v.x} y1={v.y} x2={xy[i + 1].x} y2={xy[i + 1].y}
+                  stroke={col} strokeWidth={on ? 2.4 : 1.6} strokeLinecap="round"
+                  strokeOpacity={(on ? 0.35 : 0.2) + ((on ? 0.6 : 0.42) * (i + 1)) / last} />
+              ))}
+              {xy.slice(0, -1).map((v, i) => (
+                <circle key={`d${i}`} cx={v.x} cy={v.y} r={on ? 3 : 2.1} fill={col}
+                  fillOpacity={0.2 + (0.6 * i) / last} stroke="#FBF7EF" strokeWidth="0.9" />
+              ))}
+              {/* where the year started — a hollow ring, so the eye has an anchor */}
+              {showRing && (
+                <circle cx={xy[0].x} cy={xy[0].y} r={on ? 4.5 : 3.4} fill="#FBF7EF" stroke={col} strokeWidth={on ? 2 : 1.4} strokeOpacity="0.75" />
+              )}
+              {showStartLabel && (
+                <text x={xy[0].x} y={xy[0].y - (on ? 9 : 7)} textAnchor="middle" fontSize={on ? 9 : 8}
+                  fontWeight="700" fill={col} fillOpacity={on ? 1 : 0.7} className="num">{xy[0].q.label}</text>
+              )}
+              {on && xy.slice(1, -1).map((v, i) => (
+                <text key={`l${i}`} x={v.x} y={v.y - 7} textAnchor="middle" fontSize="8.5" fontWeight="600" fill={col} className="num">{v.q.label}</text>
+              ))}
+            </g>
+          )
+        })}
 
         {/* points */}
         {points.map((p) => {
