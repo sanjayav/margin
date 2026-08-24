@@ -26,25 +26,41 @@
 // powertrain gets an explicit slot or falls back to OTHER, never a generated hue.
 // ───────────────────────────────────────────────────────────────────────────
 
-/** Fill colour per powertrain — the identity colour. */
+/** Fill colour per powertrain — the identity colour.
+ *
+ *  DARK-FIRST. The product's surfaces are warm near-black, and a palette
+ *  validated against cream is not valid against #17140F — three of the previous
+ *  slots sat outside the dark lightness band and glared. This set is re-derived
+ *  and re-validated on the real surface:
+ *
+ *    lightness band  PASS (all six inside L 0.48-0.67)
+ *    chroma floor    PASS
+ *    CVD separation  PASS (worst adjacent deltaE 10.1 deutan)
+ *    normal vision   PASS (worst adjacent deltaE 17.8)
+ *    contrast        PASS (all six >= 3:1 on #17140F)
+ *
+ *  MHEV was deliberately pulled toward olive: at the Okabe-Ito amber it sat
+ *  deltaE 14.7 from ICE red, and those two are adjacent in the carbon order. */
 export const PT_COLORS: Record<string, string> = {
-  BEV: '#009E73',
-  FCEV: '#56B4E9',
-  PHEV: '#0072B2',
-  HEV: '#CC79A7',
-  MHEV: '#E69F00',
-  ICE: '#B4331F',
+  BEV: '#00A87A',
+  FCEV: '#3D93C4',
+  PHEV: '#2E86C8',
+  HEV: '#B85C8A',
+  MHEV: '#B08E00',
+  ICE: '#C4402A',
 }
 
 /** A darker step of the same hue, for mark strokes and text on tinted chips.
  *  This is what carries the contrast relief the validator asks for. */
+/** On dark, the companion step goes LIGHTER — it is a highlight, not a shadow.
+ *  Used for text on a tinted chip and for the hover state of a mark. */
 export const PT_RING: Record<string, string> = {
-  BEV: '#00714F',
-  FCEV: '#2E7FAE',
-  PHEV: '#00537F',
-  HEV: '#9C5480',
-  MHEV: '#A87400',
-  ICE: '#872516',
+  BEV: '#4FD3AC',
+  FCEV: '#7CBEE4',
+  PHEV: '#6FB0E4',
+  HEV: '#DA92B7',
+  MHEV: '#DCB63C',
+  ICE: '#E4795F',
 }
 
 /** Powertrain names that are the same THING as a canonical slot. Kept explicit
@@ -97,10 +113,10 @@ export const ptRank = (p: string) => {
 // labels), never colour alone — which is what carries the remaining CVD
 // separation between compliant and fine.
 export const STATUS = {
-  compliant: '#0E9F6E',
+  compliant: '#0FA97C',
   fine: '#E0484D',
   exempt: '#8C8273',
-  'no-sales': '#B3A892',
+  'no-sales': '#6F675C',
 } as const
 
 /** Warning/attention — a state, not a series, and never a chart category. */

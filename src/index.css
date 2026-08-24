@@ -18,6 +18,16 @@
    ink/brand tokens are untouched; these only feed shadcn's border/bg/primary/… */
 @layer base {
   :root {
+    /* Dark-first, warm. The rebuilt modules read these; the legacy screens keep
+       their own values until they are retired. */
+    --aire-base: #100E0C;
+    --aire-raised: #17140F;
+    --aire-high: #1E1A16;
+    --aire-hair: rgba(255,255,255,0.07);
+    --aire-text: #F6F2EB;
+    --aire-text-2: #B8AEA0;
+    --aire-text-3: #7E756A;
+    --aire-surface: var(--aire-base);
     --background: 41 60% 96%;        /* #FBF7EF warm cream */
     --foreground: 40 20% 9%;         /* #1C1812 */
     --card: 48 50% 99%;              /* #FFFEFB */
@@ -333,3 +343,13 @@ input[type="range"]::-moz-range-thumb {
 /* The assumptions rail is an analyst instrument — it has no meaning to a reader
    who is not moving levers, and hiding it gives the page back its width. */
 .board-mode [data-density="rail"] { display: none; }
+
+
+/* The rebuilt shell paints its own room. Scoped so the legacy screens are
+   untouched while both exist. */
+.aire-dark {
+  background: var(--aire-base);
+  color: var(--aire-text);
+}
+.aire-dark ::selection { background: rgba(232,34,59,0.28); }
+.aire-dark .hair { border-color: var(--aire-hair); }

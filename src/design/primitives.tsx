@@ -12,6 +12,7 @@
 import type { ReactNode } from 'react'
 import Icon, { type IconName } from '../components/Icon'
 import { STATUS } from '../lib/palette'
+import { SURFACE, LINE, TEXT, EASE, bezel } from './tokens'
 
 /* ── Metric band ──────────────────────────────────────────────────────────
    The one dark surface in the product. It is where the eye lands, and it
@@ -27,24 +28,29 @@ export function MetricBand({ eyebrow, value, unit, sentence, secondary, action, 
 }) {
   const hue = tone === 'bad' ? STATUS.fine : tone === 'good' ? STATUS.compliant : '#FFFFFF'
   return (
-    <section className="rounded-2xl px-8 py-7 text-white" style={{ background: '#1B1714' }}>
-      <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-white/40">{eyebrow}</div>
-      <div className="mt-4 flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+    <section className="relative overflow-hidden rounded-[20px] px-8 py-7"
+      style={{ background: SURFACE.ink, boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px ${LINE.hair}` }}>
+      {/* A single warm glow, off-centre. Depth, not decoration — it is the only
+          gradient in the product and it lives on the one surface that leads. */}
+      <div aria-hidden className="pointer-events-none absolute -right-24 -top-32 h-72 w-72 rounded-full blur-3xl"
+        style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.16), transparent 68%)' }} />
+      <div className="relative text-[10.5px] font-semibold uppercase tracking-[0.16em]" style={{ color: TEXT.muted }}>{eyebrow}</div>
+      <div className="relative mt-4 flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
         <div className="min-w-0">
           <div className="flex items-baseline gap-2.5">
             <span className="dnum font-display font-extrabold leading-[0.95] tracking-[-0.03em] tabular-nums"
               style={{ fontSize: 'clamp(34px,4vw,52px)', color: hue }}>{value}</span>
-            {unit && <span className="text-[13px] font-medium text-white/45">{unit}</span>}
+            {unit && <span className="text-[13px] font-medium" style={{ color: TEXT.muted }}>{unit}</span>}
           </div>
-          <p className="mt-3 max-w-[62ch] text-[13.5px] leading-[1.55] text-white/65">{sentence}</p>
+          <p className="mt-3 max-w-[62ch] text-[13.5px] leading-[1.6]" style={{ color: TEXT.secondary }}>{sentence}</p>
         </div>
         {!!secondary?.length && (
           <dl className="flex shrink-0 gap-9">
             {secondary.map((s) => (
               <div key={s.label}>
-                <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/35">{s.label}</dt>
+                <dt className="text-[10px] font-semibold uppercase tracking-[0.13em]" style={{ color: TEXT.muted }}>{s.label}</dt>
                 <dd className="dnum mt-1.5 text-[19px] font-bold tabular-nums leading-none"
-                  style={{ color: s.tone === 'bad' ? STATUS.fine : s.tone === 'good' ? STATUS.compliant : 'rgba(255,255,255,0.9)' }}>{s.value}</dd>
+                  style={{ color: s.tone === 'bad' ? STATUS.fine : s.tone === 'good' ? STATUS.compliant : TEXT.primary }}>{s.value}</dd>
               </div>
             ))}
           </dl>
@@ -52,8 +58,15 @@ export function MetricBand({ eyebrow, value, unit, sentence, secondary, action, 
       </div>
       {action && (
         <button onClick={action.onClick}
-          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-[13px] font-semibold text-white transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400">
-          {action.icon && <Icon name={action.icon} size={15} />}{action.label}
+          className="group relative mt-7 inline-flex items-center gap-2.5 rounded-full bg-brand py-2 pl-5 pr-2 text-[13px] font-semibold text-white transition-transform active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-400"
+          style={{ transitionTimingFunction: EASE }}>
+          {action.label}
+          {/* The trailing glyph gets its own well, flush with the pill's inner
+              edge, and shifts on hover — kinetic tension inside the control. */}
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-white/15 transition-transform duration-300 group-hover:translate-x-[2px]"
+            style={{ transitionTimingFunction: EASE }}>
+            <Icon name={action.icon ?? 'arrow-right'} size={13} />
+          </span>
         </button>
       )}
     </section>
@@ -72,8 +85,8 @@ export function Block({ title, hint, action, children }: {
     <section className="mt-12 first:mt-0">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 className="font-display text-[17px] font-bold tracking-[-0.01em] text-ink-100">{title}</h2>
-          {hint && <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">{hint}</p>}
+          <h2 className="font-display text-[17px] font-bold tracking-[-0.015em]" style={{ color: TEXT.primary }}>{title}</h2>
+          {hint && <p className="mt-1.5 max-w-[70ch] text-[12.5px] leading-relaxed" style={{ color: TEXT.muted }}>{hint}</p>}
         </div>
         {action}
       </div>
@@ -93,15 +106,15 @@ export function Figure({ label, value, unit, basis, tone = 'neutral', size = 'md
   tone?: 'good' | 'bad' | 'warn' | 'neutral'
   size?: 'md' | 'lg'
 }) {
-  const color = tone === 'bad' ? STATUS.fine : tone === 'good' ? STATUS.compliant : tone === 'warn' ? '#D98005' : '#1C1812'
+  const color = tone === 'bad' ? STATUS.fine : tone === 'good' ? STATUS.compliant : tone === 'warn' ? '#D9A21A' : TEXT.primary
   return (
     <div>
-      <div className="text-[10.5px] font-semibold uppercase tracking-[0.13em] text-ink-500">{label}</div>
+      <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em]" style={{ color: TEXT.muted }}>{label}</div>
       <div className="mt-2 flex items-baseline gap-1.5">
         <span className={`dnum font-bold tabular-nums leading-none tracking-[-0.02em] ${size === 'lg' ? 'text-[30px]' : 'text-[22px]'}`} style={{ color }}>{value}</span>
-        {unit && <span className="text-[11.5px] text-ink-500">{unit}</span>}
+        {unit && <span className="text-[11.5px]" style={{ color: TEXT.muted }}>{unit}</span>}
       </div>
-      <div className="mt-1.5 text-[11.5px] leading-snug text-ink-500">{basis}</div>
+      <div className="mt-1.5 text-[11.5px] leading-snug" style={{ color: TEXT.faint }}>{basis}</div>
     </div>
   )
 }
@@ -140,15 +153,16 @@ export function Table<T>({ columns, rows, rowKey, onRowClick, empty = 'Nothing t
   onRowClick?: (row: T) => void
   empty?: string
 }) {
-  if (!rows.length) return <p className="py-10 text-center text-[13px] text-ink-500">{empty}</p>
+  if (!rows.length) return <p className="py-10 text-center text-[13px]" style={{ color: TEXT.muted }}>{empty}</p>
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
         <thead>
           <tr>
             {columns.map((c) => (
-              <th key={c.key} style={{ width: c.width }}
-                className={`border-b border-black/[0.08] pb-2.5 pl-5 first:pl-0 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-500 ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
+              <th key={c.key}
+                style={{ borderBottom: `1px solid ${LINE.hair}`, color: TEXT.muted, width: c.width }}
+                className={`pb-2.5 pl-5 first:pl-0 text-[10.5px] font-semibold uppercase tracking-[0.12em] ${c.align === 'right' ? 'text-right' : 'text-left'}`}>
                 {c.header}
               </th>
             ))}
@@ -157,9 +171,11 @@ export function Table<T>({ columns, rows, rowKey, onRowClick, empty = 'Nothing t
         <tbody>
           {rows.map((r) => (
             <tr key={rowKey(r)} onClick={onRowClick ? () => onRowClick(r) : undefined}
-              className={`border-b border-black/[0.05] transition-colors ${onRowClick ? 'cursor-pointer hover:bg-black/[0.02]' : ''}`}>
+              style={{ borderBottom: `1px solid ${LINE.hair}` }}
+              className={`transition-colors ${onRowClick ? 'cursor-pointer hover:bg-white/[0.035]' : ''}`}>
               {columns.map((c) => (
-                <td key={c.key} className={`py-3 pl-5 first:pl-0 text-[13px] text-ink-200 ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
+                <td key={c.key} style={{ color: TEXT.secondary }}
+                  className={`py-3 pl-5 first:pl-0 text-[13px] ${c.align === 'right' ? 'text-right tabular-nums' : ''}`}>
                   {c.cell(r)}
                 </td>
               ))}
@@ -176,9 +192,9 @@ export function Table<T>({ columns, rows, rowKey, onRowClick, empty = 'Nothing t
    states where it came from. */
 export function Provenance({ source, vintage, detail }: { source: string; vintage: string; detail?: string }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-500">
-      <Icon name="shield" size={12} className="text-ink-400" />
-      <span className="font-medium text-ink-400">{source}</span>
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px]" style={{ color: TEXT.muted }}>
+      <Icon name="shield" size={12} className="opacity-60" />
+      <span className="font-medium" style={{ color: TEXT.secondary }}>{source}</span>
       <span aria-hidden>·</span>
       <span>{vintage}</span>
       {detail && <><span aria-hidden>·</span><span>{detail}</span></>}

@@ -4,7 +4,7 @@ import EUBrief from './screens/Brief'
 import EUOverview from './screens/Overview'
 import EUAnalyse from './screens/Analyse'
 import EUPlan from './screens/Plan'
-import Data from '../../screens/Data'
+import EUData from './screens/Data'
 import Pooling from '../../screens/Pooling'
 import CreditBook from '../../screens/CreditBook'
 import Pricing from '../../screens/Pricing'
@@ -41,6 +41,6 @@ export default defineMarket({
       value: () => null },
     creditbook: { hidden: true, id: 'creditbook', label: 'Headroom', icon: 'scale', purpose: 'Surplus and shortfall by manufacturer', component: CreditBook },
     pricing: { hidden: true, id: 'pricing', label: 'Pricing', icon: 'card', purpose: 'What compliance costs per car', component: Pricing },
-    data: { id: 'data', label: 'Data', icon: 'database', purpose: 'Every registration behind the numbers', component: Data },
+    data: { id: 'data', label: 'Data', icon: 'database', purpose: 'Every registration behind the numbers', component: EUData, ownsChrome: true },
   },
 })

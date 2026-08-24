@@ -71,11 +71,11 @@ export default function Answer({
   const color = TONE[tone]
 
   return (
-    <div className="rounded-xl border border-black/[0.07] bg-white/70">
+    <div className="rounded-xl border border-white/[0.07] bg-[#17140F]">
       {/* Layer 1 — the answer */}
       <div className={dense ? 'px-5 py-4' : 'px-6 py-5'}>
         {question && (
-          <div className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-ink-500">{question}</div>
+          <div className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.13em] text-[#7E756A]">{question}</div>
         )}
         <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
           <div className="min-w-0">
@@ -83,13 +83,13 @@ export default function Answer({
               <span className={`dnum font-display font-extrabold tabular-nums leading-none tracking-[-0.03em] ${dense ? 'text-[26px]' : 'text-[34px]'}`} style={{ color }}>
                 {value}
               </span>
-              {unit && <span className="text-[12px] text-ink-500">{unit}</span>}
+              {unit && <span className="text-[12px] text-[#7E756A]">{unit}</span>}
             </div>
-            <p className="mt-2.5 max-w-[68ch] text-[13px] leading-[1.6] text-ink-300">{sentence}</p>
+            <p className="mt-2.5 max-w-[68ch] text-[13px] leading-[1.6] text-[#B8AEA0]">{sentence}</p>
           </div>
           {action && (
             <button onClick={action.onClick}
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-ink-100 px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-ink-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[#F6F2EB] px-3.5 py-2 text-[12.5px] font-semibold text-[#100E0C] transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
               {action.icon && <Icon name={action.icon} size={14} />}{action.label}
             </button>
           )}
@@ -111,16 +111,16 @@ export default function Answer({
 
       {/* Layer 2 — the computation, in the order it happened */}
       {open === 'evidence' && hasEvidence && (
-        <div className="border-t border-black/[0.06] px-6 py-4">
+        <div className="border-t border-white/[0.07] px-6 py-4">
           <ol className="space-y-2.5">
             {evidence!.map((e, i) => (
               <li key={e.label} className="flex items-baseline gap-3">
-                <span className="dnum w-4 shrink-0 text-[10.5px] tabular-nums text-ink-600">{i + 1}</span>
+                <span className="dnum w-4 shrink-0 text-[10.5px] tabular-nums text-[#5A534A]">{i + 1}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="text-[12.5px] text-ink-300">{e.label}</span>
-                  {e.note && <span className="block text-[11.5px] leading-snug text-ink-500">{e.note}</span>}
+                  <span className="text-[12.5px] text-[#B8AEA0]">{e.label}</span>
+                  {e.note && <span className="block text-[11.5px] leading-snug text-[#7E756A]">{e.note}</span>}
                 </span>
-                <span className="dnum shrink-0 text-[12.5px] font-semibold tabular-nums text-ink-100">{e.value}</span>
+                <span className="dnum shrink-0 text-[12.5px] font-semibold tabular-nums text-[#F6F2EB]">{e.value}</span>
               </li>
             ))}
           </ol>
@@ -129,15 +129,15 @@ export default function Answer({
 
       {/* Layer 3 — provenance */}
       {open === 'provenance' && hasSources && (
-        <div className="border-t border-black/[0.06] px-6 py-4">
+        <div className="border-t border-white/[0.07] px-6 py-4">
           <ul className="space-y-2.5">
             {sources!.map((s) => (
               <li key={s.name} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11.5px]">
-                <Icon name="shield" size={11} className="text-ink-500" />
-                <span className="font-semibold text-ink-200">{s.name}</span>
-                {s.vintage && <><span className="text-ink-600" aria-hidden>·</span><span className="text-ink-500">{s.vintage}</span></>}
-                {s.ms != null && <><span className="text-ink-600" aria-hidden>·</span><span className="dnum tabular-nums text-ink-500">{s.ms} ms</span></>}
-                {s.authority && <span className="w-full pl-4 text-ink-500">{s.authority}</span>}
+                <Icon name="shield" size={11} className="text-[#7E756A]" />
+                <span className="font-semibold text-[#B8AEA0]">{s.name}</span>
+                {s.vintage && <><span className="text-[#5A534A]" aria-hidden>·</span><span className="text-[#7E756A]">{s.vintage}</span></>}
+                {s.ms != null && <><span className="text-[#5A534A]" aria-hidden>·</span><span className="dnum tabular-nums text-[#7E756A]">{s.ms} ms</span></>}
+                {s.authority && <span className="w-full pl-4 text-[#7E756A]">{s.authority}</span>}
               </li>
             ))}
           </ul>
@@ -150,10 +150,10 @@ export default function Answer({
 function Disclose({ on, onClick, icon, label, count }: { on: boolean; onClick: () => void; icon: IconName; label: string; count: number }) {
   return (
     <button onClick={onClick} aria-expanded={on}
-      className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-colors ${on ? 'text-ink-100' : 'text-ink-500 hover:text-ink-200'}`}>
+      className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold transition-colors ${on ? 'text-[#F6F2EB]' : 'text-[#7E756A] hover:text-[#B8AEA0]'}`}>
       <Icon name={icon} size={12} />
       {label}
-      <span className="dnum tabular-nums text-ink-600">({count})</span>
+      <span className="dnum tabular-nums text-[#5A534A]">({count})</span>
       <span aria-hidden className={`transition-transform ${on ? 'rotate-90' : ''}`}>›</span>
     </button>
   )

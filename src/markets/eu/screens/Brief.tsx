@@ -54,17 +54,17 @@ export default function EUBrief() {
     <Shell>
       <header className="mb-9">
         <div className="flex items-baseline justify-between gap-4">
-          <p className="text-[12.5px] text-ink-500">{pack.name} · {WHEN.format(new Date())}</p>
-          <p className="text-[12px] text-ink-500">
+          <p className="text-[12.5px] text-[#7E756A]">{pack.name} · {WHEN.format(new Date())}</p>
+          <p className="text-[12px] text-[#7E756A]">
             {fmtInt(tree.rawUnits)} registrations · {scenario.year}
           </p>
         </div>
-        <h1 className="font-display mt-3 text-[26px] font-bold leading-[1.15] tracking-[-0.025em] text-ink-100">
+        <h1 className="font-display mt-3 text-[26px] font-bold leading-[1.15] tracking-[-0.025em] text-[#F6F2EB]">
           {needsYou.length === 0
             ? 'Nothing needs you today.'
             : `${needsYou.length === 1 ? 'One thing needs' : `${needsYou.length} things need`} you today.`}
         </h1>
-        <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-ink-500">
+        <p className="mt-2 max-w-[62ch] text-[13.5px] leading-relaxed text-[#7E756A]">
           {needsYou.length === 0
             ? 'No manufacturer is over its target and nothing in the data or the regulation has moved. The position below is unchanged.'
             : 'Ranked by what it costs to leave alone. Each one opens into the figures behind it and a way to act.'}
@@ -88,9 +88,9 @@ export default function EUBrief() {
         </div>
       </Block>
 
-      <p className="mt-10 flex items-center gap-2 text-[12px] text-ink-500">
+      <p className="mt-10 flex items-center gap-2 text-[12px] text-[#7E756A]">
         <Icon name="spark" size={13} className="text-brand" />
-        Ask anything about this market — <button onClick={() => setScreen('copilot')} className="font-semibold text-ink-300 underline-offset-2 hover:underline">open AiRE</button>
+        Ask anything about this market — <button onClick={() => setScreen('copilot')} className="font-semibold text-[#B8AEA0] underline-offset-2 hover:underline">open AiRE</button>
       </p>
     </Shell>
   )
@@ -99,9 +99,9 @@ export default function EUBrief() {
 function Measure({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-500">{label}</div>
-      <div className="dnum mt-1.5 text-[24px] font-bold tabular-nums leading-none tracking-[-0.02em] text-ink-100">{value}</div>
-      <div className="mt-1.5 text-[11.5px] text-ink-500">{sub}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#7E756A]">{label}</div>
+      <div className="dnum mt-1.5 text-[24px] font-bold tabular-nums leading-none tracking-[-0.02em] text-[#F6F2EB]">{value}</div>
+      <div className="mt-1.5 text-[11.5px] text-[#7E756A]">{sub}</div>
     </div>
   )
 }

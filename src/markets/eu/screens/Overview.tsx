@@ -55,13 +55,13 @@ export default function EUOverview() {
       cell: (r) => (
         <span className="flex items-center gap-2.5">
           <BrandChip name={r.parent} size={20} />
-          <span className="truncate font-medium text-ink-100">{r.parent}</span>
+          <span className="truncate font-medium text-[#F6F2EB]">{r.parent}</span>
         </span>
       ),
     },
     { key: 'units', header: 'Registrations', align: 'right', cell: (r) => fmtInt(r.units) },
     { key: 'fleet', header: `Fleet ${pack.metricUnit}`, align: 'right', cell: (r) => fmtNum(r.metric, 1) },
-    { key: 'limit', header: 'Target', align: 'right', cell: (r) => <span className="text-ink-500">{fmtNum(r.limit, 1)}</span> },
+    { key: 'limit', header: 'Target', align: 'right', cell: (r) => <span className="text-[#7E756A]">{fmtNum(r.limit, 1)}</span> },
     {
       // The gap carries the state on three channels at once: the SIGN, the
       // colour and the arrow. A separate Status column repeating "Over the line"
@@ -83,7 +83,7 @@ export default function EUOverview() {
     },
     {
       key: 'fine', header: 'Exposure', align: 'right',
-      cell: (r) => <span className="font-semibold text-ink-100">{r.fine > 0 ? fmtMoney(r.fine, pack.currency) : '—'}</span>,
+      cell: (r) => <span className="font-semibold text-[#F6F2EB]">{r.fine > 0 ? fmtMoney(r.fine, pack.currency) : '—'}</span>,
     },
   ]
 
@@ -96,8 +96,8 @@ export default function EUOverview() {
         tone={exposure > 0 ? 'bad' : 'good'}
         sentence={over.length === 0
           ? <>Every manufacturer is under its target. There is no penalty at today's mix.</>
-          : <><b className="text-white/90">{over.length} of {makers.length}</b> manufacturers are over their target for {scenario.year}
-              {worst && <>, led by <b className="text-white/90">{worst.parent}</b> at {fmtMoney(worst.fine, pack.currency)}</>}.
+          : <><b className="text-[#F6F2EB]">{over.length} of {makers.length}</b> manufacturers are over their target for {scenario.year}
+              {worst && <>, led by <b className="text-[#F6F2EB]">{worst.parent}</b> at {fmtMoney(worst.fine, pack.currency)}</>}.
               {pooled.saved > 0 && <> Article 6 pooling already absorbs {fmtMoney(pooled.saved, pack.currency)} of it.</>}</>}
         secondary={[
           { label: 'Fleet', value: `${fmtNum(tree.avgMetric, 1)} ${pack.metricUnit}` },
@@ -156,7 +156,7 @@ export default function EUOverview() {
       <Block title="Where these numbers come from">
         <Provenance source={meta.source} vintage={meta.lastRefreshed ? `refreshed ${new Date(meta.lastRefreshed).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'bundled extract'}
           detail={pack.coverage.label} />
-        <p className="mt-3 max-w-[76ch] text-[12.5px] leading-relaxed text-ink-500">{pack.limitNote}</p>
+        <p className="mt-3 max-w-[76ch] text-[12.5px] leading-relaxed text-[#7E756A]">{pack.limitNote}</p>
       </Block>
     </div>
   )

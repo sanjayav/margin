@@ -37,18 +37,21 @@ describe('palette · one source of truth', () => {
 describe('palette · powertrain slots', () => {
   it('pins the validated hexes (change ⇒ re-run the CVD validator)', () => {
     expect(PT_COLORS).toEqual({
-      BEV: '#009E73', FCEV: '#56B4E9', PHEV: '#0072B2',
-      HEV: '#CC79A7', MHEV: '#E69F00', ICE: '#B4331F',
+      BEV: '#00A87A', FCEV: '#3D93C4', PHEV: '#2E86C8',
+      HEV: '#B85C8A', MHEV: '#B08E00', ICE: '#C4402A',
     })
   })
 
-  it('gives every slot a distinct fill and a distinct darker ring', () => {
+  it('gives every slot a distinct fill and a distinct companion step', () => {
     const fills = Object.values(PT_COLORS)
     expect(new Set(fills).size).toBe(fills.length)
     const lum = (h: string) => [1, 3, 5].reduce((a, i) => a + parseInt(h.slice(i, i + 2), 16), 0)
     for (const pt of PT_ORDER) {
       expect(ptRing(pt)).not.toBe(ptColor(pt))
-      expect(lum(ptRing(pt)), pt).toBeLessThan(lum(ptColor(pt)))
+      // On a dark surface the companion goes LIGHTER — it is a highlight, not a
+      // shadow. The inverse of the light-mode rule, and the reason this assertion
+      // flipped rather than being deleted.
+      expect(lum(ptRing(pt)), pt).toBeGreaterThan(lum(ptColor(pt)))
     }
   })
 

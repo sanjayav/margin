@@ -62,7 +62,7 @@ export default function EUPlan() {
       cell: (m) => (
         <span className="flex items-center gap-2.5">
           <BrandChip name={m.label} size={20} />
-          <span className="truncate font-medium text-ink-100">{m.label}</span>
+          <span className="truncate font-medium text-[#F6F2EB]">{m.label}</span>
         </span>
       ),
     },
@@ -71,13 +71,13 @@ export default function EUPlan() {
       key: 'g', header: 'Gap', align: 'right',
       cell: (m) => <span className="font-semibold" style={{ color: m.gap > 0 ? '#E0484D' : '#0E9F6E' }}>{m.gap > 0 ? '+' : ''}{fmtNum(m.gap, 1)}</span>,
     },
-    { key: 'f', header: 'Exposure', align: 'right', cell: (m) => <span className="font-semibold text-ink-100">{m.fine > 0 ? fmtMoney(m.fine, pack.currency) : '—'}</span> },
+    { key: 'f', header: 'Exposure', align: 'right', cell: (m) => <span className="font-semibold text-[#F6F2EB]">{m.fine > 0 ? fmtMoney(m.fine, pack.currency) : '—'}</span> },
   ]
 
   return (
     <Shell inspectorTitle="The plan" inspector={<PlanInspector focus={focus} pack={pack} pool={pool} meta={meta} />}>
-      <h1 className="font-display text-[22px] font-bold tracking-[-0.02em] text-ink-100">Plan</h1>
-      <p className="mt-1.5 max-w-[64ch] text-[13px] leading-relaxed text-ink-500">
+      <h1 className="font-display text-[22px] font-bold tracking-[-0.02em] text-[#F6F2EB]">Plan</h1>
+      <p className="mt-1.5 max-w-[64ch] text-[13px] leading-relaxed text-[#7E756A]">
         Pick who you are planning for, then choose an outcome. The engine proposes the changes that reach it and prices
         each one — nothing is applied until you approve it.
       </p>
@@ -91,21 +91,21 @@ export default function EUPlan() {
             <ul className="space-y-2">
               {routes.map((r) => (
                 <li key={r.type}
-                  className={`rounded-xl border px-4 py-3.5 ${r.best ? 'border-black/[0.14] bg-white' : 'border-black/[0.07] bg-white/60'}`}>
+                  className={`rounded-xl border px-4 py-3.5 ${r.best ? 'border-white/[0.12] bg-[#1E1A16]' : 'border-white/[0.07] bg-[#17140F]'}`}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink-100">
-                      <Icon name={r.type === 'pool' ? 'handshake' : r.type === 'credits' ? 'card' : 'alert'} size={14} className="text-ink-500" />
+                    <span className="flex items-center gap-2 text-[13.5px] font-semibold text-[#F6F2EB]">
+                      <Icon name={r.type === 'pool' ? 'handshake' : r.type === 'credits' ? 'card' : 'alert'} size={14} className="text-[#7E756A]" />
                       {r.label}
-                      {r.best && <span className="rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-ink-100 ring-1 ring-black/15">Cheapest</span>}
+                      {r.best && <span className="rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#F6F2EB] ring-1 ring-white/20">Cheapest</span>}
                     </span>
-                    <span className="dnum text-[15px] font-bold tabular-nums text-ink-100">{fmtMoney(r.cost, pack.currency)}</span>
+                    <span className="dnum text-[15px] font-bold tabular-nums text-[#F6F2EB]">{fmtMoney(r.cost, pack.currency)}</span>
                   </div>
-                  <p className="mt-1.5 max-w-[74ch] text-[12px] leading-relaxed text-ink-500">{r.detail}</p>
+                  <p className="mt-1.5 max-w-[74ch] text-[12px] leading-relaxed text-[#7E756A]">{r.detail}</p>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-[13px] text-ink-500">No fix needed at today's position.</p>
+            <p className="text-[13px] text-[#7E756A]">No fix needed at today's position.</p>
           )}
         </Block>
       )}
@@ -124,10 +124,10 @@ function PlanInspector({ focus, pack, pool, meta }: any) {
   if (!focus) return null
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 rounded-lg bg-black/[0.04] p-0.5">
+      <div className="flex gap-1 rounded-lg bg-white/[0.05] p-0.5">
         {(['position', 'pooling'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 rounded-md px-2 py-1.5 text-[11.5px] font-semibold capitalize transition ${tab === t ? 'bg-white text-ink-100 shadow-sm' : 'text-ink-500 hover:text-ink-200'}`}>
+            className={`flex-1 rounded-md px-2 py-1.5 text-[11.5px] font-semibold capitalize transition ${tab === t ? 'bg-[#1E1A16] text-[#F6F2EB] shadow-sm' : 'text-[#7E756A] hover:text-[#B8AEA0]'}`}>
             {t}
           </button>
         ))}
@@ -151,14 +151,14 @@ function PlanInspector({ focus, pack, pool, meta }: any) {
         <div className="space-y-5">
           <Figure label="Pooling removes" value={fmtMoney(pool.saved, pack.currency)} basis="across all declared pools" tone="good" />
           <Figure label="Residual after pooling" value={fmtMoney(pool.after, pack.currency)} basis="no partner can absorb this" tone={pool.after > 0 ? 'bad' : 'good'} />
-          <p className="text-[11.5px] leading-relaxed text-ink-500">
+          <p className="text-[11.5px] leading-relaxed text-[#7E756A]">
             The EU issues no compliance credit. Article 6 lets manufacturers share one fleet average — nothing is bought
             or sold, so the money moves as a private settlement between members.
           </p>
         </div>
       )}
 
-      <div className="border-t border-black/[0.06] pt-5">
+      <div className="border-t border-white/[0.07] pt-5">
         <Provenance source={meta.source} vintage="working assumptions" />
       </div>
     </div>

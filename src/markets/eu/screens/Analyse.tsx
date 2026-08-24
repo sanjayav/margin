@@ -84,13 +84,13 @@ export default function EUAnalyse() {
         <span className="flex items-center gap-2.5">
           {level <= 1 ? <BrandChip name={c.label} size={20} />
             : <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(c.vehicles[0]?.powertrain ?? '') }} />}
-          <span className="truncate font-medium text-ink-100">{c.label}</span>
+          <span className="truncate font-medium text-[#F6F2EB]">{c.label}</span>
         </span>
       ),
     },
     { key: 'units', header: 'Registrations', align: 'right', cell: (c) => fmtInt(c.rawUnits) },
     { key: 'metric', header: `Fleet ${pack.metricUnit}`, align: 'right', cell: (c) => fmtNum(c.avgMetric, 1) },
-    { key: 'limit', header: 'Target', align: 'right', cell: (c) => <span className="text-ink-500">{fmtNum(c.limit, 1)}</span> },
+    { key: 'limit', header: 'Target', align: 'right', cell: (c) => <span className="text-[#7E756A]">{fmtNum(c.limit, 1)}</span> },
     {
       key: 'gap', header: 'Gap', align: 'right', width: '13%',
       cell: (c) => (
@@ -100,7 +100,7 @@ export default function EUAnalyse() {
       ),
     },
     { key: 'st', header: '', width: '10%', cell: (c) => (c.status === 'fine' || c.status === 'compliant' ? null : <Status status={c.status} />) },
-    { key: 'fine', header: 'Exposure', align: 'right', cell: (c) => <span className="font-semibold text-ink-100">{c.fine > 0 ? fmtMoney(c.fine, pack.currency) : '—'}</span> },
+    { key: 'fine', header: 'Exposure', align: 'right', cell: (c) => <span className="font-semibold text-[#F6F2EB]">{c.fine > 0 ? fmtMoney(c.fine, pack.currency) : '—'}</span> },
   ]
 
   return (
@@ -108,17 +108,17 @@ export default function EUAnalyse() {
       <nav aria-label="Drill" className="mb-6 flex flex-wrap items-center gap-1.5 text-[12.5px]">
         {crumbs.map((c, i) => (
           <span key={`${c}-${i}`} className="flex items-center gap-1.5">
-            {i > 0 && <span aria-hidden className="text-ink-600">/</span>}
+            {i > 0 && <span aria-hidden className="text-[#5A534A]">/</span>}
             <button onClick={() => setDrill(drill.slice(0, crumbLen(i)))}
-              className={i === crumbs.length - 1 ? 'font-semibold text-ink-100' : 'text-ink-500 hover:text-ink-200'}>
+              className={i === crumbs.length - 1 ? 'font-semibold text-[#F6F2EB]' : 'text-[#7E756A] hover:text-[#B8AEA0]'}>
               {c}
             </button>
           </span>
         ))}
       </nav>
 
-      <h1 className="font-display text-[22px] font-bold tracking-[-0.02em] text-ink-100">{node.label}</h1>
-      <p className="mt-1.5 text-[13px] text-ink-500">
+      <h1 className="font-display text-[22px] font-bold tracking-[-0.02em] text-[#F6F2EB]">{node.label}</h1>
+      <p className="mt-1.5 text-[13px] text-[#7E756A]">
         {fmtInt(node.rawUnits)} registrations · {kids.length} {childLabel.toLowerCase()}
         {exposure > 0 && <> · <span className="font-semibold text-danger">{fmtMoney(exposure, pack.currency)}</span> exposed</>}
       </p>
@@ -135,8 +135,8 @@ export default function EUAnalyse() {
 
       <div className="mt-10">
         <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="font-display text-[15px] font-bold text-ink-100">{childLabel}</h2>
-          <span className="text-[11.5px] text-ink-500">{level < 3 ? 'Select a row to go deeper' : 'Leaf level'}</span>
+          <h2 className="font-display text-[15px] font-bold text-[#F6F2EB]">{childLabel}</h2>
+          <span className="text-[11.5px] text-[#7E756A]">{level < 3 ? 'Select a row to go deeper' : 'Leaf level'}</span>
         </div>
         <Table columns={cols} rows={kids} rowKey={(c) => c.key}
           onRowClick={level < 3 ? (c) => into(c.label) : undefined}
@@ -175,7 +175,7 @@ function Evidence({ node, pack, meta, year }: { node: Aggregate; pack: any; meta
       />
 
       <div>
-        <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-500">Powertrain mix</div>
+        <div className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-[#7E756A]">Powertrain mix</div>
         <div className="flex h-2 overflow-hidden rounded-full">
           {mix.map((m) => <span key={m.pt} style={{ width: `${m.share * 100}%`, background: ptColor(m.pt) }} title={`${m.pt} ${(m.share * 100).toFixed(1)}%`} />)}
         </div>
@@ -183,17 +183,17 @@ function Evidence({ node, pack, meta, year }: { node: Aggregate; pack: any; meta
           {mix.slice(0, 5).map((m) => (
             <li key={m.pt} className="flex items-center gap-2 text-[11.5px]">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: ptColor(m.pt) }} />
-              <span className="flex-1 text-ink-400">{m.pt}</span>
-              <span className="dnum tabular-nums font-semibold text-ink-200">{(m.share * 100).toFixed(1)}%</span>
+              <span className="flex-1 text-[#7E756A]">{m.pt}</span>
+              <span className="dnum tabular-nums font-semibold text-[#B8AEA0]">{(m.share * 100).toFixed(1)}%</span>
             </li>
           ))}
         </ul>
       </div>
 
       {/* The Inspector explains; it never decides. No primary action here. */}
-      <div className="border-t border-black/[0.06] pt-5">
+      <div className="border-t border-white/[0.07] pt-5">
         <Provenance source={meta.source} vintage={`${year} position`} />
-        <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-500">
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-[#7E756A]">
           <Icon name="shield" size={11} className="mt-[2px] shrink-0" />
           Every figure here is computed by the engine from the registrations above — none of it is estimated.
         </p>

@@ -30,10 +30,21 @@ Three rules follow, and they settle most arguments:
 
 ## Surface
 
-Light. This product's output gets exported, printed, and put in board packs, and
-its readers are finance and legal. Dark is reserved for exactly one thing: the
-**headline metric band** at the top of a screen, which is where the eye must land
-first. Dark used everywhere (as today) spends the contrast budget on chrome.
+**Dark, and warm.** Reversed from an earlier draft that specified light: this is a
+control room that analysts sit in front of all day, and the brand's identity is a
+warm near-black, not the blue-black every dev tool defaults to. The greys carry a
+little of that warmth so a panel never reads as "default dark mode".
+
+    base    #100E0C   the room
+    raised  #17140F   a panel resting on it
+    high    #1E1A16   a panel on a panel — two levels is the limit
+    ink     #0A0908   the metric band, and full-bleed media only
+
+**Separation is light, not borders.** A raised surface catches an inset highlight
+along its top edge, as if lit from above, plus a hairline at
+`rgba(255,255,255,0.07)`. No drop shadows — a shadow on near-black is mud.
+
+Exports and board packs render light; that is a print concern, not a screen one.
 
 ## Tokens
 
@@ -44,8 +55,11 @@ surface `#FBF7EF`, card `#FFFEFB`, ink `#1C1812` → `#8C8273`.
   item, and nothing else. It is not a data colour.
 - **Status (reserved).** compliant `#0E9F6E` · fine `#E0484D` · warn `#D98005` ·
   exempt `#8C8273`. Always with an icon and a label; never colour alone.
-- **Data.** The validated powertrain palette in `src/lib/palette.ts`
-  (Okabe–Ito derived, CVD-checked against the cream surface). Never re-derive it.
+- **Data.** The powertrain palette in `src/lib/palette.ts`, re-derived and
+  validated against the real dark surface (#17140F): lightness band, chroma
+  floor, CVD separation (worst adjacent ΔE 10.1 deutan), normal vision (ΔE 17.8)
+  and contrast all pass. A palette validated on cream is not valid here — three
+  of the previous slots sat outside the dark band and glared.
 
 ## Type
 

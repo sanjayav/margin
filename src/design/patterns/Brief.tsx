@@ -50,54 +50,54 @@ export default function Brief({ findings, onAsk, onAct }: {
                   <Icon name={s.icon} size={12} /> {s.label}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14.5px] font-semibold leading-snug text-ink-100">{f.headline}</span>
-                  {!on && <span className="mt-1 block truncate text-[12.5px] text-ink-500">{f.situation}</span>}
+                  <span className="block text-[14.5px] font-semibold leading-snug text-[#F6F2EB]">{f.headline}</span>
+                  {!on && <span className="mt-1 block truncate text-[12.5px] text-[#7E756A]">{f.situation}</span>}
                 </span>
-                <span aria-hidden className={`mt-1 shrink-0 text-ink-500 transition-transform ${on ? 'rotate-90' : ''}`}>›</span>
+                <span aria-hidden className={`mt-1 shrink-0 text-[#7E756A] transition-transform ${on ? 'rotate-90' : ''}`}>›</span>
               </button>
 
               {on && (
                 <div className="pb-6 pr-2">
-                  <p className="max-w-[74ch] text-[13px] leading-[1.65] text-ink-300">{f.situation}</p>
-                  <p className="mt-2.5 max-w-[74ch] text-[12.5px] leading-[1.6] text-ink-500">{f.why}</p>
+                  <p className="max-w-[74ch] text-[13px] leading-[1.65] text-[#B8AEA0]">{f.situation}</p>
+                  <p className="mt-2.5 max-w-[74ch] text-[12.5px] leading-[1.6] text-[#7E756A]">{f.why}</p>
 
                   {!!f.metrics.length && (
                     <dl className="mt-4 flex flex-wrap gap-x-9 gap-y-3">
                       {f.metrics.map((m) => (
                         <div key={m.label}>
-                          <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-500">{m.label}</dt>
-                          <dd className="dnum mt-1 text-[15px] font-bold tabular-nums text-ink-100">{m.value}</dd>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7E756A]">{m.label}</dt>
+                          <dd className="dnum mt-1 text-[15px] font-bold tabular-nums text-[#F6F2EB]">{m.value}</dd>
                           {/* the figure names the engine call that produced it —
                               the same disclosure the Answer pattern uses */}
-                          <dd className="mt-0.5 text-[10.5px] text-ink-600">via {m.tool}</dd>
+                          <dd className="mt-0.5 text-[10.5px] text-[#5A534A]">via {m.tool}</dd>
                         </div>
                       ))}
                     </dl>
                   )}
 
                   {f.recommendation && (
-                    <p className="mt-4 max-w-[74ch] border-l-2 border-black/10 pl-3 text-[12.5px] leading-relaxed text-ink-300">
-                      <span className="font-semibold text-ink-100">Recommendation. </span>{f.recommendation}
+                    <p className="mt-4 max-w-[74ch] border-l-2 border-white/[0.10] pl-3 text-[12.5px] leading-relaxed text-[#B8AEA0]">
+                      <span className="font-semibold text-[#F6F2EB]">Recommendation. </span>{f.recommendation}
                     </p>
                   )}
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     {f.options.slice(0, 2).map((o, i) => (
                       <button key={o.title} onClick={() => onAct(f, i)}
-                        className="rounded-lg border border-black/[0.1] bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-200 transition hover:border-black/25 hover:text-ink-100">
+                        className="rounded-lg px-3 py-1.5 text-[12px] font-semibold text-[#B8AEA0] transition-colors hover:text-[#F6F2EB]" style={{ background: '#1E1A16', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
                         {o.title}
                       </button>
                     ))}
                     <button onClick={() => onAsk(f)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-ink-100 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-ink-200">
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#F6F2EB] px-3 py-1.5 text-[12px] font-semibold text-[#100E0C] transition hover:bg-white">
                       <Icon name="spark" size={12} /> Ask AiRE
                     </button>
-                    <span className="ml-auto text-[11px] text-ink-500">{f.category} · {f.year}</span>
+                    <span className="ml-auto text-[11px] text-[#7E756A]">{f.category} · {f.year}</span>
                   </div>
                 </div>
               )}
             </div>
-            <span aria-hidden className="ml-6 block h-px bg-black/[0.06] group-last:hidden" />
+            <span aria-hidden className="ml-6 block h-px bg-white/[0.06] group-last:hidden" />
           </li>
         )
       })}
