@@ -168,6 +168,42 @@ export interface LimitContext {
   scenario: Scenario
 }
 
+/** How complete a market's bundled dataset is.
+ *   • `market`  — essentially the whole regulated market. Every maker a customer
+ *                 would look for is present, so market-level totals are real.
+ *   • `partial` — real, sourced rows, but only some compliance entities. Per-maker
+ *                 figures stand; market totals are scope totals and say so.
+ *   • `preview` — a sample carried to exercise the rule pack. Correct arithmetic
+ *                 over an unrepresentative fleet — never shown as a market view. */
+export type CoverageTier = 'market' | 'partial' | 'preview'
+
+/** The instrument (if any) that moves compliance between manufacturers. */
+export interface TransferModel {
+  /** 'pool' = a shared fleet average only, no instrument (EU Article 6).
+   *  'trade' = transferable credits/allowances with a price. */
+  kind: 'pool' | 'trade'
+  /** What one unit of headroom IS, singular — 'ZEV allowance', 'NEV credit'. */
+  unit: string
+  /** The verb a surface should use — 'pool', 'trade'. */
+  verb: string
+  /** How a surplus holder is described — 'pool partner', 'seller'. */
+  supplier: string
+  /** How a deficit holder is described — 'pool member', 'buyer'. */
+  taker: string
+  /** One line on the mechanism, shown where the distinction matters. */
+  note: string
+}
+
+export interface DataCoverage {
+  tier: CoverageTier
+  /** One line naming the source and the scope, shown under the workspace.
+   *  Written to be read by a customer, not by us. */
+  label: string
+  /** Shown on the module card and the preview interstitial when tier is not
+   *  `market` — what is missing and what it means for the numbers on screen. */
+  detail?: string
+}
+
 export interface RulePack {
   id: CountryId
   name: string
@@ -199,13 +235,35 @@ export interface RulePack {
   fiscalYearStartMonth?: number
   classes: string[]
   smallVolumeThreshold: number
+  /** True where each vehicle CLASS is its own compliance obligation, so the
+   *  classes must not net against each other. Under Reg (EU) 2019/631 a maker
+   *  holds separate M1 and N1 targets and Article 8 charges each independently:
+   *  van headroom cannot pay down a car deficit. Regimes that assess one blended
+   *  fleet leave this unset. */
+  classSeparateCompliance?: boolean
   pooling: { enabled: boolean; note: string }
   credits: string         // human description of the credit system
+
+  /** How compliance moves BETWEEN compliance entities in this regime.
+   *
+   *  This exists because the EU has NO transfer instrument. Article 6 pooling
+   *  makes members share ONE fleet average — nothing is issued, transferred,
+   *  priced or banked, so "credit", "trade", "seller" and "banked position" are
+   *  all factually wrong for the EU. Headroom there is real and valuable, but it
+   *  moves by joining a pool, not by selling anything. Every regime must declare
+   *  its mechanism so no surface can describe a market that does not exist. */
+  transfer: TransferModel
   limitNote: string       // how the limit is built, plain language
   source: string          // where the official numbers come from
   /** Set when the bundled dataset covers only part of the real market —
    *  surfaces an honesty chip so "market" verdicts read as covered-scope. */
   coverageNote?: string
+  /** How complete this market's dataset is. Drives the provenance line under
+   *  the workspace and the readiness state on the module card — replacing the
+   *  old blanket "illustrative until live data connected" disclaimer, which was
+   *  false for a market carrying a full registrations file (India) and not
+   *  specific enough for one carrying a partial book (China). */
+  coverage: DataCoverage
 
   /** Per-vehicle emissions figure that gets weighted-averaged (after credits). */
   vehicleMetric: (v: Vehicle, s: Scenario) => number
@@ -250,6 +308,16 @@ export interface FineMath {
   expression: string   // "4.2 g/km over × €95 × 182,400 cars"
 }
 
+/** One vehicle class's standalone position inside a mixed fleet. */
+export interface ClassPosition {
+  vclass: string
+  units: number
+  avgMetric: number
+  limit: number
+  gap: number
+  fine: number
+}
+
 export interface Aggregate {
   label: string
   // 'fleet' = market · 'pool' = compliance pool · 'parent' = manufacturer ·
@@ -267,6 +335,11 @@ export interface Aggregate {
   fine: number
   status: 'compliant' | 'fine' | 'no-sales' | 'exempt'
   fineMath: FineMath
+  /** Position per vehicle class. Only meaningful where a regime makes each class
+   *  its OWN obligation (`classSeparateCompliance`) — there `fine` is the sum of
+   *  these, not a single blended charge, and a maker can be long on cars while
+   *  short on vans. Length 1 for a single-class fleet. */
+  classes?: ClassPosition[]
   children?: Aggregate[]
   vehicles: Vehicle[]
 }

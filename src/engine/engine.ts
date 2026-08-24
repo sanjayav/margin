@@ -269,15 +269,23 @@ export function aggregate(
   const zlevBenchShare = rawUnits > 0 ? zlevUnits / rawUnits : 0 // 0–50 g share (limit relaxation)
 
   // The limit is class-specific (EU car vs van, AU Type 1 vs Type 2). For a
-  // mixed fleet we units-weight each class's limit — still one shared formula.
+  // mixed fleet we units-weight each class's limit for DISPLAY — still one
+  // shared formula.
   const byClass = groupBy(vehicles, (x) => x.vclass)
+  const classPos: { vclass: string; units: number; limit: number; metric: number }[] = []
   let wLimit = 0
   for (const [vclass, cv] of byClass) {
     const cu = cv.reduce((a, x) => a + x.sales, 0)
     if (cu === 0) continue
     const cMass = cv.reduce((a, x) => a + x.mass * x.sales, 0) / cu
-    const ctx: LimitContext = { year: s.year, avgMass: cMass, zlevShare: zlevBenchShare, vclass, scenario: s }
-    wLimit += pack.limit(ctx) * cu
+    // The ZLEV relaxation is a property of the CLASS's own fleet, not the
+    // combined one — a van fleet's benchmark is measured on vans.
+    const cEff = cv.reduce((a, x) => a + pack.vehicleUnits(x, s), 0)
+    const cMetric = cEff > 0 ? cv.reduce((a, x) => a + pack.vehicleMetric(x, s) * pack.vehicleUnits(x, s), 0) / cEff : 0
+    const cZlev = cu > 0 ? cv.filter((x) => isZlev(x)).reduce((a, x) => a + x.sales, 0) / cu : 0
+    const cLimit = pack.limit({ year: s.year, avgMass: cMass, zlevShare: pack.classSeparateCompliance ? cZlev : zlevBenchShare, vclass, scenario: s })
+    wLimit += cLimit * cu
+    classPos.push({ vclass, units: cu, limit: cLimit, metric: cMetric })
   }
   const limit = rawUnits > 0 ? wLimit / rawUnits : 0
   const gap = avgMetric - limit
@@ -285,8 +293,22 @@ export function aggregate(
   // Small-volume makers are exempt from fines.
   const exempt = rawUnits > 0 && rawUnits < pack.smallVolumeThreshold && level === 'parent'
   const excess = Math.max(0, gap)
+  // Where a regime sets a SEPARATE obligation per vehicle class, the premium is
+  // charged per class and the classes do NOT net. Under Reg (EU) 2019/631 a
+  // manufacturer holds two distinct targets (M1 and N1) and Article 8 charges
+  // each independently — so van headroom cannot pay for a car deficit, and
+  // blending them into one gap both understates the bill and reports a
+  // compliance position that does not legally exist.
+  const classFine = (c: { units: number; limit: number; metric: number }) => {
+    const ex = Math.max(0, c.metric - c.limit)
+    if (ex <= 0 || exempt) return 0
+    return pack.fineFor ? pack.fineFor(ex, c.units, s) : ex * pack.fineRate * c.units
+  }
+  const perClassFine = () => classPos.reduce((a, c) => a + classFine(c), 0)
   // Stepped statutory schedules (pack.fineFor) replace the linear formula.
-  const fine = exempt || gap <= 0 ? 0
+  const fine = exempt ? 0
+    : pack.classSeparateCompliance && classPos.length > 1 ? perClassFine()
+    : gap <= 0 ? 0
     : pack.fineFor ? pack.fineFor(excess, rawUnits, s)
     : excess * pack.fineRate * rawUnits
 
@@ -316,6 +338,10 @@ export function aggregate(
     rawAvgMetric,
     avgMass,
     zlevShare,
+    classes: classPos.map((c) => ({
+      vclass: c.vclass, units: c.units, avgMetric: c.metric, limit: c.limit,
+      gap: c.metric - c.limit, fine: classFine(c),
+    })),
     limit,
     gap,
     fine,

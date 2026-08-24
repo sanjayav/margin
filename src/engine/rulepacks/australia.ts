@@ -36,9 +36,22 @@ export const AU: RulePack = {
   classes: ['Type 1', 'Type 2'],
   smallVolumeThreshold: 0,
   pooling: { enabled: true, note: 'Makers may transfer/trade credits; illustrative credit price A$50 per unit.' },
+  transfer: {
+    kind: 'trade',
+    unit: 'credit',
+    verb: 'trade',
+    supplier: 'seller',
+    taker: 'buyer',
+    note: 'Over-achievers bank credits and may sell them to laggards; illustrative A$50 per unit until a market price is observed.',
+  },
   credits: 'Over-achievers bank credits and may sell them to laggards (A$50/unit illustrative). No super-credit multiplier.',
   limitNote: 'Two break-pointed lines: a headline target tightening each year ± a mass-adjustment per kg vs the reference MIRO, clamped between break-points.',
   source: 'DCCEEW — New Vehicle Efficiency Standard determinations.',
+  coverage: {
+    tier: 'preview',
+    label: 'Sample fleet — three manufacturers, carried to exercise the NVES rule pack',
+    detail: 'The NVES break-pointed Type 1 / Type 2 limit lines, A$100/g penalty and credit trading are implemented in full and compute correctly. The bundled fleet is a three-manufacturer sample. The Green Vehicle Guide is a spec catalogue with no volumes, so real Australian coverage needs a licensed dataset.',
+  },
 
   vehicleMetric: (v: Vehicle) => (v.co2 === 0 ? 0 : Math.max(0, v.co2)),
   vehicleUnits: (v: Vehicle) => v.sales,

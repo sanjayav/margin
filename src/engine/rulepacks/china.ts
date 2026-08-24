@@ -110,14 +110,30 @@ export const CN: RulePack = {
     enabled: false,
     note: 'China does not pool fleets. Each compliance entity is judged standalone on both axes; a CAFC deficit is cleared by carried-over own surplus, transfer from AFFILIATES (关联企业, ≥25% shareholding), or purchased NEV credits (1:1, the 2023 credit pool adds deposit/withdraw with 5-yr validity). An NEV deficit can ONLY be cleared by buying NEV credits. All of this lives in the Credit book.',
   },
+  transfer: {
+    kind: 'trade',
+    unit: 'NEV credit',
+    verb: 'trade',
+    supplier: 'seller',
+    taker: 'buyer',
+    note: 'No pooled average. A CAFC deficit clears via carried-over own surplus, affiliate transfer (关联企业, ≥25% shareholding) or purchased NEV credits; an NEV deficit can only be cleared by buying NEV credits.',
+  },
   credits:
     'Dual-credit (双积分): NEVs count as zero fuel use AND are multiplied in the CAFC denominator (×2.0 in 2021 tapering to ×1.0 by 2025; ×1.4→×1.0 over 2026–30), so a high-NEV maker banks a large CAFC surplus. A separate NEV-ratio mandate (14/16/18% for 2021–23; 28/38% for 2024–25; 48/58% announced for 2026–27) requires NEV credits ≥ ratio × conventional volume — surfaced here via credit pricing; a full NEV-ratio ledger is a follow-up.',
   limitNote:
     'CAFC target = 0.0017 × (kerb mass − 1,500 kg) + a per-year constant (5.18 in 2024, 4.80 in 2025) — the CAFC Standard (目标值) from the source, against which the dual-credit CAFC credit = (Standard − actual) × volume. Tightens toward the 3.3 L/100km 2030 goal (Phase 6, modelled). WLTC basis.',
   source:
     'China Data.xlsx — variant-level dual-credit dataset (6 compliance entities, 2024–2027, real WLTP CO₂ / kerb mass / battery / e-range / sales, with per-entity CAFC & NEV credit accounting). GB 27999-2019/2025; GB 19578-2021/2024.',
+  coverage: {
+    tier: 'partial',
+    label: 'Variant-level dual-credit data for 6 compliance entities · 2024–2027 · covered scope, not all-China',
+    // "Tata" and "Chery-Tata" are the JLR China compliance parents (Tata Motors
+    // owns JLR; Chery-JLR is the manufacturing JV) — spelled out because the bare
+    // parent name reads as Tata Motors India to anyone who doesn't know the group.
+    detail: 'Covers BMW, Brilliance-BMW, Porsche, JLR China (Tata) and Chery-JLR, plus Tesla — the premium and import entities. The domestic majors (BYD, Geely, SAIC, Changan, Great Wall) are not in this dataset, so market-level totals are scope totals. Per-maker positions are real.',
+  },
   coverageNote:
-    'Real dataset, but partial market — 6 compliance entities (BMW, Brilliance-BMW, Porsche, Tata, Chery-Tata, Tesla), not all-China. Verdicts read as covered-scope. Add more via Data & imports.',
+    'Real dataset, but partial market — 6 compliance entities (BMW, Brilliance-BMW, Porsche, JLR China “Tata”, Chery-JLR, Tesla), not all-China. Verdicts read as covered-scope. Add more via Data & imports.',
 
   vehicleMetric: (v: Vehicle, s) => {
     if (isElectric(v)) {

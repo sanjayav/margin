@@ -54,11 +54,24 @@ export const UK: RulePack = {
     enabled: true,
     note: 'CRTS/VRTS allowances are tradable between manufacturers (Nov–Dec window); banking (≤3 yrs) and borrowing (2024–29, repay by 2030) smooth year-to-year positions.',
   },
+  transfer: {
+    kind: 'trade',
+    unit: 'ZEV allowance',
+    verb: 'trade',
+    supplier: 'seller',
+    taker: 'buyer',
+    note: 'CRTS/VRTS allowances transfer between manufacturers in the Nov–Dec window, bank for up to 3 years, and can be borrowed 2024–29 at 3.5% compounding (repaid by 2030).',
+  },
   credits:
     'Unit-based: one allowance per ZEV registration. Tradable (≈£4k observed), bankable ≤3 years, borrowable 2024–29 at 3.5% compounding interest (repay by 2030); non-ZE CO₂-improvement conversion exists but is not modelled yet.',
   limitNote:
     'Allowed non-ZE share of registrations = 1 − ZEV mandate (cars 22%→80% ZEV over 2024–30; vans 10%→70%). The metric is the fleet\'s non-ZE share, so "over the line" = missing ZEV volume.',
   source: 'DfT — Vehicle Emissions Trading Schemes (VETS) Order 2023; April 2025 flexibility package.',
+  coverage: {
+    tier: 'preview',
+    label: 'Sample fleet — three manufacturers, carried to exercise the VETS rule pack',
+    detail: 'The ZEV mandate is modelled as the unit mandate it is — % non-ZE metric, £12,000 per missing ZEV, CRTS credit trading — and computes correctly. The bundled fleet is a three-manufacturer sample. The DfT publishes no registration-volume feed comparable to the EEA’s, so real UK coverage needs a licensed dataset.',
+  },
 
   // A vehicle either is a ZEV (counts 0) or is not (counts 100) — the weighted
   // average is then exactly the non-ZE share of effective registrations, in %.

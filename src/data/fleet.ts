@@ -38,7 +38,7 @@ export const parentsFor = (id: CountryId): string[] =>
   [...new Set(getFleet(id).map((v) => v.parent))].sort()
 
 export const DATA_REFRESHED: Record<CountryId, string> = {
-  EU: '2026-05-18',
+  EU: '2026-06-25',
   IN: '2026-08-05',
   AU: '2026-05-02',
   UK: '2026-05-11',

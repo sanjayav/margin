@@ -1,3 +1,23 @@
+// ⚠ SUPERSEDED by scripts/ingest-eu-eea.mjs (npm run ingest:open / ingest:eu:eea).
+//
+// Kept for reference only — do NOT run it against the shipped dataset. It has
+// three defects that were found while reconciling the EU fleet against the EEA's
+// published figures, and each one silently biases compliance in the optimistic
+// direction:
+//
+//   1. Eco-innovation via AVG([Erwltp (g/km)]). That column is NULL on vehicles
+//      claiming no credit, so AVG() averages claimants only and reports 1.50
+//      g/km where the true per-vehicle credit is 0.777. Fleet CO2 comes out low
+//      and every fine with it.
+//   2. Powertrain read off `Ft` alone. The plug-in/non-plug distinction lives in
+//      `Fm` (P = OVC-HEV, H = NOVC-HEV), so 3.3M petrol hybrids land in with
+//      plain ICE and the PHEV utility-factor correction cannot be applied.
+//   3. `Mh` used as the compliance parent with no pool split, and top-N
+//      truncation with a single residual bucket that smears each maker's ZE
+//      share — which the ZLEV target relaxation depends on.
+//
+// The replacement pulls the whole grid (no truncation), classifies on Fm, keeps
+// Mh and Mp apart, and reproduces the EEA's published car headline exactly.
 // Open-data ingestion — scrapes real registration data from public sources and
 // loads it into the store the app reads (Neon when DATABASE_URL is set, else the
 // local file store at .data/underline.json, exactly like api/_store.ts).

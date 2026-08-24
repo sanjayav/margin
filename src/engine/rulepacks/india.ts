@@ -40,6 +40,13 @@ const PETROL_DIV = 23.7135 // CO₂ → petrol-equiv L/100km
 const FINE_TIER1 = 25_000  // ₹/vehicle · exceedance ≤ 0.2 L/100km
 const FINE_TIER2 = 50_000  // ₹/vehicle · exceedance > 0.2 L/100km
 const FINE_STEP = 0.2
+// The step is a statutory threshold, and the exceedance reaching it has been
+// through a CO₂ → L/100km conversion — so a fleet that is arithmetically AT
+// 0.2 can land a few ulps above it (0.20000000000000018) and get charged the
+// wrong tier. That doubles a per-vehicle penalty on floating-point noise, which
+// across a million-unit fleet is a multi-thousand-crore error. Compare with a
+// tolerance far below any real homologation precision.
+const STEP_EPS = 1e-9
 // Draft CAFE III credit trading: ~₹2,500 per gCO₂/km per vehicle at FY2027-28
 // (rising toward ₹4,500 by FY2031-32) ⇒ per L/100km-unit: × 23.7135
 const CREDIT_PER_L = Math.round(2500 * PETROL_DIV) // ≈ ₹59,300
@@ -87,9 +94,21 @@ export const IN: RulePack = {
   classes: ['Passenger car'],
   smallVolumeThreshold: 1000,
   pooling: { enabled: false, note: 'CAFE is assessed per manufacturer; the draft provides credit trading between makers, not pooled averages.' },
+  transfer: {
+    kind: 'trade',
+    unit: 'credit',
+    verb: 'trade',
+    supplier: 'seller',
+    taker: 'buyer',
+    note: 'CAFE is assessed per manufacturer — there is no pooled average. Draft CAFE III provides banked credits that trade between makers at a notified price; none of this exists under CAFE II.',
+  },
   credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
   limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',
   source: 'Two workbooks, merged with no entity taken from both. DEMO DATA_SHARED.xlsx (Aug 2026) — 5 entities with the makers’ own FY2027-28 → FY2032-33 plan. “update dat india 27 july.xlsx” (VIJAY) — the full-market registrations file adding Maruti Suzuki, Hyundai, Tata, Mahindra, Kia, Renault, Nissan and FCA. Model-level sales-weighted CO₂ (MIDC/WLTC) and kerb mass, with the monthly filing. FY2025-26 complete actual ≈4.80M units. BEE Draft CAFE 2027 norms (25 Sep 2025); CAFE II (in force); Energy Conservation (Amendment) Act 2022 penalty schedule.',
+  coverage: {
+    tier: 'market',
+    label: 'Model-level registrations for 13 compliance entities · ≈4.80M units FY2025-26 · benchmarked against VAHAN',
+  },
   coverageNote: '13 compliance entities covering essentially the whole Indian PV market (≈4.80M units in FY2025-26). FY2025-26 is a complete 12-month actual; FY2026-27 is a 3-month YTD part-year (badged in Data), so its volume and fine exposure are partial while its sales-weighted average is not. From FY2027-28 the five entities carrying their own plan (Toyota Kirloskar, Škoda-VW, MG, Honda, BYD) use it; the eight from the registrations file, which stops at FY2026-27, hold their complete FY2025-26 fleet against each tightening line and are tagged “Baseline projection”. FY2032-33 sits beyond the drafted CAFE III schedule and holds the FY2031-32 target line flat.',
 
   regimeFor: (year) =>
@@ -142,7 +161,7 @@ export const IN: RulePack = {
     return A * (ctx.avgMass - C3) + d * shift
   },
   // EC Act 2022: stepped per-vehicle penalty on the fleet's average exceedance.
-  fineFor: (excess, units) => (excess <= FINE_STEP ? FINE_TIER1 : FINE_TIER2) * units,
+  fineFor: (excess, units) => (excess <= FINE_STEP + STEP_EPS ? FINE_TIER1 : FINE_TIER2) * units,
   forecast: (year) => ({
     limit: year < CAFE3_FROM ? A * (1300 - C2) + D2 : A * (1300 - C3) + (D3[year] ?? 3.0139),
     note:

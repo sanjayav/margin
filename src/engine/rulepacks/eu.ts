@@ -1,36 +1,59 @@
 // ───────────────────────────────────────────────────────────────────────────
 // RULE PACK · European Union — Reg (EU) 2019/631, amended by 2023/851 & 2025/1214
 //
-// Target model (post-2021, WLTP): a manufacturer's specific CO₂ target is the
-// EU fleet-wide reference target for the year PLUS a mass-adjustment term:
-//     target = fleetTarget(year) + a · (testMass − TM0)
-// The 2025 EU car fleet target is 93.6 g/km WLTP = 2021 reference × (1 − 15%).
-// Sources: EC "Cars and vans"; ICCT 2025 manufacturer targets (Oct 2024);
-// Commission Implementing Decision (EU) 2023/1623 (a, TM0); JRC133502.
+// A manufacturer's specific CO₂ target is the published EU fleet-wide target for
+// the year plus a SIGNED mass term, then relaxed by the ZLEV factor:
+//
+//   cars  2025-2029:  ref = 93.6  − 0.0144 · (TM − 1609.6)
+//   cars  2030-2034:  ref = 49.5  − 0.0076 · (TM − TM0)
+//   vans  2025-2029:  ref = 153.9 + α · (TM − 2163.0)
+//   vans  2030-2034:  ref = 90.6  + α · (TM − TM0)
+//   2035+:            0 g/km, both classes
+//   target = ref × ZLEV factor   (2025-2029 only)
+//
+// Two things here are easy to get wrong and both are load-bearing:
+//
+//   1. THE CAR SLOPE IS NEGATIVE. A heavier car fleet gets a TIGHTER target, not
+//      a looser one. That is not a transcription slip in the statute — the 2021
+//      CO₂-vs-test-mass regression for cars slopes DOWN (a2021 = −0.0175)
+//      because the heavy vehicles in the 2021 fleet were the zero- and
+//      low-emission ones. Flipping this sign hands every heavy premium fleet
+//      several g/km of target it has not earned, and flatters the whole market.
+//
+//   2. VANS ARE PIECEWISE. Below TM0 the renormalised slope applies; above TM0
+//      the steeper 2021 regression slope a2021 = 0.1064 does (Annex I Part B
+//      point 6; JRC133502 eq 17/18). Since the EU van fleet averages ~2,216 kg
+//      against a 2,163 kg TM0, the market sits on the STEEP branch — using the
+//      shallow one understates van targets.
+//
+// Every constant below is from the Commission's own parameter report
+// JRC133502 "2025 and 2030 CO₂ emission targets for light duty vehicles",
+// eq (27)–(41), which is the analysis Commission Implementing Decision (EU)
+// 2023/1623 Annex II is built on.
 // ───────────────────────────────────────────────────────────────────────────
 import type { RulePack, Vehicle, LimitContext } from '../types.js'
 
-// EU fleet-wide 2021 WLTP reference. 2025 car target 93.6 = 110.118 × (1 − 0.15).
-const EU2021_CAR = 110.118
-const EU2021_VAN = 181.06 // × 0.85 ≈ 153.9 g (WLTP, approximate)
+// EU fleet-wide 2021 WLTP reference values (JRC133502 §4.3.1, §4.4.1). Used for
+// the "−x% vs 2021" headline; the target line itself uses the published targets.
+const EU2021_CAR = 110.1
+const EU2021_VAN = 181.1
 
-// Reduction vs the 2021 reference, by year. Cars and vans diverge from 2030
-// (cars −55%, vans −50%); both reach −100% in 2035.
-const REDUCTION_CAR: Record<number, number> = {
-  2025: 0.15, 2026: 0.15, 2027: 0.15, 2028: 0.15, 2029: 0.15,
-  2030: 0.55, 2031: 0.55, 2032: 0.55, 2033: 0.55, 2034: 0.55, 2035: 1,
-}
-const REDUCTION_VAN: Record<number, number> = {
-  2025: 0.15, 2026: 0.15, 2027: 0.15, 2028: 0.15, 2029: 0.15,
-  2030: 0.5, 2031: 0.5, 2032: 0.5, 2033: 0.5, 2034: 0.5, 2035: 1,
-}
+// Published EU fleet-wide targets, g/km WLTP (JRC133502 eq 31/32/40/41).
+const TARGET_CAR = { near: 93.6, far: 49.5 } // 2025-2029 · 2030-2034
+const TARGET_VAN = { near: 153.9, far: 90.6 }
 
-// Mass adjustment. 2025 switched to a TEST-MASS basis with a smaller slope than
-// the 2020–2024 MIRO-basis 0.0333; TM0 recalculated to 1609.6 kg for 2025–2027.
-const SLOPE_CAR = 0.0144
-const SLOPE_VAN = 0.0427 // approximate test-mass van slope
+// Mass-adjustment slopes, g/(km·kg). SIGNED — see note 1 above.
+const SLOPE_CAR_NEAR = -0.0144 // a2025 (JRC eq 28)
+const SLOPE_CAR_FAR = -0.0076 // a2030 (JRC eq 29)
+const SLOPE_VAN_NEAR = 0.0848 // a2025, applies at or below TM0 (JRC eq 37)
+const SLOPE_VAN_FAR = 0.0499 // a2030, applies at or below TM0 (JRC eq 38)
+const SLOPE_VAN_ABOVE = 0.1064 // a2021, applies ABOVE TM0 in both periods (JRC eq 36)
+
+// Reference test masses (JRC eq 30, 39). Art 14(1)(d) has the Commission
+// recalculate TM0 every second year from October 2024, so the 2030-2034 value is
+// not yet fixed; the 2025 value is carried forward as the modelling assumption.
 const TM0_CAR = 1609.6
-const TM0_VAN = 1900
+const TM0_VAN = 2163.0
 
 const FINE_RATE = 95 // €/g/km over · per car (Article 8)
 // ZLEV target relaxation (2025–2029 only; removed from 2030). +1% per 1pp of
@@ -54,16 +77,29 @@ const PHEV_UF: Record<number, number> = {
 }
 const phevUF = (year: number) => PHEV_UF[year] ?? (year < 2024 ? 1 : 2.5)
 
+/** Which target era a year sits in. 2035 is the zero-emission end state. */
+const era = (year: number): 'near' | 'far' | 'zero' => (year >= 2035 ? 'zero' : year >= 2030 ? 'far' : 'near')
+
 function fleetTarget(vclass: string, year: number) {
-  return isCar(vclass)
-    ? EU2021_CAR * (1 - (REDUCTION_CAR[year] ?? 0.55))
-    : EU2021_VAN * (1 - (REDUCTION_VAN[year] ?? 0.5))
+  const e = era(year)
+  if (e === 'zero') return 0
+  return isCar(vclass) ? TARGET_CAR[e] : TARGET_VAN[e]
+}
+
+/** The mass-adjustment slope for a class/year/mass. Cars use one signed slope
+ *  per era; vans switch to the steeper a2021 above TM0. */
+function slopeFor(vclass: string, year: number, avgMass: number) {
+  const e = era(year)
+  if (isCar(vclass)) return e === 'far' ? SLOPE_CAR_FAR : SLOPE_CAR_NEAR
+  if (avgMass > TM0_VAN) return SLOPE_VAN_ABOVE
+  return e === 'far' ? SLOPE_VAN_FAR : SLOPE_VAN_NEAR
 }
 
 function referenceTarget(vclass: string, year: number, avgMass: number) {
-  const slope = isCar(vclass) ? SLOPE_CAR : SLOPE_VAN
+  // From 2035 the target is 0 g/km flat — no mass relief off a zero target.
+  if (era(year) === 'zero') return 0
   const tm0 = isCar(vclass) ? TM0_CAR : TM0_VAN
-  return fleetTarget(vclass, year) + slope * (avgMass - tm0)
+  return fleetTarget(vclass, year) + slopeFor(vclass, year, avgMass) * (avgMass - tm0)
 }
 
 function zlevFactor(vclass: string, year: number, zlevShare: number) {
@@ -71,6 +107,10 @@ function zlevFactor(vclass: string, year: number, zlevShare: number) {
   const bench = isCar(vclass) ? ZLEV_BENCH_CAR : ZLEV_BENCH_VAN
   return 1 + Math.min(ZLEV_RELAX_CAP, Math.max(0, zlevShare - bench))
 }
+
+/** Reduction vs the 2021 reference, for the forecast headline. */
+const reductionVs2021 = (vclass: string, year: number) =>
+  1 - fleetTarget(vclass, year) / (isCar(vclass) ? EU2021_CAR : EU2021_VAN)
 
 export const EU: RulePack = {
   id: 'EU',
@@ -85,10 +125,25 @@ export const EU: RulePack = {
   years: [2025, 2026, 2027, 2028, 2029, 2030],
   classes: ['Passenger car', 'Light commercial vehicle'],
   smallVolumeThreshold: 1000,
+  // M1 and N1 are separate obligations with separate Article 8 premiums.
+  classSeparateCompliance: true,
   pooling: { enabled: true, note: 'Article 6 — makers may pool registrations and share one average.' },
+  transfer: {
+    kind: 'pool',
+    unit: 'g/km · car of pooled headroom',
+    verb: 'pool',
+    supplier: 'pool partner',
+    taker: 'pool member',
+    note: 'The EU issues no compliance credit. Article 6 lets manufacturers form a pool and be assessed on ONE combined fleet average — nothing is transferred, priced, banked or carried forward, and super-credits expired in 2022. Headroom still has real value (it is the fine a partner avoids), but it can only be realised by pooling, and the price is whatever the members privately agree. Reg (EU) 2025/1214 adds the only time flexibility: 2025-2027 may be met on a three-year average.',
+  },
   credits: 'Eco-innovation credits up to 6 g/km (2025–2029), plus a ZLEV target relaxation (up to 5%) when the 0–50 g share beats the 25% car benchmark. Super-credits expired in 2022.',
-  limitNote: 'EU fleet target (93.6 g/km for 2025 cars = 2021 WLTP reference −15%) + 0.0144 g per kg of test mass vs the 1609.6 kg reference, then relaxed by the ZLEV factor (2025–2029).',
-  source: 'EC Cars & Vans; ICCT 2025 targets; Reg (EU) 2019/631, 2023/851, 2025/1214.',
+  limitNote: 'EU fleet target (93.6 g/km for 2025 cars) MINUS 0.0144 g per kg of test mass above the 1609.6 kg reference — the car slope is negative, so a heavier fleet gets a tighter target. Vans add 0.0848 g/kg below the 2163.0 kg reference and 0.1064 above it. The result is then relaxed by the ZLEV factor (2025–2029).',
+  source: 'Reg (EU) 2019/631 (Annex I Parts A & B), amended by 2023/851 and 2025/1214; target-line parameters from the Commission\'s JRC133502 eq (27)–(41); fleet from the EEA CO₂-monitoring file.',
+  coverage: {
+    tier: 'market',
+    label: 'Full EEA registrations · 119 car makers (10.80M) + 87 van makers (1.17M) · 2025 provisional, published 25 Jun 2026',
+    detail: 'Every new car and van registered in the EU, Norway and Iceland in 2025, from the EEA CO₂-monitoring file behind Reg (EU) 2019/631, aggregated to model · powertrain · maker with each maker\'s registrations, CO₂, test mass and eco-innovation credit preserved exactly. The car fleet reproduces the EEA\'s published headline to the decimal (96.7 g/km, BEV 18.9%, PHEV 9.7%); the van fleet reads 172.5 g/km against a published 172.1 because multi-stage van attribution is not exposed in the file. Declared Article 6 pools are the real 2025 ones. 2026-2030 hold the 2025 fleet as a baseline — the limit tightens, the fleet does not move until you model it.',
+  },
 
   vehicleMetric: (v: Vehicle, s) => {
     if (v.co2 === 0) return 0
@@ -105,9 +160,10 @@ export const EU: RulePack = {
   limit: (ctx: LimitContext) => referenceTarget(ctx.vclass, ctx.year, ctx.avgMass) * zlevFactor(ctx.vclass, ctx.year, ctx.zlevShare),
   forecast: (year) => ({
     limit: fleetTarget('Passenger car', year),
-    // derive the headline from the actual reduction table so it stays correct at
-    // every year (−15% phase, −55% step, −100% in 2035) instead of a fixed string.
-    note: `−${Math.round((REDUCTION_CAR[year] ?? 0.55) * 100)}% vs 2021`,
+    // Derived from the published target vs the 2021 reference, so it stays
+    // correct at every year (−15% phase, −55% step, −100% in 2035) rather than
+    // being a hand-maintained string that can drift from the maths above.
+    note: `−${Math.round(reductionVs2021('Passenger car', year) * 100)}% vs 2021`,
   }),
   ecoCap, // Art 11 cap: 7 g/km ≤2024, 6 g/km 2025–2029, 4 g/km 2030+
 }
