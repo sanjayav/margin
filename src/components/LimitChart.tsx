@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { RulePack } from '../engine/types'
 import { fmtInt, fmtNum } from '../engine/engine'
 import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
-import { ptColor, ptRing } from '../lib/palette'
+import { ptColor, ptRing, STATUS, WARN } from '../lib/palette'
 
 export interface ChartPoint {
   key: string
@@ -394,7 +394,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           if (!pt || tp.length < 2) return null
           const dim = hover && hover !== key
           const on = hover === key
-          const statusColor = pt.status === 'fine' ? '#ff5d6c' : pt.status === 'compliant' ? '#3ddc97' : pt.status === 'exempt' ? '#ffb454' : '#8C8273'
+          const statusColor = pt.status === 'fine' ? STATUS.fine : pt.status === 'compliant' ? STATUS.compliant : pt.status === 'exempt' ? STATUS.exempt : STATUS['no-sales']
           const col = colorBy === 'powertrain' ? ptColor(pt.powertrain ?? '') : statusColor
           const xy = tp.map((q) => ({ x: sx(q.mass), y: syAt(q.mass, q.metric), q }))
           const last = xy.length - 1
@@ -453,7 +453,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const ux = dx / len, uy = dy / len
           const ex = x1 - ux * (r + 3), ey = y1 - uy * (r + 3)
           const improved = p.metric < from.metric
-          const col = improved ? '#3ddc97' : '#ffb454'
+          const col = improved ? STATUS.compliant : WARN
           const ah = 5.5
           return (
             <g key={`mv-${p.key}`} className="lc-move" pointerEvents="none">
@@ -470,7 +470,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           if (p.mass <= 0) return null
           const cx = sx(p.mass)
           const cy = syAt(p.mass, p.metric)
-          const statusColor = p.status === 'fine' ? '#ff5d6c' : p.status === 'compliant' ? '#3ddc97' : p.status === 'exempt' ? '#ffb454' : '#8C8273'
+          const statusColor = p.status === 'fine' ? STATUS.fine : p.status === 'compliant' ? STATUS.compliant : p.status === 'exempt' ? STATUS.exempt : STATUS['no-sales']
           const color = p.isFleet ? statusColor : colorBy === 'powertrain' ? ptColor(p.powertrain ?? '') : statusColor
           const r = p.isFleet ? 9 : 5 + Math.sqrt(Math.min(1, Math.max(0, p.units) / sizeRef)) * 18
           const active = hover === p.key
@@ -567,7 +567,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           return (
             <g style={{ pointerEvents: 'none' }}>
               <line x1={ox} y1={oy} x2={gx} y2={gy} stroke="#E8223B" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
-              <line x1={gx} y1={gy} x2={gx} y2={syAt(ghost.mass, limitAt(ghost.mass))} stroke={over ? '#ff5d6c' : '#3ddc97'} strokeWidth="1" strokeDasharray="2 3" opacity="0.7" />
+              <line x1={gx} y1={gy} x2={gx} y2={syAt(ghost.mass, limitAt(ghost.mass))} stroke={over ? STATUS.fine : STATUS.compliant} strokeWidth="1" strokeDasharray="2 3" opacity="0.7" />
               <circle cx={gx} cy={gy} r={11} fill="#E8223B" fillOpacity="0.22" stroke="#E8223B" strokeWidth="2" strokeDasharray="5 3" />
               <circle cx={gx} cy={gy} r={2.5} fill="#E8223B" />
               <rect x={tx} y={ty} width={tw} height={ghost.lines.length * 13 + 12} rx="7" fill="#17140F" opacity="0.94" />

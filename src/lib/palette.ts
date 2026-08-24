@@ -83,10 +83,26 @@ export const ptRank = (p: string) => {
 
 // ── Status — RESERVED. Never reused as a categorical series colour, so "over
 //    the line" can never be confused with "this one happens to be series 4".
+//
+// These are the design system's own tokens (tailwind safe / danger / ink), so a
+// maker shown as "over" is the SAME red in the bubble chart and in the card
+// beside it. LimitChart used to carry a private neon set instead (#3ddc97 /
+// #ff5d6c / #ffb454), which was both inconsistent and unusable: measured on the
+// cream chart surface, exempt #8C8273 against fined #ff5d6c is deltaE 1.0 under
+// protanopia — the same colour to a colourblind reader, in a tool whose entire
+// job is showing who owes money. The trio below is deltaE 17.5 at worst for
+// normal vision and clears 3:1 contrast on every slot.
+//
+// Status always ships with an icon and a label (StatusPill, direct chart
+// labels), never colour alone — which is what carries the remaining CVD
+// separation between compliant and fine.
 export const STATUS = {
   compliant: '#0E9F6E',
-  fine: '#C0392B',
+  fine: '#E0484D',
   exempt: '#8C8273',
   'no-sales': '#B3A892',
 } as const
+
+/** Warning/attention — a state, not a series, and never a chart category. */
+export const WARN = '#D98005'
 export const statusColor = (s: string) => (STATUS as Record<string, string>)[s] ?? OTHER

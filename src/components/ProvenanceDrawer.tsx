@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { STATUS } from '../lib/palette'
 import { useProvenance, contributions, rowsCsv, download } from '../lib/provenance'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import { StatusPill } from './ui'
@@ -37,7 +38,7 @@ export default function ProvenanceDrawer() {
             return (
               <div className="rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
                 <div className="space-y-2.5">
-                  <Track label="Fleet" value={agg.avgMetric} max={max} unit={pack.metricUnit} color={over ? '#ff5d6c' : '#3ddc97'} />
+                  <Track label="Fleet" value={agg.avgMetric} max={max} unit={pack.metricUnit} color={over ? STATUS.fine : STATUS.compliant} />
                   <Track label="Limit" value={agg.limit} max={max} unit={pack.metricUnit} color="#E0A100" />
                 </div>
                 <div className="mt-3 flex items-center gap-2 text-xs">

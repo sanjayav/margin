@@ -1,4 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
+import { STATUS, WARN } from '../lib/palette'
 import { useCompliance } from '../lib/useCompliance'
 import { useStore } from '../state/store'
 import { parentsFor } from '../data/fleet'
@@ -17,6 +18,7 @@ import { buildForecastPack, openPrintReport } from '../lib/report'
 import { svgFanChart, svgWaterfall, svgSCurve } from '../lib/packcharts'
 import { Section, StatusPill } from '../components/ui'
 import TornadoChart, { type TornadoDriver } from '../components/TornadoChart'
+import WhenVisible from '../components/WhenVisible'
 import Verdict from '../components/Verdict'
 import Icon, { type IconName } from '../components/Icon'
 
@@ -165,26 +167,7 @@ export default function Forecast() {
 
   // ── sensitivity: how much each lever swings the focused scenario's exposure ──
   // (the classic tornado — every value is engine-computed, one buildForecast per extreme)
-  const sensitivity = useMemo<TornadoDriver[]>(() => {
-    const years = pack.years
-    const fy = years[years.length - 1]
-    const isLive = focusScen.kind === 'live'
-    const planBase = isLive ? liveScenario : base
-    const seed = isLive || focusScen.kind === 'baseline' ? null : materializeSpec(focusScen.def, base, years).perYear
-    type NumLever = 'evSharePct' | 'salesMultiplier' | 'massShiftKg' | 'ecoBoostG'
-    const exposure = (key: NumLever, val: number) => {
-      const perYear: Record<number, Partial<typeof liveScenario>> = {}
-      for (const y of years) perYear[y] = { ...(seed?.[y] ?? {}), [key]: val }
-      return buildForecast({ raw, pack, target, baseline: base, plan: { base: planBase, perYear }, overrides: isLive ? liveOverrides : {}, glide: false, bandN: 0 }).cumPlan
-    }
-    const d: TornadoDriver[] = [
-      { label: 'Zero-emission share', a: { value: exposure('evSharePct', 20), note: '20% ZE' }, b: { value: exposure('evSharePct', 70), note: '70% ZE' } },
-      { label: 'Sales volume', a: { value: exposure('salesMultiplier', 0.9), note: '−10% sales' }, b: { value: exposure('salesMultiplier', 1.15), note: '+15% sales' } },
-    ]
-    if (pack.massBasedLimit !== false) d.push({ label: `${pack.massLabel} shift`, a: { value: exposure('massShiftKg', -40), note: '−40 kg' }, b: { value: exposure('massShiftKg', 60), note: '+60 kg' } })
-    if (pack.ecoCap) d.push({ label: 'Eco-innovation', a: { value: exposure('ecoBoostG', pack.ecoCap(fy)), note: 'full credits' }, b: { value: exposure('ecoBoostG', 0), note: 'no credits' } })
-    return d
-  }, [focusScen, raw, pack, target, base, liveScenario, liveOverrides])
+  // (moved into SensitivityPanel — see the note there)
 
   // ── actions ──
   const hasLive = scenarios.some((s) => s.kind === 'live')
@@ -545,10 +528,15 @@ export default function Forecast() {
         <OutlookPanel raw={raw} pack={pack} country={country} vintageYear={vintageYear} />
       </div>
 
-      {/* sensitivity — what moves the exposure most */}
+      {/* sensitivity — what moves the exposure most. Deferred: it runs
+          buildForecast at both extremes of every lever across every year, which
+          is far too much to pay for during this screen's first paint. */}
       <Section density="detail" title="What moves the exposure"
         right={<span className="text-[11px] text-ink-500">{focusScen.name} · exposure at each lever's plausible extremes</span>}>
-        <TornadoChart base={focusFc.cumPlan} drivers={sensitivity} currency={pack.currency} />
+        <WhenVisible minHeight={260}>
+          <SensitivityPanel base={focusFc.cumPlan} raw={raw} pack={pack} target={target} baseScen={base}
+            focusScen={focusScen} liveScenario={liveScenario} liveOverrides={liveOverrides} />
+        </WhenVisible>
       </Section>
 
       {/* focused-scenario detail */}
@@ -766,7 +754,7 @@ function StudioChart({ years, baseFc, shown, fcById, focusFc, pack }: {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" onMouseLeave={() => setHover(null)}>
       <defs>
         <linearGradient id="fc-over" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ff5d6c" stopOpacity="0.26" /><stop offset="100%" stopColor="#ff5d6c" stopOpacity="0.03" />
+          <stop offset="0%" stopColor={STATUS.fine} stopOpacity="0.26" /><stop offset="100%" stopColor={STATUS.fine} stopOpacity="0.03" />
         </linearGradient>
       </defs>
       {Array.from({ length: 5 }, (_, i) => { const v = (yMax * i) / 4; const y = sy(v); return (<g key={i}><line x1={m.l} y1={y} x2={W - m.r} y2={y} stroke="#1C1812" strokeOpacity="0.05" /><text x={m.l - 6} y={y + 3} textAnchor="end" fontSize="10" fill="#8C8273" className="num">{fmtNum(v, 0)}</text></g>) })}
@@ -774,7 +762,7 @@ function StudioChart({ years, baseFc, shown, fcById, focusFc, pack }: {
       {/* regulatory cliffs */}
       {years.map((_, i) => (cliffs[i] > 0.08 ? (
         <g key={`c${i}`}>
-          <line x1={sx(i)} y1={m.t} x2={sx(i)} y2={m.t + ih} stroke="#ffb454" strokeOpacity="0.4" strokeDasharray="3 3" />
+          <line x1={sx(i)} y1={m.t} x2={sx(i)} y2={m.t + ih} stroke={WARN} strokeOpacity="0.4" strokeDasharray="3 3" />
           {cliffs[i] === baseFc.maxDrop && (
             <g>
               <rect x={sx(i) - 34} y={m.t - 2} width="68" height="15" rx="7" fill="#fff3e0" />
@@ -800,7 +788,7 @@ function StudioChart({ years, baseFc, shown, fcById, focusFc, pack }: {
       {/* first-breach callout on the focused line */}
       {breachIdx >= 0 && (
         <g>
-          <circle cx={sx(breachIdx)} cy={sy(focusVals[breachIdx])} r="5" fill="#ff5d6c" stroke="#FBF7EF" strokeWidth="2" />
+          <circle cx={sx(breachIdx)} cy={sy(focusVals[breachIdx])} r="5" fill={STATUS.fine} stroke="#FBF7EF" strokeWidth="2" />
           <rect x={Math.min(sx(breachIdx) - 30, W - m.r - 66)} y={sy(focusVals[breachIdx]) - 26} width="62" height="16" rx="8" fill="#E0484D" />
           <text x={Math.min(sx(breachIdx) + 1, W - m.r - 35)} y={sy(focusVals[breachIdx]) - 15} textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff">breach {years[breachIdx]}</text>
         </g>
@@ -824,7 +812,7 @@ function StudioChart({ years, baseFc, shown, fcById, focusFc, pack }: {
           {lines.map(({ s, fc, values }) => {
             const focus = fc === focusFc
             if (!focus && hover !== i) return null
-            return <circle key={s.id} cx={sx(i)} cy={sy(values[i])} r={hover === i && focus ? 6 : 4} fill={fc.years[i].lGap > 0 && focus ? '#ff5d6c' : s.hex} stroke="#FBF7EF" strokeWidth="2" />
+            return <circle key={s.id} cx={sx(i)} cy={sy(values[i])} r={hover === i && focus ? 6 : 4} fill={fc.years[i].lGap > 0 && focus ? STATUS.fine : s.hex} stroke="#FBF7EF" strokeWidth="2" />
           })}
           <text x={sx(i)} y={H - 16} textAnchor="middle" fontSize="10" fill="#8C8273" className="num">{yr}</text>
           {hover === i && (
@@ -1206,4 +1194,33 @@ function scheduleAhead(focusFc: ForecastResult, baseFc: ForecastResult, who: str
   })
   const seen = new Set<string>()
   return out.filter((it) => { const k = `${it.year}|${it.title}`; if (seen.has(k)) return false; seen.add(k); return true }).sort((a, b) => a.year - b.year).slice(0, 6)
+}
+
+// The tornado's inputs are expensive: `exposure` runs a full multi-year
+// buildForecast per lever extreme, so drawing it costs ~8 complete forecasts.
+// Keeping it in its own component means the work is tied to the component being
+// MOUNTED, which WhenVisible controls — a memo in the parent would have run
+// regardless of whether the panel was ever on screen.
+function SensitivityPanel({ base, raw, pack, target, baseScen, focusScen, liveScenario, liveOverrides }: any) {
+  const drivers = useMemo<TornadoDriver[]>(() => {
+    const years = pack.years
+    const fy = years[years.length - 1]
+    const isLive = focusScen.kind === 'live'
+    const planBase = isLive ? liveScenario : baseScen
+    const seed = isLive || focusScen.kind === 'baseline' ? null : materializeSpec(focusScen.def, baseScen, years).perYear
+    type NumLever = 'evSharePct' | 'salesMultiplier' | 'massShiftKg' | 'ecoBoostG'
+    const exposure = (key: NumLever, val: number) => {
+      const perYear: Record<number, Partial<typeof liveScenario>> = {}
+      for (const y of years) perYear[y] = { ...(seed?.[y] ?? {}), [key]: val }
+      return buildForecast({ raw, pack, target, baseline: baseScen, plan: { base: planBase, perYear }, overrides: isLive ? liveOverrides : {}, glide: false, bandN: 0 }).cumPlan
+    }
+    const d: TornadoDriver[] = [
+      { label: 'Zero-emission share', a: { value: exposure('evSharePct', 20), note: '20% ZE' }, b: { value: exposure('evSharePct', 70), note: '70% ZE' } },
+      { label: 'Sales volume', a: { value: exposure('salesMultiplier', 0.9), note: '−10% sales' }, b: { value: exposure('salesMultiplier', 1.15), note: '+15% sales' } },
+    ]
+    if (pack.massBasedLimit !== false) d.push({ label: `${pack.massLabel} shift`, a: { value: exposure('massShiftKg', -40), note: '−40 kg' }, b: { value: exposure('massShiftKg', 60), note: '+60 kg' } })
+    if (pack.ecoCap) d.push({ label: 'Eco-innovation', a: { value: exposure('ecoBoostG', pack.ecoCap(fy)), note: 'full credits' }, b: { value: exposure('ecoBoostG', 0), note: 'no credits' } })
+    return d
+  }, [focusScen, raw, pack, target, baseScen, liveScenario, liveOverrides])
+  return <TornadoChart base={base} drivers={drivers} currency={pack.currency} />
 }

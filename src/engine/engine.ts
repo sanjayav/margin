@@ -43,7 +43,42 @@ export const variantKey = (v: Vehicle): string => (v.variant && v.variant.trim()
  *  · salesMultiplier — scale total registrations
  *  · massShiftKg — heavier/lighter fleet (moves the limit AND nudges CO₂)
  */
+// applyScenario copies every row for the year, so it is the single most
+// expensive thing in the engine — and it is called far more often than it looks.
+// `aggregateParent` runs it per manufacturer, and the Intelligence heat map asks
+// for 158 makers x 6 years, so one screen could trigger ~950 full passes over the
+// EU fleet. A CPU profile put ~5 s of a Scenario open inside this function alone.
+//
+// The trees are memoised by REFERENCE, which cannot help here: the hot callers
+// build a fresh scenario per cell (`{ ...s, year }`), so every call is a new
+// object with identical content. This cache is therefore keyed by VALUE — a
+// stringify of the scenario is a few microseconds against milliseconds of object
+// copying — while raw/pack/overrides stay reference-keyed.
+interface ScenCacheEntry { raw: Vehicle[]; pack: RulePack; ov: Record<string, Partial<Scenario>>; key: string; rows: Vehicle[] }
+const _scenCache: ScenCacheEntry[] = []
+const SCEN_CACHE_MAX = 24
+
+/** Rows produced here are TREATED AS IMMUTABLE by every caller (they read and
+ *  aggregate, never mutate), which is what makes sharing them safe. */
 export function applyScenario(
+  raw: Vehicle[], s: Scenario, pack: RulePack,
+  overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
+): Vehicle[] {
+  const key = JSON.stringify(s)
+  for (let i = 0; i < _scenCache.length; i++) {
+    const c = _scenCache[i]
+    if (c.raw === raw && c.pack === pack && c.ov === overrides && c.key === key) {
+      if (i > 0) { _scenCache.splice(i, 1); _scenCache.unshift(c) }
+      return c.rows
+    }
+  }
+  const rows = applyScenarioUncached(raw, s, pack, overrides)
+  _scenCache.unshift({ raw, pack, ov: overrides, key, rows })
+  if (_scenCache.length > SCEN_CACHE_MAX) _scenCache.length = SCEN_CACHE_MAX
+  return rows
+}
+
+function applyScenarioUncached(
   raw: Vehicle[], s: Scenario, pack: RulePack,
   overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
 ): Vehicle[] {
@@ -399,7 +434,7 @@ function cachePut(store: TreeEntry[], e: TreeEntry) {
 }
 
 /** Drop every memoised tree. Call when the underlying dataset is replaced. */
-export function clearTreeCache() { _btCache.length = 0; _dtCache.length = 0 }
+export function clearTreeCache() { _btCache.length = 0; _dtCache.length = 0; _scenCache.length = 0 }
 
 /** Drill-down tree: market → parent → model → powertrain. */
 export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Aggregate {

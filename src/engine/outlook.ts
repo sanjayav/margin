@@ -16,7 +16,7 @@
 // engine — the outlook only *builds fleets*; it never estimates a fine itself.
 // ───────────────────────────────────────────────────────────────────────────
 import type { CountryId, RulePack, Scenario, Vehicle } from './types.js'
-import { buildTree, NO_OVERRIDES } from './engine.js'
+import { buildTree, fleetFineFast, NO_OVERRIDES } from './engine.js'
 import { baselineScenario } from './forecast.js'
 
 // ── the driver registry ──────────────────────────────────────────────────────
@@ -152,7 +152,33 @@ export interface OutlookConfig {
 
 /** Everything a forecast run needs for one case: the per-year fleet function
  *  and the per-year plan (the ZE adoption path). */
-export function outlookRun(cfg: OutlookConfig) {
+// An outlook run is asked for the same year over and over — by the fan chart, the
+// bridge, the tornado, and the motion theatre — and each of those asks used to
+// get a FRESH synthetic fleet array and a FRESH scenario object. Every downstream
+// memo is reference-keyed, so nothing could ever hit: a profile put ~4.7 s of a
+// Forecast open inside applyScenario, all of it re-copying fleets that were
+// already identical. Both are memoised per year below, and the run itself is
+// memoised per config, so the caches downstream finally do their job.
+const _runCache: { key: string; raw: Vehicle[]; pack: RulePack; run: OutlookRun }[] = []
+const RUN_CACHE_MAX = 8
+export type OutlookRun = ReturnType<typeof buildOutlookRun>
+
+export function outlookRun(cfg: OutlookConfig): OutlookRun {
+  const key = JSON.stringify({ d: cfg.drivers, v: cfg.vintageYear })
+  for (let i = 0; i < _runCache.length; i++) {
+    const c = _runCache[i]
+    if (c.raw === cfg.raw && c.pack === cfg.pack && c.key === key) {
+      if (i > 0) { _runCache.splice(i, 1); _runCache.unshift(c) }
+      return c.run
+    }
+  }
+  const run = buildOutlookRun(cfg)
+  _runCache.unshift({ key, raw: cfg.raw, pack: cfg.pack, run })
+  if (_runCache.length > RUN_CACHE_MAX) _runCache.length = RUN_CACHE_MAX
+  return run
+}
+
+function buildOutlookRun(cfg: OutlookConfig) {
   const { raw, pack, drivers, vintageYear } = cfg
   const years = pack.years
   const baseYear = outlookBaseYear(raw, pack, vintageYear)
@@ -164,16 +190,35 @@ export function outlookRun(cfg: OutlookConfig) {
 
   const idx = (year: number) => Math.max(0, year - baseYear)
   const n = Math.max(...years) - baseYear + 1
-  const fleetForYear = (year: number) => outlookFleetForYear(baseRows, drivers, idx(year), year)
+  // Per-year memos: the SAME array and the SAME scenario object come back for a
+  // given year, which is what lets buildTree/applyScenario cache downstream.
+  const _fleets = new Map<number, Vehicle[]>()
+  const _scens = new Map<number, Scenario>()
+  const fleetForYear = (year: number) => {
+    let f = _fleets.get(year)
+    if (!f) _fleets.set(year, (f = outlookFleetForYear(baseRows, drivers, idx(year), year)))
+    return f
+  }
   const shareFor = (year: number) => adoptionShare(s0, drivers.evShareHorizon, idx(year), n, mandateFloor(pack, year))
-  const scenarioFor = (year: number): Scenario => ({ ...baselineScenario(pack), year, evSharePct: Math.round(shareFor(year) * 10) / 10 })
+  const scenarioFor = (year: number): Scenario => {
+    let sc = _scens.get(year)
+    if (!sc) _scens.set(year, (sc = { ...baselineScenario(pack), year, evSharePct: Math.round(shareFor(year) * 10) / 10 }))
+    return sc
+  }
   return { baseYear, baseRows, s0, fleetForYear, shareFor, scenarioFor }
 }
 
 // ── market fine under an outlook configuration (the bridge/sensitivity core) ─
+// This wants ONE number: the sum of per-manufacturer fines. It used to get it by
+// building the whole drill tree, which also aggregates every model and every
+// variant underneath each maker — work that is thrown away immediately. The
+// bridge alone calls this 5x per year, and the tornado many more times over
+// freshly-synthesised fleets, so it dominated a Forecast open.
+//
+// fleetFineFast exists for exactly this (it was written for the risk
+// Monte-Carlo) and skips the model/variant sub-tree entirely.
 function marketFine(rows: Vehicle[], pack: RulePack, sc: Scenario): number {
-  const t = buildTree(rows, pack, sc, NO_OVERRIDES)
-  return (t.children ?? []).reduce((a, c) => a + c.fine, 0)
+  return fleetFineFast(rows, pack, sc, NO_OVERRIDES)
 }
 
 /** Fine for a given year with INDEPENDENT progress indices per factor — the
