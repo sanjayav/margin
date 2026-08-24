@@ -7,7 +7,7 @@
 // the value is split.
 // ───────────────────────────────────────────────────────────────────────────
 import type { Aggregate, RulePack, Scenario, Vehicle } from './types.js'
-import { aggregate, applyScenario, buildTree } from './engine.js'
+import { aggregate, applyScenario, buildTree, NO_OVERRIDES } from './engine.js'
 
 export interface Standing {
   parent: string
@@ -21,7 +21,7 @@ export interface Standing {
   creditBalance: number  // −gap × units (g·units): >0 surplus to sell, <0 deficit to cover
 }
 
-export function standings(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {}): Standing[] {
+export function standings(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Standing[] {
   const tree = buildTree(raw, pack, s, overrides)
   return (tree.children ?? [])
     .filter((c) => c.rawUnits > 0)
@@ -56,7 +56,7 @@ export interface PoolGroup {
 
 /** Group makers by their registered Compliance Pool and value each group as a
  *  proper unit — the legal hierarchy, not a flat maker list. */
-export function poolGroups(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {}): PoolGroup[] {
+export function poolGroups(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): PoolGroup[] {
   const st = standings(raw, pack, s, overrides)
   const pmap = parentPoolMap(raw, s.year)
   const by = new Map<string, PoolMember[]>()
@@ -64,17 +64,28 @@ export function poolGroups(raw: Vehicle[], pack: RulePack, s: Scenario, override
     const pool = pmap[r.parent] ?? r.parent
     ;(by.get(pool) ?? by.set(pool, []).get(pool)!).push({ ...r, pool })
   }
+  // One pass over the rows for the whole screen. Calling poolResult per group
+  // re-ran applyScenario over every vehicle once per pool — 92 pools on the EU
+  // fleet, ~428 ms of blocking work just to draw the group cards.
+  const sums = makerSums(raw, pack, s, overrides)
   return [...by.entries()]
     .map(([pool, members]) => {
       const names = members.map((m) => m.parent)
-      const result = poolResult(raw, pack, s, names, overrides)
+      const pos = coalitionPosition(sums, names, pack, s)
       const standaloneFine = members.reduce((a, m) => a + m.fine, 0)
-      return { pool, members: members.sort((a, b) => a.gap - b.gap), result, standaloneFine, saved: Math.max(0, standaloneFine - result.fine) }
+      const exempt = pos.units > 0 && pos.units < pack.smallVolumeThreshold
+      const result: PoolResult = {
+        members: names, units: pos.units, avgMetric: pos.avgMetric, limit: pos.limit, gap: pos.gap,
+        fine: exempt ? 0 : pos.fine,
+        status: pos.units === 0 ? 'no-sales' : exempt ? 'exempt' : pos.fine > 0 ? 'fine' : 'compliant',
+        standaloneFine, saved: Math.max(0, standaloneFine - (exempt ? 0 : pos.fine)),
+      }
+      return { pool, members: members.sort((a, b) => a.gap - b.gap), result, standaloneFine, saved: result.saved }
     })
     .sort((a, b) => b.result.units - a.result.units)
 }
 
-export function poolAggregate(raw: Vehicle[], pack: RulePack, s: Scenario, members: string[], overrides: Record<string, Partial<Scenario>> = {}): Aggregate {
+export function poolAggregate(raw: Vehicle[], pack: RulePack, s: Scenario, members: string[], overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Aggregate {
   const v = applyScenario(raw, s, pack, overrides).filter((x) => members.includes(x.parent))
   return aggregate(v, pack, s, members.length > 1 ? `Pool of ${members.length}` : members[0] ?? 'Pool', 'parent', 'pool:' + members.join('+'))
 }
@@ -91,7 +102,7 @@ export interface PoolResult {
   saved: number
 }
 
-export function poolResult(raw: Vehicle[], pack: RulePack, s: Scenario, members: string[], overrides: Record<string, Partial<Scenario>> = {}): PoolResult {
+export function poolResult(raw: Vehicle[], pack: RulePack, s: Scenario, members: string[], overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): PoolResult {
   const agg = poolAggregate(raw, pack, s, members, overrides)
   const st = standings(raw, pack, s, overrides)
   const standaloneFine = st.filter((x) => members.includes(x.parent)).reduce((a, x) => a + x.fine, 0)
@@ -115,7 +126,7 @@ interface ClassSums { rawUnits: number; effUnits: number; wMetric: number; wMass
 export interface MakerSums { parent: string; byClass: Map<string, ClassSums> }
 
 export function makerSums(
-  raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {},
+  raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
 ): Map<string, MakerSums> {
   const rows = applyScenario(raw, s, pack, overrides)
   const isZlev = pack.isZLEV ?? pack.isZeroEmission
@@ -212,7 +223,7 @@ export interface OptimiseResult {
 
 const popcount = (x: number) => { let c = 0; while (x) { c += x & 1; x >>= 1 } return c }
 
-export function poolOptimise(raw: Vehicle[], pack: RulePack, s: Scenario, members?: string[], overrides: Record<string, Partial<Scenario>> = {}): OptimiseResult {
+export function poolOptimise(raw: Vehicle[], pack: RulePack, s: Scenario, members?: string[], overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): OptimiseResult {
   const st = standings(raw, pack, s, overrides)
   // Bound the roster. A coalition's value only moves if a member brings either a
   // fine to remove or headroom to lend with it; a maker sitting exactly on its
@@ -291,7 +302,7 @@ export interface MarketOption {
 }
 
 /** Ranked ways for one short maker to deal with its fine: pool, buy credits, or pay. */
-export function bestForMaker(raw: Vehicle[], pack: RulePack, s: Scenario, parent: string, overrides: Record<string, Partial<Scenario>> = {}): MarketOption[] {
+export function bestForMaker(raw: Vehicle[], pack: RulePack, s: Scenario, parent: string, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): MarketOption[] {
   const st = standings(raw, pack, s, overrides)
   const me = st.find((x) => x.parent === parent)
   if (!me || me.fine <= 0) return []

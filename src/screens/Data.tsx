@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ptColor, ptRing } from '../lib/palette'
 import { useStore, defaultScenario } from '../state/store'
 import { getFleet, getMeta, setLiveFleet } from '../data/fleet'
@@ -299,6 +299,18 @@ export default function Data() {
 
   const totalUnits = rows.reduce((a, r) => a + r.sales, 0)
   const makers = new Set(rows.map((r) => r.parent)).size
+  // The table renders one <tr> per row. That was fine when a market carried a
+  // few hundred rows; the EU now ships 10,596 and the browser spent ~12 s
+  // building a DOM nobody can read past the first screen. Page it — the filters,
+  // the stat band and every CSV export still run over the FULL `rows` set, so
+  // this bounds rendering only, never the data.
+  const PAGE_SIZE = 250
+  const [page, setPage] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const pageSafe = Math.min(page, pageCount - 1)
+  const pageRows = useMemo(() => rows.slice(pageSafe * PAGE_SIZE, pageSafe * PAGE_SIZE + PAGE_SIZE), [rows, pageSafe])
+  // any change to the filter/sort result puts you back on the first page
+  useEffect(() => { setPage(0) }, [rows.length, sortKey, sortDir])
 
   // ── compare tray ──────────────────────────────────────────────────────────
   const cmpKey = (r: Vehicle) => `${r.parent}|${r.model}|${variantLabel(r)}|${r.year}`
@@ -667,7 +679,7 @@ export default function Data() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => {
+                {pageRows.map((r, i) => {
                   const m = metricOf(r)
                   // one cell per header — cols is dynamic (scenario metric, master
                   // structure columns, Basis), so the body must map the same array
@@ -733,6 +745,21 @@ export default function Data() {
                 )}
               </tbody>
             </table>
+          )}
+          {!library && rows.length > PAGE_SIZE && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] px-3 py-2.5 text-[11px] text-white/55">
+              <span>
+                Showing <b className="num text-white/85">{fmtInt(pageSafe * PAGE_SIZE + 1)}–{fmtInt(Math.min(rows.length, (pageSafe + 1) * PAGE_SIZE))}</b> of{' '}
+                <b className="num text-white/85">{fmtInt(rows.length)}</b> rows · filters, totals and export cover all of them
+              </span>
+              <span className="flex items-center gap-1">
+                <button disabled={pageSafe === 0} onClick={() => setPage(0)} className="rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10">« First</button>
+                <button disabled={pageSafe === 0} onClick={() => setPage(pageSafe - 1)} className="rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10">‹ Prev</button>
+                <span className="num px-2">page {pageSafe + 1} / {pageCount}</span>
+                <button disabled={pageSafe >= pageCount - 1} onClick={() => setPage(pageSafe + 1)} className="rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10">Next ›</button>
+                <button disabled={pageSafe >= pageCount - 1} onClick={() => setPage(pageCount - 1)} className="rounded px-2 py-1 disabled:opacity-30 hover:bg-white/10">Last »</button>
+              </span>
+            </div>
           )}
         </div>
       </div>

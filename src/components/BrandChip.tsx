@@ -13,7 +13,7 @@ export default function BrandChip({ name, size = 22, className = '' }: { name: s
       className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full border border-black/10 bg-white shadow-[0_1px_2px_rgba(60,45,20,0.10)] ${className}`}>
       {showLogo ? (
         <img src={url} width={Math.round(size * 0.72)} height={Math.round(size * 0.72)} style={{ objectFit: 'contain' }}
-          alt="" draggable={false} onError={() => setFailed(true)} />
+          alt="" draggable={false} loading="lazy" decoding="async" onError={() => setFailed(true)} />
       ) : (
         <span style={{ background: brandColor(name) }} className="grid h-full w-full place-items-center text-[8.5px] font-black leading-none text-white">
           {brandInitials(name)}

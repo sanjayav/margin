@@ -45,7 +45,7 @@ export const variantKey = (v: Vehicle): string => (v.variant && v.variant.trim()
  */
 export function applyScenario(
   raw: Vehicle[], s: Scenario, pack: RulePack,
-  overrides: Record<string, Partial<Scenario>> = {},
+  overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
 ): Vehicle[] {
   let v = raw.filter((x) => x.year === s.year).map((x) => ({ ...x }))
 
@@ -360,19 +360,51 @@ const groupBy = <T,>(arr: T[], fn: (x: T) => string) => {
   return m
 }
 
-// Single-entry, reference-keyed caches. The two trees are pure functions of
-// (raw, pack, scenario, overrides); since Analyze and ScenarioRail each call
-// useCompliance with the SAME store refs in one render, the second build is free.
-// Results are read-only (aggregate() returns fresh objects), so sharing is safe.
-type TreeCache = { raw: Vehicle[]; pack: RulePack; s: Scenario; ov: Record<string, Partial<Scenario>>; r: Aggregate } | null
-let _btCache: TreeCache = null
-let _dtCache: TreeCache = null
-const cacheHit = (c: TreeCache, raw: Vehicle[], pack: RulePack, s: Scenario, ov: Record<string, Partial<Scenario>>) =>
-  !!c && c.raw === raw && c.pack === pack && c.s === s && c.ov === ov
+// Reference-keyed memo for the two trees. They are pure functions of
+// (raw, pack, scenario, overrides) and their results are read-only, so sharing
+// across callers in a render is safe.
+//
+// This used to be a SINGLE entry with `overrides = {}` as a default parameter,
+// and between them those two details meant it essentially never hit:
+//
+//   · a default `= {}` builds a NEW empty object on every call, so the
+//     `ov === ov` reference check failed for every caller that omitted
+//     overrides — which is most of them. Hence the shared NO_OVERRIDES below.
+//   · one entry cannot survive interleaving. ScenarioRail probes a dozen
+//     candidate scenarios per render, and each probe evicted the tree Analyze
+//     had just built, so the two thrashed and every render paid full price.
+//
+// On the EU fleet (10,596 rows) a rebuild is ~45-60 ms, so a missed cache is a
+// dropped frame on any hover or slider drag. A small LRU fixes both.
+export const NO_OVERRIDES: Record<string, Partial<Scenario>> = Object.freeze({}) as Record<string, Partial<Scenario>>
+interface TreeEntry { raw: Vehicle[]; pack: RulePack; s: Scenario; ov: Record<string, Partial<Scenario>>; r: Aggregate }
+const CACHE_MAX = 12
+const _btCache: TreeEntry[] = []
+const _dtCache: TreeEntry[] = []
+
+function cacheGet(store: TreeEntry[], raw: Vehicle[], pack: RulePack, s: Scenario, ov: Record<string, Partial<Scenario>>): Aggregate | null {
+  for (let i = 0; i < store.length; i++) {
+    const c = store[i]
+    if (c.raw === raw && c.pack === pack && c.s === s && c.ov === ov) {
+      // move-to-front so the hot entries survive a burst of probe scenarios
+      if (i > 0) { store.splice(i, 1); store.unshift(c) }
+      return c.r
+    }
+  }
+  return null
+}
+function cachePut(store: TreeEntry[], e: TreeEntry) {
+  store.unshift(e)
+  if (store.length > CACHE_MAX) store.length = CACHE_MAX
+}
+
+/** Drop every memoised tree. Call when the underlying dataset is replaced. */
+export function clearTreeCache() { _btCache.length = 0; _dtCache.length = 0 }
 
 /** Drill-down tree: market → parent → model → powertrain. */
-export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {}): Aggregate {
-  if (cacheHit(_btCache, raw, pack, s, overrides)) return _btCache!.r
+export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Aggregate {
+  const hit = cacheGet(_btCache, raw, pack, s, overrides)
+  if (hit) return hit
   const v = applyScenario(raw, s, pack, overrides)
   const root = aggregate(v, pack, s, pack.name, 'fleet', 'fleet')
 
@@ -392,7 +424,7 @@ export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides
     })
     .sort((a, b) => b.rawUnits - a.rawUnits)
 
-  _btCache = { raw, pack, s, ov: overrides, r: root }
+  cachePut(_btCache, { raw, pack, s, ov: overrides, r: root })
   return root
 }
 
@@ -403,8 +435,9 @@ export function buildTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides
  * `MAKER/MODEL` / `MAKER/MODEL/VARIANTKEY`) and the variant node's LABEL equals
  * its variantKey so a drill path reconstructs the scope exactly.
  */
-export function buildDrillTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {}): Aggregate {
-  if (cacheHit(_dtCache, raw, pack, s, overrides)) return _dtCache!.r
+export function buildDrillTree(raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Aggregate {
+  const hit = cacheGet(_dtCache, raw, pack, s, overrides)
+  if (hit) return hit
   const v = applyScenario(raw, s, pack, overrides)
   const root = aggregate(v, pack, s, pack.name, 'fleet', 'fleet')
   const byUnits = (a: Aggregate, b: Aggregate) => b.rawUnits - a.rawUnits
@@ -431,7 +464,7 @@ export function buildDrillTree(raw: Vehicle[], pack: RulePack, s: Scenario, over
     })
     .sort(byUnits)
 
-  _dtCache = { raw, pack, s, ov: overrides, r: root }
+  cachePut(_dtCache, { raw, pack, s, ov: overrides, r: root })
   return root
 }
 
@@ -585,7 +618,7 @@ export function monthlyCompliance(rows: Vehicle[], pack: RulePack, s: Scenario):
 
 export function threeYearAverage(
   raw: Vehicle[], pack: RulePack, s: Scenario, parent: string,
-  years: number[] = [2025, 2026, 2027], overrides: Record<string, Partial<Scenario>> = {},
+  years: number[] = [2025, 2026, 2027], overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
 ): ThreeYear {
   const perYear = years.map((year) => {
     const n = aggregateParent(raw, pack, { ...s, year }, parent, overrides)
@@ -608,7 +641,7 @@ export function threeYearAverage(
  * ~40× heavier). market = Σ all makers · pool = Σ the pool's makers · maker = one.
  */
 export function fleetFineFast(
-  raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {},
+  raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES,
   opts: { pool?: string; maker?: string } = {},
 ): number {
   let v = applyScenario(raw, s, pack, overrides)
@@ -620,7 +653,7 @@ export function fleetFineFast(
 }
 
 /** Aggregate for one parent (the selected maker), with its model breakdown. */
-export function aggregateParent(raw: Vehicle[], pack: RulePack, s: Scenario, parent: string, overrides: Record<string, Partial<Scenario>> = {}): Aggregate {
+export function aggregateParent(raw: Vehicle[], pack: RulePack, s: Scenario, parent: string, overrides: Record<string, Partial<Scenario>> = NO_OVERRIDES): Aggregate {
   const v = applyScenario(raw, s, pack, overrides).filter((x) => x.parent === parent)
   const node = aggregate(v, pack, s, parent, 'parent', parent)
   node.children = [...groupBy(v, (x) => x.model).entries()]

@@ -146,6 +146,17 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     return { xMin, xMax, yLo, yHi, line }
   }, [points, limitAt, ghosts, corridor, gap, trails])
 
+  // Logos are third-party requests (one per manufacturer). At 3 makers that was
+  // free; on the EU's 158 it fired ~158 external fetches on module entry, which
+  // the browser serialises ~6 at a time — seconds of it, for discs mostly too
+  // small to read. Only the largest bubbles ask for one; the rest wear the
+  // deterministic monogram they would have fallen back to anyway.
+  const LOGO_MAX = 28
+  const logoAllowed = useMemo(() => {
+    if (!logos) return new Set<string>()
+    return new Set([...points].sort((a, b) => b.units - a.units).slice(0, LOGO_MAX).map((p) => p.key))
+  }, [points, logos])
+
   const T = (mass: number, v: number) => (gap ? v - limitAt(mass) : v)
   const sx = (mass: number) => m.l + ((mass - xMin) / (xMax - xMin)) * iw
   const sy = (v: number) => m.t + ih - ((v - yLo) / (yHi - yLo)) * ih
@@ -483,7 +494,10 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
                 </g>
               )}
               {(() => {
-                const url = logos && !p.isFleet ? brandLogoUrl(p.label) : null
+                // r is the bubble radius; below ~9px a 128px favicon renders as
+                // an unreadable smudge, so it is not worth a network round trip.
+                const wantsLogo = logos && !p.isFleet && logoAllowed.has(p.key) && r >= 9
+                const url = wantsLogo ? brandLogoUrl(p.label) : null
                 const showLogo = logos && !p.isFleet
                 if (!showLogo) return (
                   <circle cx={cx} cy={cy} r={r + (active ? 3 : 0)} fill={color} fillOpacity={p.isFleet ? 0.95 : 0.5} stroke={p.isFleet ? '#FBF7EF' : color} strokeWidth={p.isFleet ? 2.5 : 1.5} className={p.isFleet ? 'animate-flip' : 'lc-bubble'} style={p.isFleet ? { filter: 'url(#glow)' } : { transition: 'r .25s ease, cx .25s ease, cy .25s ease, fill .25s ease' }} />

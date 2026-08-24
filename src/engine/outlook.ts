@@ -16,7 +16,7 @@
 // engine — the outlook only *builds fleets*; it never estimates a fine itself.
 // ───────────────────────────────────────────────────────────────────────────
 import type { CountryId, RulePack, Scenario, Vehicle } from './types.js'
-import { buildTree } from './engine.js'
+import { buildTree, NO_OVERRIDES } from './engine.js'
 import { baselineScenario } from './forecast.js'
 
 // ── the driver registry ──────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ export function outlookRun(cfg: OutlookConfig) {
 
 // ── market fine under an outlook configuration (the bridge/sensitivity core) ─
 function marketFine(rows: Vehicle[], pack: RulePack, sc: Scenario): number {
-  const t = buildTree(rows, pack, sc, {})
+  const t = buildTree(rows, pack, sc, NO_OVERRIDES)
   return (t.children ?? []).reduce((a, c) => a + c.fine, 0)
 }
 

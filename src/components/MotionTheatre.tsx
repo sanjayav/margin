@@ -14,7 +14,7 @@
 // ───────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CountryId, RulePack, Scenario, Vehicle } from '../engine/types'
-import { buildTree, fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { buildTree, fmtInt, fmtMoney, fmtNum, NO_OVERRIDES } from '../engine/engine'
 import { baselineScenario } from '../engine/forecast'
 import { CASES, caseDrivers, outlookRun, type DriverSet, type OutlookConfig } from '../engine/outlook'
 import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
@@ -51,8 +51,17 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
   const logosRef = useRef<Map<string, HTMLImageElement | 'failed'>>(new Map())
   const reduced = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, [])
 
+  // The theatre is an animation the user opts into, but its keyframes are one
+  // full engine aggregate PER YEAR on a synthetic fleet — on the EU's 158 makers
+  // that is most of a second of blocking work. Building them on mount made
+  // Forecast pay for a chart nobody had pressed play on yet. Frames are built on
+  // first engagement (play, scrub, or case change) and cached from then on.
+  const [armed, setArmed] = useState(false)
+  const arm = () => setArmed(true)
+
   // ── keyframes: one ENGINE aggregate per case-year ──────────────────────────
   const frames = useMemo<YearFrame[]>(() => {
+    if (!armed) return []
     const base = baselineScenario(pack)
     let fleetFor: (y: number) => Vehicle[]
     let scFor: (y: number) => Scenario
@@ -67,7 +76,7 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
       scFor = run.scenarioFor
     }
     return years.map((y) => {
-      const t = buildTree(fleetFor(y), pack, scFor(y), {})
+      const t = buildTree(fleetFor(y), pack, scFor(y), NO_OVERRIDES)
       const makers = new Map<string, MakerFrame>()
       for (const c of t.children ?? []) {
         if (c.rawUnits <= 0 || c.avgMass <= 0) continue
@@ -76,7 +85,14 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
       const marketFine = (t.children ?? []).reduce((a, c) => a + c.fine, 0)
       return { year: y, makers, marketFine, zeShare: t.zlevShare * 100, avgMetric: t.avgMetric, avgLimit: t.limit }
     })
-  }, [raw, pack, drivers, vintageYear, caseSel, years])
+  }, [armed, raw, pack, drivers, vintageYear, caseSel, years])
+
+  // NOTE: arming on visibility was worse than arming on mount — the theatre sits
+  // just below the fold, so the observer fired immediately and the component paid
+  // for a render with no frames AND the full frame build straight after. It is
+  // opt-in instead: the keyframes are built when someone actually presses play or
+  // scrubs. Until then the canvas shows the poster below and Forecast's first
+  // paint carries none of it.
 
   // preload each maker's logo once (async; frames draw monograms until ready)
   useEffect(() => {
@@ -97,6 +113,7 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
   const scales = useMemo(() => {
     const ms: number[] = [], vs: number[] = []
     for (const f of frames) for (const m of f.makers.values()) { ms.push(m.mass); vs.push(m.metric, m.limit) }
+    if (!ms.length) return { mLo: 0, mHi: 1, vLo: 0, vHi: 1, uMax: 1 } // not armed yet
     const mLo = Math.min(...ms), mHi = Math.max(...ms)
     const vLo = Math.min(...vs, 0), vHi = Math.max(...vs)
     const uMax = Math.max(...frames.flatMap((f) => [...f.makers.values()].map((m) => m.units)), 1)
@@ -272,9 +289,36 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
     return () => window.removeEventListener('keydown', onKey)
   }, [years.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const jumpTo = (p: number) => { posRef.current = p; setPos(p); trailsRef.current.clear() }
+  const jumpTo = (p: number) => { arm(); posRef.current = p; setPos(p); trailsRef.current.clear() }
   const restart = () => { jumpTo(0); setPlaying(true) }
   useEffect(() => { jumpTo(0); setPlaying(false) }, [caseSel, country]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Poster state. Nothing above this line touches `frames`, so an unarmed
+  // theatre costs a couple of divs — the engine work starts on the first press.
+  if (!armed) {
+    return (
+      <div ref={wrapRef} className="relative">
+        <div className="relative overflow-hidden rounded-2xl border border-black/[0.07]" style={{ background: 'linear-gradient(150deg,#FFFDF9 0%,#F6F1E6 100%)', height: 340 }}>
+          <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.5]"
+            style={{ backgroundImage: 'radial-gradient(rgba(28,24,18,0.07) 1px, transparent 1px)', backgroundSize: '22px 22px', maskImage: 'radial-gradient(120% 120% at 50% 40%, #000 30%, transparent 72%)', WebkitMaskImage: 'radial-gradient(120% 120% at 50% 40%, #000 30%, transparent 72%)' }} />
+          <div className="relative flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+            <button onClick={arm}
+              className="group grid h-14 w-14 place-items-center rounded-full text-white shadow-[0_10px_30px_-10px_rgba(232,34,59,0.6)] transition hover:scale-[1.06]"
+              style={{ background: 'linear-gradient(135deg,#E8223B,#C41730)' }} aria-label="Play the decade">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="ml-[3px]"><path d="M8 5v14l11-7z" /></svg>
+            </button>
+            <div>
+              <div className="font-display text-[15px] font-bold text-ink-100">Play the decade</div>
+              <p className="mx-auto mt-1 max-w-[46ch] text-[12px] leading-relaxed text-ink-500">
+                Every manufacturer as a bubble — mass against fleet CO₂, sized by volume — drifting year to year while the
+                statutory line tightens beneath it. Each keyframe is a full engine aggregate, so it is built when you press play.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const { a, b, f } = frameAt(pos)
   const yearNow = Math.round(lerp(a.year, b.year, f))
@@ -286,7 +330,7 @@ export default function MotionTheatre({ raw, pack, country, drivers, vintageYear
     <div ref={wrapRef} className="relative">
       {/* controls */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button data-testid="theatre-play" onClick={() => (pos >= years.length - 1 ? restart() : setPlaying((p) => !p))}
+        <button data-testid="theatre-play" onClick={() => { arm(); pos >= years.length - 1 ? restart() : setPlaying((p) => !p) }}
           className="btn-primary flex items-center gap-1.5 px-4 py-2 text-xs">
           {playing ? <><span className="flex gap-[3px]"><i className="h-3 w-[3px] rounded-sm bg-white" /><i className="h-3 w-[3px] rounded-sm bg-white" /></span> Pause</> : <><span className="ml-0.5 inline-block h-0 w-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-white" /> {pos >= years.length - 1 ? 'Replay the decade' : 'Play the decade'}</>}
         </button>
