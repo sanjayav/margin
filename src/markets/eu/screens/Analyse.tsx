@@ -32,7 +32,7 @@ const nodeAt = (root: Aggregate, path: string[]): Aggregate => {
 const solo = (n?: Aggregate) => !!n && (n.children?.length ?? 0) === 1
 
 export default function EUAnalyse() {
-  const { pack, drillTree, meta, scenario } = useCompliance('actuals')
+  const { pack, tree, drillTree, meta, scenario } = useCompliance('actuals')
   const drill = useStore((s) => s.drillPath)
   const setDrill = useStore((s) => s.setDrill)
   const setParent = useStore((s) => s.setParent)
@@ -47,11 +47,23 @@ export default function EUAnalyse() {
     (node.children ?? []).filter((c) => c.rawUnits > 0).sort((a, b) => b.fine - a.fine || b.rawUnits - a.rawUnits),
     [node])
 
-  // Exposure at a scope is the SUM of the liabilities inside it, not the penalty
-  // on that scope's own average. The market does not receive one bill — each
-  // manufacturer does — so summing the children is the only figure that matches
-  // what anyone actually pays, and it is what the Brief and the top bar show.
-  const exposure = useMemo(() => (kids.length ? kids.reduce((a, c) => a + c.fine, 0) : node.fine), [kids, node.fine])
+  // Exposure is ALWAYS the sum of per-MANUFACTURER liabilities, because that is
+  // who receives a bill. Summing the drill's children is only the same thing
+  // below the pool tier: at market level the children are pools, so summing them
+  // gives the POOLED liability (EUR 7.29bn) rather than the standalone one
+  // (EUR 10.77bn). Both are real, they differ by what pooling removes, and
+  // showing one where the reader expects the other — two inches from the top
+  // bar showing the other — is how a product loses its credibility.
+  const exposure = useMemo(() => {
+    if (drill.length === 0) return (tree.children ?? []).reduce((a, m) => a + m.fine, 0) // manufacturers
+    if (drill.length === 1) return (node.children ?? []).reduce((a, m) => a + m.fine, 0) // pool → its makers
+    return node.fine // a manufacturer or below: its own liability
+  }, [drill.length, tree, node])
+  const exposureBasis = drill.length === 0
+    ? `standalone across ${(tree.children ?? []).filter((m) => m.fine > 0).length} manufacturers · before pooling`
+    : drill.length === 1
+      ? `${(node.children ?? []).length} pool member${(node.children ?? []).length === 1 ? '' : 's'}, standalone`
+      : pack.fineRateLabel
 
   const into = (label: string) => {
     const child = node.children?.find((c) => c.label === label)
@@ -118,8 +130,7 @@ export default function EUAnalyse() {
         <Figure label="Target" value={fmtNum(node.limit, 1)} basis="mass-adjusted, ZLEV-relaxed" />
         <Figure label="Gap" value={`${node.gap > 0 ? '+' : ''}${fmtNum(node.gap, 1)}`} basis="fleet minus target" tone={node.gap > 0 ? 'bad' : 'good'} />
         <Figure label="Exposure" value={exposure > 0 ? fmtMoney(exposure, pack.currency) : '—'}
-          basis={kids.length ? `sum of ${kids.length} liabilities · ${pack.fineRateLabel}` : pack.fineRateLabel}
-          tone={exposure > 0 ? 'bad' : 'neutral'} />
+          basis={exposureBasis} tone={exposure > 0 ? 'bad' : 'neutral'} />
       </div>
 
       <div className="mt-10">

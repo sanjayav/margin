@@ -328,7 +328,16 @@ export function bestForMaker(raw: Vehicle[], pack: RulePack, s: Scenario, parent
     const myResidual = poolDeficit > 0 ? res.fine * (deficitGU / poolDeficit) : res.fine
     opts.push({
       type: 'pool',
-      label: `Pool with ${surplus.map((x) => x.parent.split(' ')[0]).join(' & ')}`,
+      // Name the partners that actually carry the load, not all of them. On the
+      // EU fleet this listed 50+ makers in a single unreadable line, most of them
+      // contributing a rounding error — the biggest three plus a count says the
+      // same thing and can be read.
+      label: (() => {
+        const ranked = [...surplus].sort((a, b) => b.creditBalance - a.creditBalance)
+        const named = ranked.slice(0, 3).map((x) => x.parent.split(/\s+/)[0])
+        const rest = ranked.length - named.length
+        return `Pool with ${named.join(', ')}${rest > 0 ? ` and ${rest} other${rest === 1 ? '' : 's'}` : ''}`
+      })(),
       detail: `Combined fleet ${res.avgMetric.toFixed(1)} vs limit ${res.limit.toFixed(1)} ${pack.metricUnit} — ${res.status === 'fine' ? 'cuts the gap' : 'clears the limit'}. Settle ~${cur}${Math.round(payment).toLocaleString()} with the surplus maker(s).`,
       cost: payment + myResidual,
     })
