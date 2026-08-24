@@ -129,3 +129,70 @@ Each step ships working and is reviewed before the next starts.
 
 Done means: typecheck, tests, the EU verifier, the design detector, and a
 screenshot reviewed at 1560px and at 1024px.
+
+---
+
+## 6. UI architecture
+
+Benchmarked against Linear/Stripe/Notion (navigation), Bloomberg (expert
+density) and the master–detail–inspector pattern.
+
+### The shell — three panes, fixed meaning
+
+    ┌─────────┬────────────────────────────┬───────────┐
+    │  NAV    │      WORKING SURFACE       │ INSPECTOR │
+    │ market  │  one module, one job,      │ evidence  │
+    │ modules │  ONE primary action,       │ · agent   │
+    │ persona │  ≤ 4 metrics above fold    │ · assumption │
+    └─────────┴────────────────────────────┴───────────┘
+                  ⌘K — the same grammar, typed
+
+The third pane is the fix for the biggest structural inconsistency in the
+current app: today it is FactsRail on one screen, ScenarioRail on another and
+nothing on a third, so the user cannot learn what the right-hand side of the
+screen *is*. It becomes ONE thing — the Inspector — which always answers "tell me
+more about what I have selected". What fills it is contextual; that it exists,
+and where, is not.
+
+Sidebar navigation stays visible. ⌘K complements it and never replaces it: a
+command palette is how an expert moves, not how a new user learns.
+
+### The grammar — one vocabulary, three ways in
+
+Bloomberg's real lesson is not density, it is a compact learnable vocabulary that
+experts internalise. AiRE has five verbs:
+
+    show     <maker | market | model>     navigate to it
+    why      <number>                     open its computation
+    what if  <change>                     stage a scenario
+    compare  <a> <b>                      side by side
+    prove    <number>                     provenance + export
+
+Every UI affordance maps to one of these, every one is typeable in ⌘K, and every
+one is sayable to the agent. That equivalence is the point: **the agent's intent
+vocabulary and the app's command vocabulary are the same set**, so the agent can
+do anything the user can do, and using the UI teaches the agent.
+
+New capability = a new noun, not a new verb. If something needs a sixth verb, it
+probably belongs inside an existing one.
+
+### Density is a mode
+
+`Board` and `Analyst` already exist and mean almost nothing. They become the
+answer to "the product is too complex" — without making it useless for the people
+who live in it.
+
+| | Board | Analyst |
+|---|---|---|
+| Reader | exec, compliance officer checking in | daily analyst |
+| Shows | one number, one sentence, large type | tables, drill, inspector |
+| Controls | none | full |
+| Metrics above fold | 1 | ≤ 4 |
+
+Same engine, same numbers. One is the calm door, the other the cockpit.
+
+### Rules that keep the shell honest
+- A module has ONE primary action. If it needs two, it is two modules.
+- ≤ 4 metrics above the fold (Stripe's discipline). The fifth goes in the Inspector.
+- The Inspector never contains a primary action — it explains, it does not decide.
+- Nothing in the working surface is unreachable by the grammar.
