@@ -2,7 +2,7 @@
 import { defineMarket } from '../types'
 import EUBrief from './screens/Brief'
 import EUOverview from './screens/Overview'
-import Analyze from '../../screens/Analyze'
+import EUAnalyse from './screens/Analyse'
 import Scenario from '../../screens/Scenario'
 import Data from '../../screens/Data'
 import Pooling from '../../screens/Pooling'
@@ -28,11 +28,11 @@ export default defineMarket({
     { group: 'Utilities', modules: ['data'] },
   ],
   modules: {
-    brief: { id: 'brief', label: 'Brief', icon: 'gauge', purpose: 'What needs you today', component: EUBrief },
+    brief: { id: 'brief', label: 'Brief', icon: 'gauge', purpose: 'What needs you today', component: EUBrief, ownsChrome: true },
     // Kept routable while Analyse absorbs it — reachable by link and by the
     // agent, but no longer a destination in the nav.
     overview: { id: 'overview', label: 'Position', icon: 'scatter', purpose: 'Where the market sits against the line', component: EUOverview, hidden: true },
-    analyse: { id: 'analyse', label: 'Analyse', icon: 'scatter', purpose: 'Drill from the market to a single variant', component: Analyze },
+    analyse: { id: 'analyse', label: 'Analyse', icon: 'scatter', purpose: 'Drill from the market to a single variant', component: EUAnalyse, ownsChrome: true },
     scenario: { id: 'scenario', label: 'Plan', icon: 'sliders', purpose: 'Model a fleet change and price it', component: Scenario },
     forecast: { id: 'forecast', label: 'Forecast', icon: 'trending', purpose: 'The exposure to 2035, under driver assumptions', component: Forecast, addon: 'planning' },
     pooling: { id: 'pooling', label: 'Pooling', icon: 'handshake', purpose: 'Article 6 — who can carry whom, and what it is worth', component: Pooling, addon: 'pooling',

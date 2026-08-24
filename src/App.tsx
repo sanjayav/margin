@@ -245,6 +245,7 @@ function TopBar() {
   const c = useCompliance(screen === 'analyse' || screen === 'creditbook' ? 'actuals' : 'live')
   const { pack, scenario } = c
   const year = useStore((s) => s.scenario.year)
+  const tbCountry = useStore((s) => s.country)
   // …and Plan can read the year at a point in its monthly filing, so the header
   // follows it there. Anywhere else the scope is not applied, so the verdict
   // stays the whole period.
@@ -261,7 +262,12 @@ function TopBar() {
     return headScope.mode === 'month' ? `${m} ${year}` : `${year} to ${m}`
   }, [headScope, year, pack])
   const openCmdK = useCmdK((s) => s.setOpen)
-  const item = NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
+  // A registered market names its own modules — the legacy NAV table still calls
+  // `analyse` "Plan", which is not what this market calls it.
+  const registered = getMarket(tbCountry)?.modules[screen]
+  const item = registered
+    ? { id: screen, label: registered.label, icon: registered.icon }
+    : NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
   // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
   const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
   const marketFine = makers.reduce((a, c) => a + c.fine, 0)
@@ -397,6 +403,25 @@ function ModuleShell() {
     ?? SHARED[screen]
     ?? (market ? market.modules[market.home].component : AnalyseActuals)
   const gated = screen === 'pooling' && !poolingAddon
+
+  // A rebuilt module brings its own shell (nav + working surface + Inspector).
+  // Rendering it inside the legacy chrome produced two navigations and two
+  // inspectors side by side, so the legacy frame steps aside for it entirely.
+  if (market?.modules[screen]?.ownsChrome && !gated) {
+    return (
+      <div className="flex h-screen overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar />
+          <ErrorBoundary screenKey={screen}>
+            <div key={screen} className="screen-in flex min-h-0 flex-1">
+              <Screen />
+            </div>
+          </ErrorBoundary>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />

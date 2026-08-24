@@ -16,6 +16,7 @@ import { runCoPilot, type Finding } from '../../../engine/copilot'
 import { clientFleetSource, type ToolContext } from '../../../engine/tools'
 import { fmtInt, fmtMoney } from '../../../engine/engine'
 import Brief from '../../../design/patterns/Brief'
+import Shell from '../../../app/Shell'
 import { Block, Provenance } from '../../../design/primitives'
 import Icon from '../../../components/Icon'
 
@@ -50,7 +51,7 @@ export default function EUBrief() {
   }
 
   return (
-    <div>
+    <Shell>
       <header className="mb-9">
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-[12.5px] text-ink-500">{pack.name} · {WHEN.format(new Date())}</p>
@@ -91,7 +92,7 @@ export default function EUBrief() {
         <Icon name="spark" size={13} className="text-brand" />
         Ask anything about this market — <button onClick={() => setScreen('copilot')} className="font-semibold text-ink-300 underline-offset-2 hover:underline">open AiRE</button>
       </p>
-    </div>
+    </Shell>
   )
 }
 

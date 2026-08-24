@@ -60,6 +60,12 @@ export interface MarketModule {
   value?: () => { headline: string; detail: string } | null
   /** Hidden from nav but still routable (deep links, AI navigation). */
   hidden?: boolean
+  /** This module renders its own chrome via app/Shell — nav, working surface and
+   *  Inspector. The legacy sidebar and rails are suppressed for it, because two
+   *  shells on one screen produce two navigations and two inspectors, which is
+   *  worse than either alone. This is the per-module switch that lets the rebuild
+   *  run beside the old app instead of replacing it in one cut. */
+  ownsChrome?: boolean
 }
 
 export interface MarketDefinition {
