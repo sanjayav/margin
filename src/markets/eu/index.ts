@@ -1,5 +1,6 @@
 // The EU module. Everything this market shows, in this market's language.
 import { defineMarket } from '../types'
+import EUBrief from './screens/Brief'
 import EUOverview from './screens/Overview'
 import Analyze from '../../screens/Analyze'
 import Scenario from '../../screens/Scenario'
@@ -17,9 +18,9 @@ export default defineMarket({
   sellableAddons: ['pooling', 'planning', 'radar'],
   name: 'European Union',
   regulation: 'Reg (EU) 2019/631 · 2023/851 · 2025/1214',
-  home: 'overview',
+  home: 'brief',
   nav: [
-    { group: 'Compliance', modules: ['overview', 'analyse', 'scenario', 'forecast'] },
+    { group: 'Compliance', modules: ['brief', 'analyse', 'scenario', 'forecast'] },
     // The EU issues no compliance credit — Article 6 shares one fleet average.
     // "Credit book" is kept because headroom still has value, but pooling is the
     // instrument here, so it leads.
@@ -27,7 +28,10 @@ export default defineMarket({
     { group: 'Utilities', modules: ['data'] },
   ],
   modules: {
-    overview: { id: 'overview', label: 'Overview', icon: 'gauge', purpose: 'Where the market sits against the line, and what it costs', component: EUOverview },
+    brief: { id: 'brief', label: 'Brief', icon: 'gauge', purpose: 'What needs you today', component: EUBrief },
+    // Kept routable while Analyse absorbs it — reachable by link and by the
+    // agent, but no longer a destination in the nav.
+    overview: { id: 'overview', label: 'Position', icon: 'scatter', purpose: 'Where the market sits against the line', component: EUOverview, hidden: true },
     analyse: { id: 'analyse', label: 'Analyse', icon: 'scatter', purpose: 'Drill from the market to a single variant', component: Analyze },
     scenario: { id: 'scenario', label: 'Plan', icon: 'sliders', purpose: 'Model a fleet change and price it', component: Scenario },
     forecast: { id: 'forecast', label: 'Forecast', icon: 'trending', purpose: 'The exposure to 2035, under driver assumptions', component: Forecast, addon: 'planning' },

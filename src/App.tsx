@@ -47,7 +47,7 @@ import type { CountryId } from './engine/types'
 // book of record; levers live in Scenario); Pooling is the add-on (only some
 // regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling'; country?: CountryId }[] = [
-  { id: 'overview', label: 'Overview', icon: 'gauge', tier: 'CORE' },
+  { id: 'brief', label: 'Brief', icon: 'gauge', tier: 'CORE' },
   { id: 'copilot', label: 'Co-pilot', icon: 'spark', tier: 'Core' },
   { id: 'analyse', label: 'Plan', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
@@ -63,7 +63,7 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
 // instead of a flat wall of seven. Co-pilot stays standalone (the front door).
 const SCENARIO_SCREENS: ScreenId[] = ['scenario'] // tabs resolve to screen:'scenario'
 const HUBS: { label: string; icon: IconName; hint: string; items: ScreenId[] }[] = [
-  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['overview', 'analyse', 'scenario', 'forecast'] },
+  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['brief', 'analyse', 'scenario', 'forecast'] },
   { label: 'Credits', icon: 'scale', hint: 'ledger · pool · price', items: ['creditbook', 'pooling', 'pricing'] },
 ]
 
@@ -297,7 +297,9 @@ function TopBar() {
         </button>
         <div className="h-10 w-px bg-white/[0.10]" />
         <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 ${under ? 'border-safe/25 bg-safe/[0.08]' : 'border-danger/25 bg-danger/[0.08]'}`}>
-          <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger animate-pulse'}`} />
+          {/* The pulse was an alarm that never stopped ringing. A steady dot
+              states the position; it does not demand attention every second. */}
+          <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger'}`} />
           <div className="leading-tight">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9A9082]">{pack.name} {periodTag} · {isCN ? `${dc!.totals.makers - dc!.totals.makersOver} of ${dc!.totals.makers} credit-clear` : under ? 'Under the line' : 'Over the line'}</div>
             <div className="num text-[13px] font-bold text-white">
@@ -310,11 +312,19 @@ function TopBar() {
             </div>
           </div>
         </div>
-        <div className="h-10 w-px bg-white/[0.10]" />
-        <div className="text-right">
-          <div className="label text-[#8A8174]">{pack.currency}-at-risk</div>
-          <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}<span className="ml-1.5 text-[11px] font-medium text-[#9A9082]">{over} of {makers.length} over</span></div>
-        </div>
+        {/* Deliberately absent on the Brief. Opening a market with a penalty
+            makes the tool read as an accusation before the reader knows what to
+            do about it — the whole reason the Brief exists. The figure is one
+            line down on that screen, and permanent everywhere else. */}
+        {screen !== 'brief' && (
+          <>
+            <div className="h-10 w-px bg-white/[0.10]" />
+            <div className="text-right">
+              <div className="label text-[#8A8174]">{pack.currency}-at-risk</div>
+              <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}<span className="ml-1.5 text-[11px] font-medium text-[#9A9082]">{over} of {makers.length} over</span></div>
+            </div>
+          </>
+        )}
       </div>
     </header>
   )
