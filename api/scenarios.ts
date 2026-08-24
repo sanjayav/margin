@@ -4,6 +4,7 @@
 // The client treats localStorage as the live source of truth and mirrors here, so
 // the app degrades gracefully if the backend is unavailable.
 import { getScenarioBlob, putScenarioBlob } from './_store.js'
+import { requireSession } from './_auth.js'
 
 // Hard caps so a buggy or hostile client can't grow the blob unboundedly: the
 // store keeps at most 60 scenarios client-side, so mirror that here, and bound
@@ -22,10 +23,14 @@ function validScenario(s: any): boolean {
 }
 
 export default async function handler(req: any, res: any) {
+  // Saved scenarios are customer work product. The workspace comes from the
+  // session, never from the request — a client cannot ask for someone else's.
+  const session = requireSession(req, res)
+  if (!session) return
   try {
     if (req.method === 'GET') {
       res.setHeader('Cache-Control', 'no-store')
-      const blob = await getScenarioBlob()
+      const blob = await getScenarioBlob(session.workspace)
       res.status(200).json(blob)
       return
     }
@@ -51,7 +56,7 @@ export default async function handler(req: any, res: any) {
       }
       if (!patch.scenarios && !patch.assumptions) { res.status(400).json({ error: 'nothing to store — expected scenarios[] and/or assumptions{}' }); return }
 
-      const next = await putScenarioBlob(patch)
+      const next = await putScenarioBlob(session.workspace, patch)
       res.status(200).json(next)
       return
     }

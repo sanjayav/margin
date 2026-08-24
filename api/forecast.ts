@@ -9,10 +9,12 @@
 //      trajectory with buildForecast, then Claude streams an executive brief
 //      using exactly those engine numbers.
 //
-// Same invariant as /api/ask: the model narrates and shapes scenarios; every
+// Same invariant as /api/copilot: the model narrates and shapes scenarios; every
 // emissions figure, limit, gap and fine comes from the deterministic engine.
 // ───────────────────────────────────────────────────────────────────────────
 import Anthropic from '@anthropic-ai/sdk'
+import { requireSession } from './_auth.js'
+import { allow } from './_ratelimit.js'
 import { getPack, PACK_LIST } from '../src/engine/rulepacks/index.js'
 import { FLEET } from '../src/data/fleet.js'
 import {
@@ -34,13 +36,16 @@ type Fleets = Record<CountryId, Vehicle[]>
 const COLORS = ['emerald', 'amber', 'violet', 'sky', 'rose', 'teal', 'orange'] as const
 
 /** Live fleet from the store (Neon or local), else the bundled extract — so the
- *  forecast's numbers match what the screens show. Mirrors /api/ask. */
-async function loadFleets(): Promise<Fleets> {
+ *  forecast’s numbers match what the screens show. Mirrors /api/copilot. */
+async function loadFleets(workspace: string): Promise<Fleets> {
   const out: Fleets = { EU: FLEET.EU, IN: FLEET.IN, AU: FLEET.AU, UK: FLEET.UK, CN: FLEET.CN }
   await Promise.all(
     PACK_LIST.map(async (p) => {
       try {
-        const data = await getCurrent(p.id)
+        // The workspace's own dataset, so the model reasons over exactly what
+        // the screens show. Answering from the shared baseline while the user
+        // looks at their own import would be worse than not answering.
+        const data = await getCurrent(p.id, workspace)
         if (data?.vehicles?.length) out[p.id] = data.vehicles
       } catch { /* keep extract */ }
     }),
@@ -218,6 +223,9 @@ const briefSystem = `You are the lead forecast analyst inside AiRE, writing the 
 Every figure is engine-computed — cite them exactly, never recompute. Use the market's units and currency.`
 
 export default async function handler(req: any, res: any) {
+  const session = requireSession(req, res)
+  if (!session) return
+  if (!allow(res, session.workspace, 'forecast')) return
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
 
   // Validate the client's request before checking server config, so a malformed
@@ -241,7 +249,7 @@ export default async function handler(req: any, res: any) {
 
   try {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const fleets = await loadFleets()
+    const fleets = await loadFleets(session.workspace)
     const target = resolveTarget(fleets, country, context.target)
     const pack = getPack(country)
     const raw = fleets[country]

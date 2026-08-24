@@ -17,6 +17,7 @@ import { buildForecastPack, openPrintReport } from '../lib/report'
 import { svgFanChart, svgWaterfall, svgSCurve } from '../lib/packcharts'
 import { Section, StatusPill } from '../components/ui'
 import TornadoChart, { type TornadoDriver } from '../components/TornadoChart'
+import Verdict from '../components/Verdict'
 import Icon, { type IconName } from '../components/Icon'
 
 type ScenKind = 'baseline' | 'ai' | 'user' | 'live' | 'case'
@@ -289,8 +290,37 @@ export default function Forecast() {
     setBookApplied(true)
   }
 
+  // ── the answer, before the studio ─────────────────────────────────────────
+  // The forecast's conclusion is a date and a number: when the line is first
+  // breached, and what the whole horizon costs probability-weighted. Both are
+  // already computed for the case matrix below — this just leads with them.
+  const vBase = overviewCases.find((c) => c.id.includes('base')) ?? overviewCases[0]
+  const vBreach = vBase?.breachYear ?? null
+  const vFy = (y: number) => (country === 'IN' ? `FY${String(y).slice(2)}-${String(y + 1).slice(2)}` : String(y))
+  const vHeadline = vBreach == null
+    ? <><b>{heroWho}</b> stays under the line through {vFy(lastYear)} on the base case.</>
+    : <><b>{heroWho}</b> first breaches the line in <b>{vFy(vBreach)}</b> on the base case, and stays over it after.</>
+  const vSpread = overviewCases.length
+    ? { lo: Math.min(...overviewCases.map((c) => c.cum)), hi: Math.max(...overviewCases.map((c) => c.cum)) }
+    : { lo: 0, hi: 0 }
+
   return (
     <div className="space-y-5 animate-slidein">
+      <Verdict
+        question={`What does ${pack.name} cost between now and ${lastYear}?`}
+        headline={vHeadline}
+        figure={fmtMoney(expectedCum, pack.currency)}
+        figureUnit={`expected exposure to ${lastYear}`}
+        tone={expectedCum > 0 ? 'bad' : 'good'}
+        stats={[
+          { label: 'First breach', value: vBreach == null ? 'None' : vFy(vBreach), sub: 'base case', tone: vBreach == null ? 'good' : 'bad' },
+          { label: 'Case range', value: `${fmtMoney(vSpread.lo, pack.currency)} – ${fmtMoney(vSpread.hi, pack.currency)}`, sub: `across ${overviewCases.length} weighted cases` },
+          { label: 'Scope', value: isMarket ? 'Whole market' : heroWho, sub: `${pack.years[0]}\u2013${lastYear}` },
+        ]}
+        action={{ label: 'Board pack', icon: 'section', onClick: exportPack }}
+        footnote={<>Probability-weighted across the case matrix \u00b7 {pack.coverage.label}</>}
+      />
+
       {/* ── HERO · conversational forecast cockpit ───────────────────────── */}
       <div className="rise relative overflow-hidden rounded-[24px] border border-black/[0.06] p-7 xl:p-9" style={{ background: 'linear-gradient(120deg, #1B1714 0%, #211A16 46%, #17130F 100%)' }}>
         <div aria-hidden className="pointer-events-none absolute -right-24 -top-28 h-80 w-80 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.34), transparent 62%)' }} />
@@ -432,13 +462,15 @@ export default function Forecast() {
 
       {/* compare matrix */}
       {shown.length > 1 && (
-        <Section title="Compare">
+        <Section density="detail" title="Compare">
           <CompareMatrix shown={shown} fcById={fcById} baseFc={baseFc} pack={pack} focusId={focusId} onFocus={focusAndPin} />
         </Section>
       )}
 
       {/* ── THE CASE MATRIX — Base / Upside / Downside / Management, weighted ── */}
+      {/* analyst tier: the Verdict already carries the weighted expectation */}
       <Section
+        density="detail"
         title={<span className="flex items-center gap-2"><Icon name="scale" size={15} className="text-brand" /> Case matrix · {isMarket ? 'whole market' : parent.split(' ')[0]}</span>}
         right={
           <span className="flex items-center gap-2 text-[11px] text-ink-500">
@@ -508,10 +540,13 @@ export default function Forecast() {
       </Section>
 
       {/* ── THE ASSUMPTION BOOK + BRIDGE + SENSITIVITIES (market-level) ── */}
-      <OutlookPanel raw={raw} pack={pack} country={country} vintageYear={vintageYear} />
+      {/* analyst tier: governance + driver attribution, not board reading */}
+      <div data-density="detail">
+        <OutlookPanel raw={raw} pack={pack} country={country} vintageYear={vintageYear} />
+      </div>
 
       {/* sensitivity — what moves the exposure most */}
-      <Section title="What moves the exposure"
+      <Section density="detail" title="What moves the exposure"
         right={<span className="text-[11px] text-ink-500">{focusScen.name} · exposure at each lever's plausible extremes</span>}>
         <TornadoChart base={focusFc.cumPlan} drivers={sensitivity} currency={pack.currency} />
       </Section>
@@ -524,13 +559,13 @@ export default function Forecast() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <Section title="Projected fine each year"><FineBars series={focusFc.years} overlay={overlay} pack={pack} /></Section>
-        <Section title="Compliance glide path" right={<span className="text-[11px] text-ink-500">zero-emission share needed to clear the limit</span>}>
+        <Section density="detail" title="Projected fine each year"><FineBars series={focusFc.years} overlay={overlay} pack={pack} /></Section>
+        <Section density="detail" title="Compliance glide path" right={<span className="text-[11px] text-ink-500">zero-emission share needed to clear the limit</span>}>
           <GlidePath series={focusFc.years} />
         </Section>
       </div>
 
-      <Section title="Year by year">
+      <Section density="detail" title="Year by year">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

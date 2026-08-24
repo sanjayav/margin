@@ -17,6 +17,10 @@ export type PlanTab = ScenarioTab | 'forecast'
 // 'module' = a single country workspace (the plan/forecast/… sidebar).
 export type AppView = 'platform' | 'module'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
+// How much of a screen to show. The workspace carries an analyst's density by
+// design; a board reader wants the verdict, one chart and the next action. Same
+// engine output either way — this only decides how much of it is on screen.
+export type ViewMode = 'board' | 'analyst'
 // legacy ids still accepted by setScreen and mapped to the new structure
 // ('analyze'/'plan' became Analyse; the old Scenario-group tabs became modules/tabs)
 type AnyScreen = ScreenId | 'analyze' | 'plan' | 'cockpit' | 'chart' | 'maker' | 'pool' | 'analytics' | 'model' | 'under' | 'compare'
@@ -47,6 +51,18 @@ interface UIState {
   aiEnabled: boolean
   /** Pooling & credit-market add-on — cross-cutting optimiser, where the regime allows it. */
   poolingAddon: boolean
+  /** Reading depth for every module. Persisted, because it is a property of who
+   *  is at the keyboard, not of where they navigated. */
+  viewMode: ViewMode
+  setViewMode: (m: ViewMode) => void
+
+  /** Guided path: a scripted route through the workspace that anyone can drive
+   *  without knowing the app. −1 = not running. Deliberately NOT persisted — a
+   *  reload should never drop someone back into a walkthrough. */
+  guideStep: number
+  startGuide: () => void
+  setGuideStep: (i: number) => void
+  endGuide: () => void
   enterModule: (c: CountryId) => void
   exitToPlatform: (to?: PlatformScreen) => void
   setPlatformScreen: (p: PlatformScreen) => void
@@ -73,9 +89,15 @@ interface UIState {
   setDrill: (path: string[]) => void
   loadFleet: () => Promise<void>
 
-  authed: boolean
-  login: (user: string, pass: string) => boolean
-  logout: () => void
+  /** null = not signed in. Set only from the server's answer to /api/session —
+   *  the client no longer decides who is authenticated. */
+  session: SessionInfo | null
+  /** Have we asked the server yet? Guards a flash of the login screen on reload
+   *  for someone who already holds a valid cookie. */
+  authChecked: boolean
+  login: (email: string, password: string) => Promise<string | null>
+  logout: () => Promise<void>
+  checkSession: () => Promise<void>
 }
 
 // Entitlement persistence (mock; replaced by server-issued claims once billing lands).
@@ -93,6 +115,13 @@ function loadEnt(): { modules: CountryId[]; ai: boolean; pooling: boolean } {
 }
 function saveEnt(modules: CountryId[], ai: boolean, pooling: boolean) { try { localStorage.setItem(ENT_KEY, JSON.stringify({ modules, ai, pooling })) } catch { /* ignore */ } }
 const ENT0 = loadEnt()
+
+// Reading depth persists on its own key — it survives entitlement changes and a
+// reload, so a board user never lands back in the analyst view mid-meeting.
+const VIEW_KEY = 'ul_viewmode'
+function loadViewMode(): ViewMode {
+  try { return localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'analyst' } catch { return 'analyst' }
+}
 
 // Named, durable scenarios (persisted) — promotes the ephemeral A/B snapshot.
 export interface SavedScenario { id: string; label: string; country: CountryId; scenario: Scenario; overrides: Record<string, Partial<Scenario>>; createdAt: number; datasetVersion?: string }
@@ -158,9 +187,9 @@ export function scopeKey(screen: ScreenId, drillPath: string[], scenarioTab?: Sc
   }
 }
 
-// Single demo credential
-export const CRED = { user: 'vijay@margin.io', pass: 'marginio' }
-const isAuthed = () => { try { return localStorage.getItem('ul_auth') === '1' } catch { return false } }
+/** Who the server says you are. The workspace is the tenant boundary — every
+ *  API read and write is scoped to it server-side. */
+export interface SessionInfo { email: string; name: string; workspace: string }
 
 export function defaultScenario(country: CountryId): Scenario {
   const pack = getPack(country)
@@ -205,6 +234,8 @@ export const useStore = create<UIState>((set, get) => ({
   subscribedModules: ENT0.modules,
   aiEnabled: ENT0.ai,
   poolingAddon: ENT0.pooling,
+  viewMode: loadViewMode(),
+  guideStep: -1,
 
   enterModule: (c) => {
     if (!get().subscribedModules.includes(c)) { set({ view: 'platform', platformScreen: 'subscription' }); return }
@@ -232,6 +263,10 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setAi: (b) => { saveEnt(get().subscribedModules, b, get().poolingAddon); set({ aiEnabled: b }) },
   setPooling: (b) => { saveEnt(get().subscribedModules, get().aiEnabled, b); set({ poolingAddon: b }) },
+  setViewMode: (m) => { try { localStorage.setItem(VIEW_KEY, m) } catch { /* ignore */ } ; set({ viewMode: m }) },
+  startGuide: () => set({ guideStep: 0 }),
+  setGuideStep: (i) => set({ guideStep: i }),
+  endGuide: () => set({ guideStep: -1 }),
 
   savedScenarios: loadScenarios(),
   saveScenario: (label) => {
@@ -360,13 +395,43 @@ export const useStore = create<UIState>((set, get) => ({
   },
   setDrill: (path) => set({ drillPath: path }),
 
-  authed: isAuthed(),
-  login: (user, pass) => {
-    const ok = user.trim().toLowerCase() === CRED.user && pass === CRED.pass
-    if (ok) { try { localStorage.setItem('ul_auth', '1') } catch { /* ignore */ } ; set({ authed: true }) }
-    return ok
+  session: null,
+  authChecked: false,
+
+  /** Resolves to an error message, or null on success. */
+  login: async (email, password) => {
+    try {
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) return body?.error || 'Sign-in failed.'
+      set({ session: body as SessionInfo, authChecked: true })
+      return null
+    } catch {
+      return 'Could not reach the server.'
+    }
   },
-  logout: () => { try { localStorage.removeItem('ul_auth') } catch { /* ignore */ } ; set({ authed: false, view: 'platform', platformScreen: 'home' }) },
+
+  logout: async () => {
+    try { await fetch('/api/session', { method: 'DELETE' }) } catch { /* clear locally anyway */ }
+    // Drop this workspace's cached work so the next sign-in on this machine
+    // never inherits it — the demo-to-demo leak this whole change is about.
+    for (const k of [SCEN_KEY, ASSUMP_KEY]) { try { localStorage.removeItem(k) } catch { /* ignore */ } }
+    set({ session: null, authChecked: true, savedScenarios: [], view: 'platform', platformScreen: 'home' })
+  },
+
+  checkSession: async () => {
+    try {
+      const res = await fetch('/api/session')
+      if (res.ok) set({ session: (await res.json()) as SessionInfo, authChecked: true })
+      else set({ session: null, authChecked: true })
+    } catch {
+      set({ session: null, authChecked: true })
+    }
+  },
 
   loadFleet: async () => {
     let loaded = false

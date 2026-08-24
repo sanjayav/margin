@@ -3,12 +3,17 @@
 // refresh uses (Neon in prod, local JSON file in dev). The client has already
 // made the data live in-session; this makes it durable.
 import { putDataset, SOURCES, backend } from './_store.js'
+import { requireSession } from './_auth.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 
 const MARKETS = new Set(['EU', 'IN', 'AU', 'UK', 'CN'])
 const MAX_ROWS = 100_000
 
 export default async function handler(req: any, res: any) {
+  // An import lands in the CALLER'S workspace, never the shared baseline. This
+  // is the write that used to make one customer's data everyone's.
+  const session = requireSession(req, res)
+  if (!session) return
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
   const { market, source, rows } = (req.body ?? {}) as { market?: string; source?: string; rows?: Vehicle[] }
   const m = String(market ?? '').toUpperCase() as CountryId
@@ -19,8 +24,8 @@ export default async function handler(req: any, res: any) {
   const bad = rows.findIndex((r) => !r || typeof r.parent !== 'string' || !r.parent || typeof r.model !== 'string' || typeof r.year !== 'number' || typeof r.sales !== 'number')
   if (bad >= 0) { res.status(400).json({ error: `row ${bad + 1} is missing parent/model/year/sales` }); return }
   try {
-    const version = await putDataset(m, source || `User import`, SOURCES[m].url, rows)
-    res.status(200).json({ market: m, datasetVersion: version, rows: rows.length, backend })
+    const version = await putDataset(m, source || `User import`, SOURCES[m].url, rows, session.workspace)
+    res.status(200).json({ market: m, datasetVersion: version, rows: rows.length, backend, workspace: session.workspace })
   } catch (e: any) {
     res.status(500).json({ error: String(e?.message ?? e) })
   }

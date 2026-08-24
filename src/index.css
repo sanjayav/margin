@@ -317,3 +317,19 @@ input[type="range"]::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .cb-flow, .cb-spark { animation: none; stroke-dasharray: none; }
 }
+
+/* ── Board mode ─────────────────────────────────────────────────────────────
+   Reading depth, not a different product. The workspace stays exactly as built;
+   board mode hides the analyst tier so the verdict, one primary chart and the
+   next action are what remain on screen.
+
+   Blocks opt in by tagging themselves rather than being restructured:
+     data-density="detail"    the analyst tier — deep tables, ledgers, drill rails
+     data-density="primary"   survives board mode; the one chart worth keeping
+   Anything untagged is shown in both modes, so a screen that has not been
+   triaged yet degrades to today's behaviour instead of rendering empty.        */
+.board-mode [data-density="detail"] { display: none; }
+
+/* The assumptions rail is an analyst instrument — it has no meaning to a reader
+   who is not moving levers, and hiding it gives the page back its width. */
+.board-mode [data-density="rail"] { display: none; }

@@ -54,16 +54,20 @@ export function Stat({ label, value, sub, accent, className = '' }: { label: str
   )
 }
 
-export function Section({ title, right, children, className = '', collapsible = false, defaultOpen = true, subtitle }: {
+export function Section({ title, right, children, className = '', collapsible = false, defaultOpen = true, subtitle, density }: {
   title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string
   /** When true the header toggles the body — progressive disclosure for the
    *  secondary sections a screen doesn't need at first glance. */
   collapsible?: boolean; defaultOpen?: boolean; subtitle?: ReactNode
+  /** Reading tier. 'detail' marks the section as the analyst layer, which board
+   *  mode hides (see .board-mode in index.css). Untagged sections show in both,
+   *  so a screen that hasn't been triaged degrades to today's behaviour. */
+  density?: 'detail' | 'primary'
 }) {
   const [open, setOpen] = useState(defaultOpen)
   if (collapsible) {
     return (
-      <div className={`card ${open ? 'p-6' : 'px-6 py-4'} ${className}`}>
+      <div className={`card ${open ? 'p-6' : 'px-6 py-4'} ${className}`} data-density={density}>
         <div className="flex w-full items-center justify-between gap-3">
           <button onClick={() => setOpen((o) => !o)} className="group flex flex-1 items-center gap-2.5 text-left">
             <ChevronToggle open={open} />
@@ -77,7 +81,7 @@ export function Section({ title, right, children, className = '', collapsible = 
     )
   }
   return (
-    <div className={`card p-6 ${className}`}>
+    <div className={`card p-6 ${className}`} data-density={density}>
       {(title || right) && (
         <div className="mb-5 flex items-center justify-between gap-3">
           {title && <h3 className="font-display text-[16px] font-bold tracking-[-0.02em] text-ink-100">{title}</h3>}

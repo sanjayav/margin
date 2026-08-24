@@ -54,7 +54,7 @@ export default function FactsRail() {
   const yearHasOwnRows = useMemo(() => raw.some((v) => v.year === scenario.year), [raw, scenario.year])
 
   return (
-    <aside className="rail-dark relative flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.06] p-4" style={{ background: 'linear-gradient(178deg, #221B17 0%, #1B1714 42%, #17130F 100%)' }}>
+    <aside data-density="rail" className="rail-dark relative flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.06] p-4" style={{ background: 'linear-gradient(178deg, #221B17 0%, #1B1714 42%, #17130F 100%)' }}>
       <div aria-hidden className="pointer-events-none absolute -right-14 -top-8 h-52 w-52 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(14,159,110,0.13), transparent 64%)' }} />
       <div className="relative flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-[13px] font-bold text-white"><Icon name="shield" size={15} className="text-safe" /> Facts</span>

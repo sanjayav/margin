@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from './Icon'
-import { ask, applyActions, type ChatMessage } from '../lib/assistant'
+import { applyActions, type ChatMessage } from '../lib/assistant'
+import { ask } from '../lib/copilot'
 import { useCompliance } from '../lib/useCompliance'
 
 const STARTERS = [

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStore, CRED } from '../state/store'
+import { useStore } from '../state/store'
 import Icon from '../components/Icon'
 
 const CHROME = '#141110'
@@ -14,16 +14,17 @@ export default function Login() {
   const login = useStore((s) => s.login)
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
-  const [err, setErr] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    setErr(false)
-    setTimeout(() => {
-      if (!login(email, pass)) { setErr(true); setBusy(false) }
-    }, 450)
+    setErr(null)
+    // The server decides. On success the store holds the session and App swaps
+    // the screen, so there is nothing to do here but surface a failure.
+    const message = await login(email, pass)
+    if (message) { setErr(message); setBusy(false) }
   }
 
   return (
@@ -84,17 +85,17 @@ export default function Login() {
 
           <form onSubmit={submit}>
             <Field label="Work email" icon="user">
-              <input type="email" autoFocus value={email} onChange={(e) => { setEmail(e.target.value); setErr(false) }}
+              <input type="email" autoFocus value={email} onChange={(e) => { setEmail(e.target.value); setErr(null) }}
                 placeholder="you@oem.com" className="w-full bg-transparent text-[14px] text-ink-100 outline-none placeholder:text-ink-500" />
             </Field>
             <Field label="Password" icon="shield">
-              <input type="password" value={pass} onChange={(e) => { setPass(e.target.value); setErr(false) }}
+              <input type="password" value={pass} onChange={(e) => { setPass(e.target.value); setErr(null) }}
                 placeholder="••••••••" className="w-full bg-transparent text-[14px] text-ink-100 outline-none placeholder:text-ink-500" />
             </Field>
 
             {err && (
               <div className="mb-4 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/[0.08] px-3 py-2 text-xs font-medium text-danger">
-                <Icon name="alert" size={14} /> Incorrect email or password.
+                <Icon name="alert" size={14} /> {err}
               </div>
             )}
 
@@ -103,13 +104,9 @@ export default function Login() {
             </button>
           </form>
 
-          <button type="button" onClick={() => { setEmail(CRED.user); setPass(CRED.pass); setErr(false) }}
-            className="mt-4 flex w-full items-center justify-center gap-1.5 text-[12px] font-medium text-ink-500 transition hover:text-brand">
-            <Icon name="spark" size={12} /> Use demo credentials
-          </button>
-
           <p className="mt-10 text-center text-[10.5px] leading-relaxed text-ink-500">
-            Figures illustrative until live datasets are connected.
+            Every figure is computed by the compliance engine from official-source data.
+            Each market states its own coverage and vintage.
           </p>
         </div>
       </div>

@@ -1,3 +1,7 @@
+// Workspace actions — the one place a machine-proposed change is turned into a
+// real store mutation. The co-pilot streams these as PROPOSALS (src/lib/copilot);
+// nothing here runs until a person approves it, and the guided walkthrough uses
+// the same path so there is a single audited way into the workspace.
 import { useStore } from '../state/store'
 import type { CountryId } from '../engine/types'
 
@@ -7,6 +11,8 @@ export interface ChatMessage {
 }
 
 export interface DashboardAction {
+  /** One line the co-pilot gives for why it wants this change. */
+  why?: string
   country?: CountryId
   screen?: string
   parent?: string
@@ -42,23 +48,4 @@ export function applyActions(actions: DashboardAction[]) {
     }
     if (Object.keys(patch).length) useStore.getState().patchScenario(patch)
   }
-}
-
-export async function ask(message: string, history: ChatMessage[]): Promise<{ answer: string; actions: DashboardAction[] }> {
-  const s = useStore.getState()
-  const res = await fetch('/api/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      history,
-      // ownedModules scopes the analyst to the markets the org has subscribed to.
-      context: { country: s.country, parent: s.selectedParent, screen: s.screen, scenario: s.scenario, ownedModules: s.subscribedModules, ai: s.aiEnabled, pooling: s.poolingAddon },
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `Request failed (${res.status})`)
-  }
-  return res.json()
 }

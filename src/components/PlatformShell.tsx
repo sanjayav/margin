@@ -21,6 +21,9 @@ export default function PlatformShell() {
   const ps = useStore((s) => s.platformScreen)
   const goto = useStore((s) => s.setPlatformScreen)
   const logout = useStore((s) => s.logout)
+  const session = useStore((s) => s.session)
+  const initials = (session?.name ?? session?.email ?? '?')
+    .split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
   const ai = useStore((s) => s.aiEnabled)
   const owned = useStore((s) => s.subscribedModules)
   const openCmdK = useCmdK((s) => s.setOpen)
@@ -65,15 +68,25 @@ export default function PlatformShell() {
           {!ai && <button onClick={() => goto('subscription')} className="relative mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand py-1.5 text-[10.5px] font-bold text-white shadow-[0_6px_16px_-8px_rgba(232,34,59,0.7)] transition hover:brightness-110"><Icon name="spark" size={11} /> Add AI Analyst</button>}
         </div>
 
-        <div className="mt-auto flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-[11px] font-bold text-brand-400">VJ</div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-semibold text-[#F5F0E6]">Vijay</div>
-            <div className="truncate text-[10px] text-[#8A8174]">vijay@margin.io</div>
+        {/* Who is signed in, and — the part that matters when two customers are
+            demoed from one deployment — WHICH workspace this data belongs to. */}
+        <div className="mt-auto rounded-xl border border-white/[0.08] bg-white/[0.02] p-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand/20 text-[11px] font-bold text-brand-400">{initials}</div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-semibold text-[#F5F0E6]">{session?.name ?? '—'}</div>
+              <div className="truncate text-[10px] text-[#8A8174]">{session?.email ?? ''}</div>
+            </div>
+            <button onClick={() => { void logout() }} title="Sign out" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A8174] transition hover:bg-white/[0.06] hover:text-white">
+              <Icon name="reset" size={14} />
+            </button>
           </div>
-          <button onClick={logout} title="Sign out" className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8A8174] transition hover:bg-white/[0.06] hover:text-white">
-            <Icon name="reset" size={14} />
-          </button>
+          {session?.workspace && (
+            <div className="mt-2 flex items-center gap-1.5 border-t border-white/[0.06] pt-2 text-[9.5px] text-[#8A8174]">
+              <Icon name="shield" size={10} className="shrink-0" />
+              <span className="truncate">Workspace <b className="font-semibold text-[#B8AE9C]">{session.workspace}</b> · data isolated to this tenant</span>
+            </div>
+          )}
         </div>
       </nav>
 

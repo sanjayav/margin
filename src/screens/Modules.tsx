@@ -2,8 +2,18 @@ import { useMemo } from 'react'
 import { useStore } from '../state/store'
 import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP, moduleSummary } from '../lib/modules'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
+import { getPack } from '../engine/rulepacks'
+import type { CoverageTier } from '../engine/types'
 import Icon from '../components/Icon'
 import Flag from '../components/Flag'
+
+// A module card must never present a three-manufacturer sample as a market
+// position. The tier decides whether the card shows live figures at all.
+const COVERAGE_CHIP: Record<CoverageTier, { label: string; cls: string }> = {
+  market:  { label: 'Market data',   cls: 'bg-safe/10 text-safe' },
+  partial: { label: 'Covered scope', cls: 'bg-warn/10 text-warn' },
+  preview: { label: 'Preview data',  cls: 'bg-black/[0.05] text-ink-500' },
+}
 
 const INCLUDED = ['Plan (actuals drill-down)', 'Forecast studio', 'Scenario workbench & compare', 'Credit book', 'Pricing & tax']
 
@@ -22,6 +32,9 @@ export default function Modules() {
         {ALL_MODULES.map((c, i) => {
           const m = MODULE_META[c], s = summaries[c]
           const isOwned = owned.includes(c)
+          const cov = getPack(c).coverage
+          const chip = COVERAGE_CHIP[cov.tier]
+          const isPreview = cov.tier === 'preview'
           return (
             <div key={c} style={{ animationDelay: `${i * 70}ms` }} className={`card rise relative overflow-hidden p-5 ${isOwned ? '' : 'opacity-95'}`}>
               <span className="absolute inset-x-0 top-0 h-1" style={{ background: m.accent }} />
@@ -33,18 +46,33 @@ export default function Modules() {
                     <div className="text-[11px] text-ink-500">{m.tagline}</div>
                   </div>
                 </div>
-                {isOwned
-                  ? <span className="rounded-full bg-safe/10 px-2 py-0.5 text-[10px] font-bold text-safe">Active</span>
-                  : <span className="flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-bold text-ink-500"><Icon name="shield" size={10} /> Locked</span>}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {isOwned
+                    ? <span className="rounded-full bg-safe/10 px-2 py-0.5 text-[10px] font-bold text-safe">Active</span>
+                    : <span className="flex items-center gap-1 rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-bold text-ink-500"><Icon name="shield" size={10} /> Locked</span>}
+                  <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-bold ${chip.cls}`}>{chip.label}</span>
+                </div>
               </div>
 
               <div className="mt-3 rounded-lg bg-black/[0.02] px-3 py-2 text-[11px] text-ink-500">{m.regulation}</div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div><div className="dnum text-[15px] font-bold text-ink-100">{fmtNum(s.fleet, 0)}</div><div className="text-[10px] text-ink-500">fleet {s.metricUnit}</div></div>
-                <div><div className="dnum text-[15px] font-bold text-ink-100">{fmtInt(s.makers)}</div><div className="text-[10px] text-ink-500">makers</div></div>
-                <div><div className={`dnum text-[15px] font-bold ${s.fine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(s.fine, s.currency)}</div><div className="text-[10px] text-ink-500">at risk</div></div>
-              </div>
+              {/* A sample fleet has no market position, so a preview module states
+                  what it is instead of printing a number that means nothing. */}
+              {isPreview ? (
+                <div className="mt-4 rounded-lg border border-dashed border-black/10 bg-black/[0.015] px-3 py-3">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-ink-300"><Icon name="alert" size={12} /> Rule pack ready · market data pending</div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-ink-500">{cov.detail}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    <div><div className="dnum text-[15px] font-bold text-ink-100">{fmtNum(s.fleet, 0)}</div><div className="text-[10px] text-ink-500">fleet {s.metricUnit}</div></div>
+                    <div><div className="dnum text-[15px] font-bold text-ink-100">{fmtInt(s.makers)}</div><div className="text-[10px] text-ink-500">makers</div></div>
+                    <div><div className={`dnum text-[15px] font-bold ${s.fine > 0 ? 'text-danger' : 'text-safe'}`}>{fmtMoney(s.fine, s.currency)}</div><div className="text-[10px] text-ink-500">at risk</div></div>
+                  </div>
+                  <div className="mt-2 text-center text-[10px] text-ink-500">{cov.label}</div>
+                </>
+              )}
 
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {INCLUDED.map((f) => <span key={f} className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[10px] text-ink-500">{f}</span>)}
@@ -53,7 +81,7 @@ export default function Modules() {
               <div className="mt-5 flex items-center justify-between border-t border-black/[0.05] pt-4">
                 <div className="text-[11px] text-ink-500">from <span className="dnum font-bold text-ink-200">£{m.priceGBP}</span>/mo</div>
                 {isOwned
-                  ? <button onClick={() => enter(c)} className="btn-primary px-4 py-2 text-xs"><Icon name="scatter" size={14} /> Open module</button>
+                  ? <button onClick={() => enter(c)} className={`px-4 py-2 text-xs ${isPreview ? 'btn-ghost' : 'btn-primary'}`}><Icon name="scatter" size={14} /> {isPreview ? 'Open preview' : 'Open module'}</button>
                   : <button onClick={() => goto('subscription')} className="btn-ghost px-4 py-2 text-xs"><Icon name="card" size={14} /> Subscribe</button>}
               </div>
             </div>

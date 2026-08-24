@@ -16,6 +16,7 @@ import Assistant from './components/Assistant'
 import ProvenanceDrawer from './components/ProvenanceDrawer'
 import PlatformShell from './components/PlatformShell'
 import ErrorBoundary from './components/ErrorBoundary'
+import GuidedPath from './components/GuidedPath'
 import CommandK, { useCmdK, CMDK_HINT } from './components/CommandK'
 import { applySharedFromHash } from './lib/share'
 import Analyze from './screens/Analyze'
@@ -195,8 +196,42 @@ function Sidebar() {
         )
       })}
 
-      <div className="mt-auto px-1 text-[9px] leading-relaxed text-[#6E665A]">Official sources · EEA · BEE · DCCEEW · DfT · illustrative until live data connected.</div>
+      {/* Provenance for the module you are actually in — the dataset's scope and
+          source, from its own rule pack. A blanket disclaimer here used to
+          undercut markets carrying a full registrations file. */}
+      <div className="mt-auto px-1 pt-3 text-[9px] leading-relaxed text-[#6E665A]">
+        <span className={`mr-1 font-semibold ${pack.coverage.tier === 'market' ? 'text-safe/80' : pack.coverage.tier === 'partial' ? 'text-warn/80' : 'text-[#8A8174]'}`}>
+          {pack.coverage.tier === 'market' ? 'Market data' : pack.coverage.tier === 'partial' ? 'Covered scope' : 'Preview data'} ·
+        </span>
+        {pack.coverage.label}
+      </div>
     </nav>
+  )
+}
+
+/** Reading depth. Board collapses the analyst detail to the verdict, one chart
+ *  and the next action; Analyst is the full workspace. It is a display mode over
+ *  the same engine output — no number changes, only how much of it is shown. */
+function ViewModeToggle() {
+  const mode = useStore((s) => s.viewMode)
+  const setMode = useStore((s) => s.setViewMode)
+  const OPTS: { id: 'board' | 'analyst'; label: string; icon: IconName; hint: string }[] = [
+    { id: 'board', label: 'Board', icon: 'gauge', hint: 'Verdict, one chart, next action' },
+    { id: 'analyst', label: 'Analyst', icon: 'sliders', hint: 'The full workspace' },
+  ]
+  return (
+    <div className="flex items-center gap-0.5 rounded-xl border border-white/[0.08] bg-white/[0.03] p-0.5" role="group" aria-label="Reading depth">
+      {OPTS.map((o) => {
+        const on = mode === o.id
+        return (
+          <button key={o.id} onClick={() => setMode(o.id)} title={o.hint} aria-pressed={on}
+            className={`flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[11.5px] font-semibold transition ${on ? 'bg-white/[0.10] text-white' : 'text-[#8A8174] hover:text-[#C9C0B2]'}`}>
+            <Icon name={o.icon} size={13} className={on ? 'text-brand-400' : ''} />
+            <span className="hidden lg:inline">{o.label}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -250,6 +285,7 @@ function TopBar() {
       </div>
       {/* board verdict */}
       <div className="flex items-center gap-3.5">
+        <ViewModeToggle />
         <button onClick={() => openCmdK(true)}
           className="group flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12px] text-[#8A8174] transition hover:border-white/[0.18] hover:text-[#C9C0B2]">
           <Icon name="search" size={14} className="text-[#7E766A] transition group-hover:text-brand-400" />
@@ -298,9 +334,26 @@ function PoolingLocked() {
   )
 }
 
+/** Preview markets carry a rule pack we trust and a fleet we don't. Say so at the
+ *  top of every screen, so a number here is never mistaken for a market position. */
+function PreviewBanner({ country }: { country: CountryId }) {
+  const cov = getPack(country).coverage
+  if (cov.tier !== 'preview') return null
+  return (
+    <div className="mb-5 flex items-start gap-3 rounded-xl border border-warn/25 bg-warn/[0.07] px-4 py-3">
+      <Icon name="alert" size={16} className="mt-0.5 shrink-0 text-warn" />
+      <div className="min-w-0">
+        <div className="text-[12.5px] font-bold text-warn">Preview module — sample fleet, not market data</div>
+        <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-400">{cov.detail}</p>
+      </div>
+    </div>
+  )
+}
+
 function ModuleShell() {
   const screenRaw = useStore((s) => s.screen)
   const country = useStore((s) => s.country)
+  const viewMode = useStore((s) => s.viewMode)
   const aiEnabled = useStore((s) => s.aiEnabled)
   const poolingAddon = useStore((s) => s.poolingAddon)
   // A country-specific screen (China's Dual-credit) falls back to Plan when the
@@ -321,8 +374,9 @@ function ModuleShell() {
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />
-        <div className="flex min-h-0 flex-1">
+        <div className={`flex min-h-0 flex-1 ${viewMode === 'board' ? 'board-mode' : ''}`}>
           <main className={`min-w-0 flex-1 overflow-y-auto px-7 py-6 ${screen === 'scenario' || screen === 'analyse' ? 'scn-dark' : ''}`}>
+            <PreviewBanner country={country} />
             <div key={gated ? 'locked' : screen} className="screen-in">
               <ErrorBoundary screenKey={screen}>
                 {gated ? <PoolingLocked /> : <Screen />}
@@ -338,18 +392,36 @@ function ModuleShell() {
       </div>
       {aiEnabled && <Assistant />}
       <ProvenanceDrawer />
+      {/* Sits above every screen — the walkthrough navigates between them. */}
+      <GuidedPath />
+    </div>
+  )
+}
+
+/** The half-second before the server answers /api/session. Deliberately almost
+ *  nothing: a login form that appears and then vanishes reads as a bug. */
+function AuthGate() {
+  return (
+    <div className="grid h-screen place-items-center bg-[#FBF7EF]">
+      <img src="/brand/aire-black.png" alt="AiRE" className="h-8 w-auto animate-pulse opacity-40" />
     </div>
   )
 }
 
 export default function App() {
-  const authed = useStore((s) => s.authed)
+  const session = useStore((s) => s.session)
+  const authChecked = useStore((s) => s.authChecked)
+  const checkSession = useStore((s) => s.checkSession)
   const view = useStore((s) => s.view)
   const loadFleet = useStore((s) => s.loadFleet)
-  useEffect(() => { if (authed) loadFleet() }, [loadFleet, authed])
+  // Ask the server who we are before deciding what to render — a valid cookie
+  // must not flash the login screen on reload.
+  useEffect(() => { void checkSession() }, [checkSession])
+  useEffect(() => { if (session) loadFleet() }, [loadFleet, session])
   useEffect(() => { applySharedFromHash() }, []) // hydrate a deep-link if present
 
-  if (!authed) return <Login />
+  if (!authChecked) return <AuthGate />
+  if (!session) return <Login />
   return (
     <>
       {view === 'platform' ? <PlatformShell /> : <ModuleShell />}

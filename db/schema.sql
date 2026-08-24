@@ -71,3 +71,28 @@ create table if not exists scenario_store (
   assumptions jsonb not null default '{}'::jsonb,   -- live working set, keyed by market
   updated_at  timestamptz not null default now()
 );
+
+-- ── Multi-tenancy ─────────────────────────────────────────────────────────
+-- A customer's imported dataset must not become every customer's dataset. Both
+-- data tables are scoped by workspace, where the empty string is the SHARED
+-- baseline (the official extract / EEA refresh) that every workspace sees until
+-- it imports its own. Reads prefer the workspace overlay and fall back to shared.
+--
+-- Idempotent: safe to re-run on an existing database.
+alter table data_sources add column if not exists workspace text not null default '';
+alter table vehicles     add column if not exists workspace text not null default '';
+
+-- data_sources was keyed on market alone, which is what made an import global.
+do $$
+begin
+  if exists (
+    select 1 from pg_constraint
+    where conname = 'data_sources_pkey'
+      and (select count(*) from unnest(conkey)) = 1
+  ) then
+    alter table data_sources drop constraint data_sources_pkey;
+    alter table data_sources add primary key (market, workspace);
+  end if;
+end $$;
+
+create index if not exists vehicles_ws_market_version_idx on vehicles (workspace, market, dataset_version);

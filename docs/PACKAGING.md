@@ -76,7 +76,7 @@ The current code is already shaped for this:
 | Country switcher / `PACK_LIST` | all 4 shown | filter to `entitlement.modules`; others render a locked "Upgrade" tile |
 | `store.loadFleet()` | fetches all 4 | fetch only owned modules |
 | `GET /api/fleet?country=XX` | open | `guard(req,{ module: 'XX' })` → 403 if not owned |
-| `POST /api/ask` | open (key only) | `guard(req,{ ai: true })` **and** restrict the analyst's tools to owned modules (it can't answer about a country you don't own); meter the call into `ai_usage` |
+|  `POST /api/copilot` | session + per-workspace rate limit; **owned markets enforced in the tool executor** (`src/engine/tools.ts` · `assertEntitled`), so a market the org has not bought is refused server-side rather than merely omitted from the prompt | `guard(req,{ ai: true })` for the AI add-on itself, and meter the call into `ai_usage`. The market boundary is already closed; the entitlement CLAIM still arrives from the client until billing lands |
 | `GET /api/refresh` (cron) | open | system-level, unchanged |
 | Rule packs `rulepacks/{eu,in,au,uk}` | static import | each *is* a module's engine — load per entitlement |
 
@@ -124,8 +124,8 @@ ai_usage(id, org_id, user_id, ts, model, in_tokens, out_tokens, cost_cents)
 ## 7. The AI add-on specifics
 
 - **Gate:** requires `ai === true`.
-- **Scope:** the analyst is told (in its system prompt / tool inputs) **only the owned modules**, so it can't reason about a country the org hasn't bought — the horizontal add-on still respects the module boundary.
-- **Metering:** every `/api/ask` logs tokens → `ai_usage`. Enforce `aiQuota` if metered; surface usage in the billing screen.
+- **Scope:** the analyst is told only the owned modules AND its tool executor refuses the rest (`assertEntitled`), so a prompt-injection cannot reach a country the org hasn't bought. The horizontal add-on respects the module boundary in code, not in wording.
+- **Metering:** every `/api/copilot` logs tokens → `ai_usage`. Enforce `aiQuota` if metered; surface usage in the billing screen.
 - **Pricing options:** (a) **flat add-on + fair-use cap** — simplest, predictable; (b) **metered per query/token** — aligns cost, more billing work. Recommend (a) first, add (b) later.
 
 ---
@@ -135,7 +135,7 @@ ai_usage(id, org_id, user_id, ts, model, in_tokens, out_tokens, cost_cents)
 Today: demo credential, no billing, all countries open. Ship in slices, each independently useful:
 
 1. **Auth + tenancy** — orgs/users replace the demo cred; seed an all-access entitlement for the existing demo org so nothing breaks.
-2. **`guard()` + claims** — add server enforcement to `/api/fleet` and `/api/ask`; embed entitlement claims in the session.
+2. **`guard()` + claims** — add server enforcement to `/api/fleet`; embed entitlement claims in the session so `/api/copilot` stops trusting the client's `ownedModules` list (its executor already enforces whatever list it is given).
 3. **Client gating** — country switcher + nav + AI panel read the entitlement; locked tiles + upgrade CTAs.
 4. **Stripe** — products, Checkout, Customer Portal, webhook → entitlement recompute.
 5. **Code-split** — lazy-load country chunks.

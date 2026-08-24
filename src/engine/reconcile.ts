@@ -1,7 +1,7 @@
 // Reconciliation & data-quality checks — run on the live data so a compliance
 // team can see the numbers are internally consistent before trusting a fine.
-import type { RulePack, Scenario, Vehicle } from './types'
-import { buildTree } from './engine'
+import type { RulePack, Scenario, Vehicle } from './types.js'
+import { buildTree } from './engine.js'
 
 export interface Check { label: string; status: 'pass' | 'warn' | 'fail'; detail: string }
 export interface Reconciliation {

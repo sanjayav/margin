@@ -1,6 +1,8 @@
 // GET /api/health — ops probe: which store backend is live, what data each
-// market has, and whether the AI analyst is configured. Safe to expose: no
-// secrets, only presence booleans and dataset metadata.
+// market has, and whether the AI analyst is configured. Deliberately the one
+// unauthenticated route, because an uptime check that needs a session is not an
+// uptime check. It reports on the SHARED baseline only — never a workspace's
+// own data — and reports failures as a boolean rather than echoing internals.
 import { getCurrent, backend } from './_store.js'
 import type { CountryId } from '../src/engine/types.js'
 
@@ -15,7 +17,10 @@ export default async function handler(_req: any, res: any) {
         ? { rows: d.vehicles.length, live: d.meta.live, refreshed: d.meta.lastRefreshed }
         : { rows: 0, live: false, refreshed: null }
     } catch (e: any) {
-      markets[m] = { error: String(e?.message ?? e) }
+      // Log the detail server-side; return only that it failed. A raw error
+      // string on a public endpoint is free reconnaissance.
+      console.error(`[health] ${m}:`, e?.message ?? e)
+      markets[m] = { error: 'unavailable' }
     }
   }
   res.setHeader('Cache-Control', 'no-store')

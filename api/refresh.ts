@@ -8,7 +8,10 @@ import type { CountryId, Vehicle } from '../src/engine/types.js'
 
 function authed(req: any): boolean {
   const secret = process.env.CRON_SECRET
-  if (!secret) return true
+  // This route rewrites the SHARED baseline every workspace falls back to, so an
+  // unauthenticated caller could replace the data under every customer. Open
+  // without a secret in local dev only; in production, no secret means no.
+  if (!secret) return process.env.VERCEL_ENV !== 'production'
   const hdr = req.headers?.authorization || req.headers?.Authorization
   return hdr === `Bearer ${secret}` || (req.headers?.['x-cron-secret'] || '') === secret
 }
