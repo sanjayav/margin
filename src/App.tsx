@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ComponentType } from 'react'
+import { getMarket } from './markets'
 import { useStore, type ScreenId } from './state/store'
 import { useCompliance } from './lib/useCompliance'
 import { buildTree, fmtMoney, fmtNum, scopeToMonth } from './engine/engine'
@@ -45,6 +47,7 @@ import type { CountryId } from './engine/types'
 // book of record; levers live in Scenario); Pooling is the add-on (only some
 // regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling'; country?: CountryId }[] = [
+  { id: 'overview', label: 'Overview', icon: 'gauge', tier: 'CORE' },
   { id: 'copilot', label: 'Co-pilot', icon: 'spark', tier: 'Core' },
   { id: 'analyse', label: 'Plan', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
@@ -60,7 +63,7 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
 // instead of a flat wall of seven. Co-pilot stays standalone (the front door).
 const SCENARIO_SCREENS: ScreenId[] = ['scenario'] // tabs resolve to screen:'scenario'
 const HUBS: { label: string; icon: IconName; hint: string; items: ScreenId[] }[] = [
-  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['analyse', 'scenario', 'forecast'] },
+  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['overview', 'analyse', 'scenario', 'forecast'] },
   { label: 'Credits', icon: 'scale', hint: 'ledger · pool · price', items: ['creditbook', 'pooling', 'pricing'] },
 ]
 
@@ -364,10 +367,25 @@ function ModuleShell() {
   const CN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'CN' ? { analyse: AnalyseActualsCN, forecast: ForecastCN, creditbook: DualCredit } : {}
   // India-only intelligence cockpit — replaces the generic event feed for IN.
   const IN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'IN' ? { intel: IntelligenceIN } : {}
-  const Screen = CN_FORKS[screen] ?? IN_FORKS[screen] ?? {
+  // A registered market owns its own screens (src/markets/<id>). CN_FORKS and
+  // IN_FORKS are the ad-hoc predecessor of that idea and stay as the fallback
+  // for markets not yet migrated; the shared map below is the last resort.
+  // A registered market owns its own screens (src/markets/<id>). CN_FORKS and
+  // IN_FORKS are the ad-hoc predecessor of that idea and stay as the fallback
+  // for markets not yet migrated; the shared map below is the last resort. A
+  // screen a market has not registered and the shared map does not know falls
+  // back to that market's home rather than rendering nothing.
+  const market = getMarket(country)
+  const SHARED: Partial<Record<ScreenId, ComponentType>> = {
     copilot: CoPilot, analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
     pricing: Pricing, pooling: Pooling, dualcredit: DualCredit, data: Data, intel: Intelligence, admin: Admin,
-  }[screen]
+  }
+  const Screen: ComponentType =
+    market?.modules[screen]?.component
+    ?? (CN_FORKS[screen] as ComponentType | undefined)
+    ?? (IN_FORKS[screen] as ComponentType | undefined)
+    ?? SHARED[screen]
+    ?? (market ? market.modules[market.home].component : AnalyseActuals)
   const gated = screen === 'pooling' && !poolingAddon
   return (
     <div className="flex h-screen overflow-hidden">

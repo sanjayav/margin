@@ -9,7 +9,7 @@ import { getMeta, parentsFor, setLiveFleet } from '../data/fleet'
 // modelling home: Model workbench + get-under-the-line + compare), Credit book
 // (positions ledger, actuals by default), Pricing (price/tax economics).
 // Pooling is the add-on; data/intel/admin are workspace utilities, not modules.
-export type ScreenId = 'copilot' | 'analyse' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'dualcredit' | 'data' | 'intel' | 'admin'
+export type ScreenId = 'copilot' | 'overview' | 'analyse' | 'forecast' | 'scenario' | 'creditbook' | 'pricing' | 'pooling' | 'dualcredit' | 'data' | 'intel' | 'admin'
 export type ScenarioTab = 'model' | 'under' | 'compare'
 /** @deprecated legacy alias kept for old deep-links */
 export type PlanTab = ScenarioTab | 'forecast'
@@ -317,7 +317,7 @@ export const useStore = create<UIState>((set, get) => ({
     } else if (raw === 'scenario') {
       screen = 'scenario'
       scenarioTab = sh.planTab === 'compare' ? 'compare' : sh.planTab === 'under' ? 'under' : 'model'
-    } else if (raw && ['analyse', 'creditbook', 'pricing', 'pooling', 'dualcredit', 'data', 'intel', 'admin'].includes(raw)) {
+    } else if (raw && ['overview', 'analyse', 'creditbook', 'pricing', 'pooling', 'dualcredit', 'data', 'intel', 'admin'].includes(raw)) {
       screen = raw as ScreenId
     } // 'analyze' / 'analytics' / unknown → 'analyse'
     set({
