@@ -13,6 +13,7 @@ import { useStore } from '../../../state/store'
 import { fmtInt, fmtMoney, fmtNum } from '../../../engine/engine'
 import { poolGroups } from '../../../engine/pooling'
 import { MetricBand, Block, Figure, Status, Table, Provenance, type Column } from '../../../design/primitives'
+import Answer from '../../../design/patterns/Answer'
 import BrandChip from '../../../components/BrandChip'
 
 interface MakerRow {
@@ -105,6 +106,32 @@ export default function EUOverview() {
         ]}
         action={over.length ? { label: 'Model a way under the line', icon: 'target', onClick: () => setScreen('under') } : undefined}
       />
+
+      <Block title="How the market number is built"
+        hint="Open it. Every figure in AiRE expands into the computation that produced it and the source it rests on.">
+        <Answer
+          question={`Why is ${pack.name} ${tree.gap > 0 ? 'over' : 'under'} the line in ${scenario.year}?`}
+          value={`${tree.gap > 0 ? '+' : ''}${fmtNum(tree.gap, 1)}`}
+          unit={`${pack.metricUnit} against the market's own target`}
+          tone={tree.gap > 0 ? 'bad' : 'good'}
+          sentence={<>The registration-weighted fleet is <b>{fmtNum(tree.avgMetric, 1)} {pack.metricUnit}</b> against a
+            mass-adjusted target of <b>{fmtNum(tree.limit, 1)}</b>. The penalty is charged per manufacturer, not on this
+            average — which is why {over.length} makers owe {fmtMoney(exposure, pack.currency)} while the market sits
+            {Math.abs(tree.gap) < 1 ? ' barely ' : ' '}{tree.gap > 0 ? 'above' : 'below'} its own line.</>}
+          evidence={[
+            { label: 'Fleet CO₂, registration-weighted', value: `${fmtNum(tree.avgMetric, 1)} ${pack.metricUnit}`, note: `across ${fmtInt(tree.rawUnits)} registrations, after eco-innovation and the PHEV utility factor` },
+            { label: 'Average test mass', value: `${fmtNum(tree.avgMass, 0)} kg`, note: 'the basis the post-2024 target formula uses' },
+            { label: 'Specific target', value: `${fmtNum(tree.limit, 1)} ${pack.metricUnit}`, note: 'EU fleet target, mass-adjusted, then relaxed by the ZLEV factor' },
+            { label: 'Gap', value: `${tree.gap > 0 ? '+' : ''}${fmtNum(tree.gap, 1)}`, note: 'fleet minus target' },
+            { label: 'Exposure, summed per manufacturer', value: fmtMoney(exposure, pack.currency), note: `${pack.fineRateLabel}` },
+          ]}
+          sources={[
+            { name: meta.source, vintage: pack.coverage.label },
+            { name: 'Target line', authority: pack.limitNote },
+            { name: 'Penalty', authority: pack.fineRateLabel },
+          ]}
+        />
+      </Block>
 
       <Block title="Where the exposure sits"
         hint="Every manufacturer assessed standalone against its own mass-adjusted target."
