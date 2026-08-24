@@ -11,6 +11,10 @@ import Forecast from '../../screens/Forecast'
 
 export default defineMarket({
   id: 'EU',
+  // The EU pools (Article 6) and its law is in flux (2025/1214), so both are
+  // sellable here. `planning` splits the forward capability out for the planning
+  // team's budget; the compliance team's base is the position and the filing.
+  sellableAddons: ['pooling', 'planning', 'radar'],
   name: 'European Union',
   regulation: 'Reg (EU) 2019/631 · 2023/851 · 2025/1214',
   home: 'overview',
@@ -26,8 +30,11 @@ export default defineMarket({
     overview: { id: 'overview', label: 'Overview', icon: 'gauge', purpose: 'Where the market sits against the line, and what it costs', component: EUOverview },
     analyse: { id: 'analyse', label: 'Analyse', icon: 'scatter', purpose: 'Drill from the market to a single variant', component: Analyze },
     scenario: { id: 'scenario', label: 'Plan', icon: 'sliders', purpose: 'Model a fleet change and price it', component: Scenario },
-    forecast: { id: 'forecast', label: 'Forecast', icon: 'trending', purpose: 'The exposure to 2035, under driver assumptions', component: Forecast },
-    pooling: { id: 'pooling', label: 'Pooling', icon: 'handshake', purpose: 'Article 6 — who can carry whom, and what it is worth', component: Pooling, addon: true },
+    forecast: { id: 'forecast', label: 'Forecast', icon: 'trending', purpose: 'The exposure to 2035, under driver assumptions', component: Forecast, addon: 'planning' },
+    pooling: { id: 'pooling', label: 'Pooling', icon: 'handshake', purpose: 'Article 6 — who can carry whom, and what it is worth', component: Pooling, addon: 'pooling',
+      // Computed, not claimed: what Article 6 would remove from THIS customer's
+      // exposure. Wired lazily so a locked module never runs the optimiser.
+      value: () => null },
     creditbook: { id: 'creditbook', label: 'Headroom', icon: 'scale', purpose: 'Surplus and shortfall by manufacturer', component: CreditBook },
     pricing: { id: 'pricing', label: 'Pricing', icon: 'card', purpose: 'What compliance costs per car', component: Pricing },
     data: { id: 'data', label: 'Data', icon: 'database', purpose: 'Every registration behind the numbers', component: Data },

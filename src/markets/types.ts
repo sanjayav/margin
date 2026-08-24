@@ -28,6 +28,22 @@ import type { IconName } from '../components/Icon'
  *  and may add its own `extra` modules beyond them. */
 export type CoreModuleId = 'overview' | 'analyse' | 'plan' | 'data'
 
+/** Commercial packaging. Markets are the primary SKU; capabilities are sold on
+ *  top of them, and the split matters:
+ *
+ *   · PER-MARKET add-ons carry market-specific value. Pooling is worth a lot in
+ *     the EU and is not legally possible in China — so it is not merely locked
+ *     there, it is not sellable there, and saying so is a credibility signal.
+ *   · PLATFORM add-ons cut across markets. `portfolio` is the natural upsell:
+ *     it is worth nothing at one market and compounds at three.
+ *
+ *  The base/plan split also maps to the two buyers. Compliance buys the base
+ *  (position, drill, data, provenance, filing). Planning buys the forward
+ *  capability (forecast, scenario, cheapest path, assumptions). Two budgets, one
+ *  platform, and a natural land-and-expand. */
+export type AddonId = 'pooling' | 'planning' | 'radar' | 'ai' | 'portfolio'
+export const PLATFORM_ADDONS: AddonId[] = ['ai', 'portfolio']
+
 export interface MarketModule {
   id: string
   /** What this market calls it. "Pooling" in the EU, "Credit clearing" in China. */
@@ -36,14 +52,22 @@ export interface MarketModule {
   /** One line under the title — what question this module answers, in this regime. */
   purpose: string
   component: ComponentType
-  /** Gated behind a paid add-on. */
-  addon?: boolean
+  /** Undefined = included in the market's base price. */
+  addon?: AddonId
+  /** What unlocking is worth, computed from the customer's OWN data. A paywall
+   *  listing features is a wall; "pooling would remove EUR 3.50B of your
+   *  exposure" is an argument. Returns null when there is nothing to claim. */
+  value?: () => { headline: string; detail: string } | null
   /** Hidden from nav but still routable (deep links, AI navigation). */
   hidden?: boolean
 }
 
 export interface MarketDefinition {
   id: CountryId
+  /** Add-ons this market can sell at all. Omitting one means the capability does
+   *  not exist here in law — China cannot pool — so it is never offered, never
+   *  upsold, and never rendered as "locked". */
+  sellableAddons?: AddonId[]
   /** The regime in the market's own words, for the shell header. */
   name: string
   regulation: string
