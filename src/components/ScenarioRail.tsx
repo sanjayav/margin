@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ptColor } from '../lib/palette'
 import { useStore, scopeKey, defaultScenario } from '../state/store'
 import type { Aggregate } from '../engine/types'
 import { useCompliance } from '../lib/useCompliance'
@@ -9,10 +10,6 @@ import { INDIA_CATALOG_BY_MODEL, INDIA_MODELS } from '../data/india_catalog'
 import { nevRatioFor } from '../engine/china/dualcredit'
 import Icon, { type IconName } from './Icon'
 
-const PT_COLOR: Record<string, string> = {
-  BEV: '#3ddc97', PHEV: '#5b8def', HEV: '#8b7ff0', MHEV: '#ffb454', ICE: '#ff5d6c', 'Strong Hybrid': '#8b7ff0',
-}
-const ptColor = (p: string) => PT_COLOR[p] ?? '#8C8273'
 const SCOPE_NAME = ['Market', 'Pool', 'Manufacturer', 'Model', 'Variant']
 
 interface Outcome { metric: number; limit: number; gap: number; fine: number; units: number; zlevShare?: number; marketFine: number; poolFine: number; makerFine: number }
@@ -364,7 +361,7 @@ export function ScenarioRail({ footer }: { footer?: ReactNode }) {
     : 1
 
   return (
-    <aside className="rail-dark relative flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.06] p-4" style={{ background: 'linear-gradient(178deg, #221B17 0%, #1B1714 42%, #17130F 100%)' }}>
+    <aside data-density="rail" className="rail-dark relative flex w-[19.5rem] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/[0.06] p-4" style={{ background: 'linear-gradient(178deg, #221B17 0%, #1B1714 42%, #17130F 100%)' }}>
       <div aria-hidden className="pointer-events-none absolute -right-14 -top-8 h-52 w-52 rounded-full blur-3xl" style={{ background: 'radial-gradient(circle, rgba(232,34,59,0.15), transparent 64%)' }} />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-bold text-white"><Icon name="sliders" size={16} className="text-brand-400" /> Assumptions</div>

@@ -101,6 +101,88 @@ export function poolResult(raw: Vehicle[], pack: RulePack, s: Scenario, members:
   }
 }
 
+// ── Fast coalition evaluator ────────────────────────────────────────────────
+// The Shapley split asks for the pooled fine of THOUSANDS of coalitions. Doing
+// that through poolAggregate means re-running applyScenario and re-summing every
+// vehicle row per coalition — fine when a market had three manufacturers, fatal
+// at the EU's 158: ~316k full aggregations, which locks the browser tab solid.
+//
+// A pooled position is only ever sums, though. Precompute each maker's sums ONCE
+// (per vehicle CLASS, because a class is its own obligation where the pack says
+// so) and any coalition's fine is then O(members) arithmetic over those sums —
+// the same numbers `aggregate` would produce, without touching a Vehicle again.
+interface ClassSums { rawUnits: number; effUnits: number; wMetric: number; wMass: number; zlevUnits: number }
+export interface MakerSums { parent: string; byClass: Map<string, ClassSums> }
+
+export function makerSums(
+  raw: Vehicle[], pack: RulePack, s: Scenario, overrides: Record<string, Partial<Scenario>> = {},
+): Map<string, MakerSums> {
+  const rows = applyScenario(raw, s, pack, overrides)
+  const isZlev = pack.isZLEV ?? pack.isZeroEmission
+  const out = new Map<string, MakerSums>()
+  for (const v of rows) {
+    let m = out.get(v.parent)
+    if (!m) out.set(v.parent, (m = { parent: v.parent, byClass: new Map() }))
+    let c = m.byClass.get(v.vclass)
+    if (!c) m.byClass.set(v.vclass, (c = { rawUnits: 0, effUnits: 0, wMetric: 0, wMass: 0, zlevUnits: 0 }))
+    const eu = pack.vehicleUnits(v, s)
+    c.rawUnits += v.sales
+    c.effUnits += eu
+    c.wMetric += pack.vehicleMetric(v, s) * eu
+    c.wMass += v.mass * v.sales
+    if (isZlev(v)) c.zlevUnits += v.sales
+  }
+  return out
+}
+
+export interface CoalitionPosition { units: number; avgMetric: number; limit: number; gap: number; fine: number }
+
+/** A coalition's pooled position, computed from precomputed sums only. Mirrors
+ *  `aggregate` exactly, including the per-class split where the regime makes each
+ *  class its own obligation. */
+export function coalitionPosition(
+  sums: Map<string, MakerSums>, members: string[], pack: RulePack, s: Scenario,
+): CoalitionPosition {
+  const byClass = new Map<string, ClassSums>()
+  for (const p of members) {
+    const m = sums.get(p)
+    if (!m) continue
+    for (const [vclass, c] of m.byClass) {
+      let t = byClass.get(vclass)
+      if (!t) byClass.set(vclass, (t = { rawUnits: 0, effUnits: 0, wMetric: 0, wMass: 0, zlevUnits: 0 }))
+      t.rawUnits += c.rawUnits; t.effUnits += c.effUnits
+      t.wMetric += c.wMetric; t.wMass += c.wMass; t.zlevUnits += c.zlevUnits
+    }
+  }
+  let rawUnits = 0, effUnits = 0, wMetric = 0, wLimit = 0, zlev = 0
+  for (const c of byClass.values()) { rawUnits += c.rawUnits; effUnits += c.effUnits; wMetric += c.wMetric; zlev += c.zlevUnits }
+  if (rawUnits === 0) return { units: 0, avgMetric: 0, limit: 0, gap: 0, fine: 0 }
+  const poolZlev = zlev / rawUnits
+
+  let fine = 0
+  const separate = !!pack.classSeparateCompliance && byClass.size > 1
+  for (const [vclass, c] of byClass) {
+    if (c.rawUnits === 0) continue
+    const cMass = c.wMass / c.rawUnits
+    const cMetric = c.effUnits > 0 ? c.wMetric / c.effUnits : 0
+    const cZlev = c.zlevUnits / c.rawUnits
+    const cLimit = pack.limit({ year: s.year, avgMass: cMass, zlevShare: separate ? cZlev : poolZlev, vclass, scenario: s })
+    wLimit += cLimit * c.rawUnits
+    if (separate) {
+      const ex = Math.max(0, cMetric - cLimit)
+      if (ex > 0) fine += pack.fineFor ? pack.fineFor(ex, c.rawUnits, s) : ex * pack.fineRate * c.rawUnits
+    }
+  }
+  const avgMetric = effUnits > 0 ? wMetric / effUnits : 0
+  const limit = wLimit / rawUnits
+  const gap = avgMetric - limit
+  if (!separate) {
+    const ex = Math.max(0, gap)
+    fine = ex <= 0 ? 0 : pack.fineFor ? pack.fineFor(ex, rawUnits, s) : ex * pack.fineRate * rawUnits
+  }
+  return { units: rawUnits, avgMetric, limit, gap, fine }
+}
+
 // ── Optimiser: the value-maximising pool + a Shapley fair value-split ─────────
 // Pooling is sub-additive (a bigger pool never raises the total fine), so the
 // pool that removes the most fine is everyone together. The hard question is the
@@ -123,14 +205,32 @@ export interface OptimiseResult {
   pooledFine: number
   savings: number
   split: ShapleyMember[]
+  /** Relevant makers left out of the search because the roster was capped. Shown
+   *  on the surface so a bounded answer is never presented as an exhaustive one. */
+  omitted: number
 }
 
 const popcount = (x: number) => { let c = 0; while (x) { c += x & 1; x >>= 1 } return c }
 
 export function poolOptimise(raw: Vehicle[], pack: RulePack, s: Scenario, members?: string[], overrides: Record<string, Partial<Scenario>> = {}): OptimiseResult {
   const st = standings(raw, pack, s, overrides)
-  const roster = (members ?? st.map((x) => x.parent)).filter((p) => st.some((x) => x.parent === p))
+  // Bound the roster. A coalition's value only moves if a member brings either a
+  // fine to remove or headroom to lend with it; a maker sitting exactly on its
+  // line contributes nothing to v(S) but doubles the coalition space. With the
+  // EU's 158 manufacturers an unbounded roster made this unusable, so keep the
+  // makers that can actually change the answer, largest first, and cap the rest.
+  // Anything dropped is reported so the surface can say so rather than implying
+  // the whole market was searched.
+  const MAX_ROSTER = 24
+  const relevant = st
+    .filter((x) => x.units > 0 && (x.fine > 0 || x.creditBalance > 0))
+    .sort((a, b) => Math.abs(b.creditBalance) - Math.abs(a.creditBalance))
+  const auto = relevant.slice(0, MAX_ROSTER).map((x) => x.parent)
+  const roster = (members ?? auto).filter((p) => st.some((x) => x.parent === p))
+  const omitted = members ? 0 : Math.max(0, relevant.length - roster.length)
   const n = roster.length
+  // Sums are computed ONCE; every coalition below is arithmetic over them.
+  const sums = makerSums(raw, pack, s, overrides)
   const standalone: Record<string, number> = {}
   const roleOf: Record<string, ShapleyMember['role']> = {}
   for (const x of st) { standalone[x.parent] = x.fine; roleOf[x.parent] = x.creditBalance > 0 ? 'seller' : x.gap > 0 ? 'buyer' : 'balanced' }
@@ -141,7 +241,7 @@ export function poolOptimise(raw: Vehicle[], pack: RulePack, s: Scenario, member
     const hit = vCache.get(mask); if (hit !== undefined) return hit
     const subset = roster.filter((_, i) => mask & (1 << i))
     let val = 0
-    if (subset.length >= 2) val = subset.reduce((a, p) => a + (standalone[p] ?? 0), 0) - poolResult(raw, pack, s, subset, overrides).fine
+    if (subset.length >= 2) val = subset.reduce((a, p) => a + (standalone[p] ?? 0), 0) - coalitionPosition(sums, subset, pack, s).fine
     vCache.set(mask, val); return val
   }
 
@@ -172,14 +272,14 @@ export function poolOptimise(raw: Vehicle[], pack: RulePack, s: Scenario, member
     for (let i = 0; i < n; i++) shap[i] /= SAMPLES
   }
 
-  const pooledFine = poolResult(raw, pack, s, roster, overrides).fine
+  const pooledFine = coalitionPosition(sums, roster, pack, s).fine
   const totalStandalone = roster.reduce((a, p) => a + (standalone[p] ?? 0), 0)
   const split: ShapleyMember[] = roster.map((p, i) => ({
     parent: p, role: roleOf[p] ?? 'balanced', standaloneFine: standalone[p] ?? 0,
     shapley: shap[i], finalCost: (standalone[p] ?? 0) - shap[i],
   })).sort((a, b) => b.shapley - a.shapley)
 
-  return { members: roster, totalStandalone, pooledFine, savings: Math.max(0, totalStandalone - pooledFine), split }
+  return { members: roster, totalStandalone, pooledFine, savings: Math.max(0, totalStandalone - pooledFine), split, omitted }
 }
 
 export interface MarketOption {

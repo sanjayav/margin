@@ -13,6 +13,7 @@ import { Section, Stat, Bar } from '../components/ui'
 import CafeLedger from '../components/CafeLedger'
 import MonthlyCompliance from '../components/MonthlyCompliance'
 import { INDIA_CATALOG } from '../data/india_catalog'
+import Verdict from '../components/Verdict'
 import Icon from '../components/Icon'
 import { makeLimitAt, makeLimitAtWith } from '../lib/chart'
 import { useCountUp } from '../lib/useCountUp'
@@ -133,23 +134,31 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
     status: it.status, powertrain: it.powertrain, isFleet: it.selected,
   }))
 
-  // Markets without pooling (India) have a redundant 1:1 pool tier — hide it, so
-  // the hierarchy reads Market → Manufacturer → Model → Variant.
-  const skipPool = !pack.pooling.enabled
+  // A pool with ONE member is not a pool — it is a manufacturer wearing a pool
+  // label, and drilling through it costs a click and reads as a duplicate
+  // breadcrumb segment. Two regimes hit this for different reasons: India has no
+  // pooling at all, so EVERY pool node is 1:1; the EU does pool, but 85 of its 92
+  // real pools are single-maker. So the decision is made PER BRANCH, on the node
+  // in front of the user, rather than once for the whole regime.
+  const isSoloPool = (n?: Aggregate) => !!n && (n.children?.length ?? 0) === 1
+  // the pool node on the CURRENT path, if we are inside one
+  const poolSeg = useMemo(() => (drill.length ? drillTree.children?.find((c) => c.label === drill[0]) : undefined), [drillTree, drill])
+  const hidePool = !pack.pooling.enabled || isSoloPool(poolSeg)
+
   const drillInto = (key: string) => {
     if (level === 4) { if (key !== drill[3]) setDrill([...drill.slice(0, 3), key]); return } // switch sibling variant
     const child = node.children?.find((c) => c.label === key)
     if (!child) return
     let next = [...drill, key]
-    // step straight through the sole-member pool to the manufacturer beneath it
-    if (skipPool && level === 0 && child.children?.length === 1) { next = [...next, child.children[0].label]; setParent(child.children[0].label) }
+    // step straight through a sole-member pool to the manufacturer beneath it
+    if (level === 0 && isSoloPool(child)) { next = [...next, child.children![0].label]; setParent(child.children![0].label) }
     else if (next.length === 2) setParent(key) // manufacturer level → keep selectedParent in sync
     setDrill(next)
   }
-  // breadcrumb without the pool segment for no-pool markets
-  const SCOPES = skipPool ? ['Market', 'Manufacturer', 'Model', 'Variant'] : SCOPE_NAME
-  const crumbLen = (i: number) => (skipPool ? (i === 0 ? 0 : i + 1) : i) // display index → real drill length
-  const goUp = () => { let next = drill.slice(0, -1); if (skipPool && next.length === 1) next = []; setDrill(next) }
+  // breadcrumb without the pool segment wherever that segment carries nothing
+  const SCOPES = hidePool ? ['Market', 'Manufacturer', 'Model', 'Variant'] : SCOPE_NAME
+  const crumbLen = (i: number) => (hidePool ? (i === 0 ? 0 : i + 1) : i) // display index → real drill length
+  const goUp = () => { let next = drill.slice(0, -1); if (hidePool && next.length === 1) next = []; setDrill(next) }
 
   const over = node.gap > 0
   const maxGap = Math.max(...items.map((it) => Math.abs(it.gap)), 1)
@@ -240,6 +249,30 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
     },
   } : undefined
   const undoDrag = () => { if (lastDrag) { patchOverride(lastDrag.scope, null); if (lastDrag.prev) patchOverride(lastDrag.scope, lastDrag.prev); setLastDrag(null) } }
+
+  // Where each moved point STARTED: the same scope aggregated with its own
+  // override removed. Recomputed from the overrides themselves rather than
+  // remembered from the drag, so it survives a reload, a year change and an edit
+  // made from the assumptions rail — the chart always answers "what did I
+  // change?", not just "what did I just drag?".
+  const movedFrom = useMemo(() => {
+    const m = new Map<string, { mass: number; metric: number }>()
+    if (mode !== 'model' || level > 1) return m
+    for (const it of items) {
+      const scope = level === 0 ? `pool:${it.key}` : it.key
+      if (!overrides[scope]) continue
+      const without = { ...overrides }
+      delete without[scope]
+      const rows = applyScenario(raw, scenario, pack, without)
+        .filter((v) => (level === 0 ? (v.pool || v.parent) === it.key : v.parent === it.key))
+      if (!rows.length) continue
+      const a = aggregate(rows, pack, scenario, it.key, level === 0 ? 'pool' : 'parent', 'origin-probe')
+      if (a.rawUnits > 0 && a.avgMass > 0 && (Math.abs(a.avgMass - it.mass) > 0.5 || Math.abs(a.avgMetric - it.metric) > 0.05)) {
+        m.set(it.key, { mass: a.avgMass, metric: a.avgMetric })
+      }
+    }
+    return m
+  }, [items, overrides, raw, scenario, pack, level, mode])
 
   // Trajectory: this node's gap across every compliance year (the ICCT framing —
   // "are we on track", not just "where are we this year").
@@ -367,20 +400,57 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
 
   const gapA = useCountUp(node.gap), avgA = useCountUp(node.avgMetric), fineA = useCountUp(fineValue)
   const regA = useCountUp(node.rawUnits), unitsA = useCountUp(node.units), massA = useCountUp(node.avgMass)
-  const crumbs = [drillTree.label, ...(skipPool ? drill.slice(1) : drill)]
+  const crumbs = [drillTree.label, ...(hidePool ? drill.slice(1) : drill)]
   const reportParent = drill[1] ?? tree.children?.[0]?.label ?? node.label
   const exportReport = () => openPrintReport(`AiRE · ${node.label}`, buildMakerReport(node, pack, scenario, meta, recommend(raw, pack, scenario, reportParent, overrides), new Date().toISOString().slice(0, 10)))
   const [copied, setCopied] = useState(false)
   const copyLink = async () => { const url = buildShareUrl(); try { await navigator.clipboard.writeText(url) } catch { /* ignore */ } setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
   // India shows manufacturers at the market level (the pool tier is hidden).
-  const sectionLabel = (skipPool ? ['Manufacturers', 'Manufacturers', 'Models', 'Variants'] : LEVEL_NAME)[Math.min(level, 3)]
+  const sectionLabel = (hidePool ? ['Manufacturers', 'Manufacturers', 'Models', 'Variants'] : LEVEL_NAME)[Math.min(level, 3)]
   const hint = mode === 'model' && level <= 1
-    ? 'drag a bubble to set a target and the engine solves the levers · click to drill'
+    ? 'drag a bubble to set a target — the engine solves the levers and traces the move · click to drill in'
     : level < 2 ? 'click a bubble to drill in' : level === 2 ? 'click a model to open it' : level === 3 ? 'click a variant to inspect' : 'size = sales · colour = powertrain'
+
+  // ── the answer, stated before the page ────────────────────────────────────
+  // Same engine output as everything below; this only says it in a sentence so
+  // the screen opens on a conclusion instead of on a chart to be interpreted.
+  const vMakers = (tree.children ?? []).filter((x) => x.rawUnits > 0)
+  const vOver = vMakers.filter((x) => x.status === 'fine')
+  const vWorst = [...vOver].sort((a, b) => b.fine - a.fine)[0]
+  const vScopeName = level === 0 ? pack.name : node.label
+  const vPeriod = country === 'IN' ? `FY${String(scenario.year).slice(2)}-${String(scenario.year + 1).slice(2)}` : String(scenario.year)
+  const vHeadline = level === 0
+    ? (vOver.length === 0
+        ? <>Every manufacturer is under the line in {pack.name} for {vPeriod}.</>
+        : <><b>{vOver.length} of {vMakers.length}</b> manufacturers are over the line in {pack.name} for {vPeriod}{vWorst ? <>, led by <b>{vWorst.label.split(' ').slice(0, 2).join(' ')}</b></> : null}.</>)
+    : (node.status === 'exempt'
+        ? <><b>{vScopeName}</b> is below the small-volume threshold, so no penalty applies for {vPeriod}.</>
+        : over
+          ? <><b>{vScopeName}</b> is <b>{fmtNum(node.gap, 2)} {pack.metricUnit}</b> over its {vPeriod} limit.</>
+          : <><b>{vScopeName}</b> clears its {vPeriod} limit with <b>{fmtNum(Math.abs(node.gap), 2)} {pack.metricUnit}</b> of headroom.</>)
+  const vTone: 'good' | 'bad' | 'warn' = level === 0
+    ? (vOver.length === 0 ? 'good' : 'bad')
+    : node.status === 'exempt' ? 'warn' : over ? 'bad' : 'good'
 
   return (
     <div className="space-y-5">
+      <Verdict
+        question={level === 0 ? `Where does ${pack.name} sit against the line?` : `Where does ${vScopeName} sit?`}
+        headline={vHeadline}
+        figure={fmtMoney(fineValue, pack.currency)}
+        figureUnit={fineValue > 0 ? 'exposed at today\u2019s book' : 'exposed'}
+        tone={vTone}
+        stats={[
+          { label: pack.metricLabel, value: `${fmtNum(node.avgMetric, 1)} ${pack.metricUnit}`, sub: `limit ${fmtNum(node.limit, 1)}`, tone: over ? 'bad' : 'good' },
+          { label: 'Gap to the line', value: `${over ? '+' : ''}${fmtNum(node.gap, 2)}`, sub: pack.metricUnit, tone: over ? 'bad' : 'good',
+            onTrace: () => showProv({ agg: node, pack, scenario, meta }) },
+          { label: 'Registrations', value: fmtInt(node.rawUnits), sub: fineSub },
+        ]}
+        action={fineValue > 0 ? { label: 'Get under the line', icon: 'target', onClick: () => setScreen('under') } : undefined}
+        footnote={<>Book of record \u00b7 {pack.coverage.label}</>}
+      />
+
       {/* Breadcrumb + actions */}
       <div className="flex flex-wrap items-center gap-1.5">
         {crumbs.map((c, i) => (
@@ -507,8 +577,9 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      {/* KPI strip — the Verdict above already carries the headline figures, so
+          this whole tier is analyst detail. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-density="detail">
         <div className={`card rise relative overflow-hidden p-4 ${over ? 'border-danger/25' : 'border-safe/25'}`}>
           <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: over ? '#E0484D' : '#0E9F6E' }} />
           <div className="label">Gap to the line</div>
@@ -615,7 +686,7 @@ export default function Analyze({ mode = 'model' }: { mode?: 'actuals' | 'model'
             </div>
           )}
           <LimitChart pack={pack} limitAt={limitAt} points={points} colorBy={colorByEff} height={340} onPick={drillInto} unitRef={unitRef} drag={dragCfg} logos={level <= 1}
-            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} trails={trails} />
+            ghosts={ghostLines} corridor={corridor} stringency={stringency} view={chartView} draftLine={draftLine} trails={trails} moved={movedFrom} />
         </div>
 
         {/* ── panel 2 · when the year moved ── */}

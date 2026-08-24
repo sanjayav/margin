@@ -5,6 +5,7 @@ import { standings, poolResult, bestForMaker, poolOptimise, poolGroups, parentPo
 import { fmtMoney, fmtNum, fmtInt } from '../engine/engine'
 import { Section, StatusPill, Stat, Bar } from '../components/ui'
 import Icon from '../components/Icon'
+import PoolBalance, { type BalanceMember } from '../components/PoolBalance'
 
 export default function Pooling() {
   const { pack, raw, scenario, country } = useCompliance()
@@ -109,6 +110,13 @@ export default function Pooling() {
     )
   }
 
+  const optBalance: BalanceMember[] = useMemo(
+    () => opt.members
+      .map((p) => rows.find((r) => r.parent === p))
+      .filter(Boolean)
+      .map((r) => ({ parent: r!.parent, balance: r!.creditBalance, gap: r!.gap, units: r!.units, fine: r!.fine })),
+    [opt.members, rows],
+  )
   const topReceiver = opt.split.find((m) => m.finalCost < -0.5)
   return (
     <div className="space-y-5 animate-slidein">
@@ -141,12 +149,38 @@ export default function Pooling() {
         <Stat label="Surplus available" value={`${fmtInt(surplusTotal)}`} sub={`g·units of headroom to share`} accent="text-accentblue" />
       </div>
 
+      {/* What pooling actually IS here. The optimiser below ranks coalitions by
+          value, which quietly implies you can form one at will — you cannot, and
+          the constraints change which of its answers are usable. */}
+      <MechanicsStrip pack={pack} />
+
       {/* Registered pool groups — the legal hierarchy from the source data */}
       <PoolGroups groups={groups} pack={pack} onOpen={setMembers} />
 
       {/* Optimiser — best pool + Shapley fair value-split */}
       {opt.savings > 0 && (
-        <Section title="Optimiser · best pool & fair settlement" right={<span className="text-[11px] text-ink-500">Shapley value-split</span>}>
+        <Section title="Optimiser · best pool & fair settlement"
+          right={<span className="text-[11px] text-ink-500">Shapley value-split{opt.omitted > 0 ? ` · top ${opt.members.length} of ${opt.members.length + opt.omitted}` : ''}</span>}>
+          {opt.omitted > 0 && (
+            <p className="mb-3 flex items-start gap-2 rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] leading-relaxed text-ink-500">
+              <Icon name="scale" size={13} className="mt-[1px] shrink-0 text-ink-400" />
+              <span>
+                The search covers the <b className="text-ink-300">{opt.members.length}</b> makers that can move the answer — those carrying a fine or real headroom, largest first.
+                <b className="text-ink-300"> {opt.omitted}</b> smaller relevant makers are outside this roster; adding them can only improve the total, never worsen it.
+                Use the pool builder below to price any specific combination.
+              </span>
+            </p>
+          )}
+          <div className="mb-5 rounded-2xl border border-black/[0.05] bg-black/[0.015] p-4">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-ink-500">Who carries whom</div>
+            <PoolBalance
+              members={optBalance}
+              currency={pack.currency}
+              metricUnit={pack.metricUnit}
+              net={optBalance.reduce((a, m) => a + m.balance, 0)}
+              residualFine={opt.pooledFine}
+            />
+          </div>
           <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Stat label="Recommended pool" value={`${opt.members.length} makers`} sub="value-maximising coalition" />
             <Stat label="Fine removed" value={fmtMoney(opt.savings, pack.currency)} sub={`pooled residual ${fmtMoney(opt.pooledFine, pack.currency)}`} accent="text-brand" />
@@ -369,6 +403,42 @@ function Standings({ rows, pack, maxAbs, pmap }: any) {
             })}
           </tbody>
         </table>
+      </div>
+    </Section>
+  )
+}
+
+// ── What pooling IS in this regime ───────────────────────────────────────────
+// The optimiser ranks coalitions by value, which quietly implies any of them can
+// be formed. Under Article 6 they cannot: a pool is a FORWARD declaration, it is
+// per vehicle class, and an open pool cannot refuse a comer. Stating the
+// constraints next to the optimiser is the difference between a recommendation
+// an analyst can act on and one that gets thrown out in the first legal review.
+function MechanicsStrip({ pack }: { pack: any }) {
+  const pooled = pack.transfer?.kind === 'pool'
+  const items: { icon: any; t: string; d: string }[] = pooled
+    ? [
+        { icon: 'clock', t: 'Declared in advance', d: 'Article 6(3): members must notify the Commission by 31 December of the calendar year the pool covers. It is a commitment made before the year is known — not a coalition chosen once the registrations are in.' },
+        { icon: 'layers', t: 'Per vehicle class', d: 'A manufacturer holds separate M1 and N1 targets, so a car pool and a van pool are separate arrangements. Van headroom cannot be lent against a car deficit.' },
+        { icon: 'handshake', t: 'Open on fair terms', d: 'Article 6(4): between unconnected manufacturers the pool manager must admit any maker that asks, on fair, reasonable and non-discriminatory terms. Connected undertakings pool freely.' },
+        { icon: 'scale', t: 'One average, no instrument', d: 'Members are assessed on one combined fleet average. Nothing is issued, priced or banked — the money moves as a private settlement between members, which is what the split below values.' },
+      ]
+    : [
+        { icon: 'scale', t: 'Assessed standalone', d: pack.pooling?.note ?? 'Each manufacturer clears its own line.' },
+      ]
+  return (
+    <Section title={<span className="flex items-center gap-2"><Icon name="shield" size={15} className="text-brand" /> How pooling works here</span>}
+      right={<span className="text-[11px] text-ink-500">Reg (EU) 2019/631 Article 6</span>}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {items.map((s) => (
+          <div key={s.t} className="rounded-xl border border-black/[0.06] bg-white/70 p-3.5">
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand/10 text-brand"><Icon name={s.icon} size={14} /></span>
+              <span className="text-[12.5px] font-bold leading-tight text-ink-100">{s.t}</span>
+            </div>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-500">{s.d}</p>
+          </div>
+        ))}
       </div>
     </Section>
   )

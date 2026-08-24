@@ -3,7 +3,10 @@
 // Turns the engine's fines and credit values into per-unit price economics:
 //   · compliance cost per car (maker fine ÷ units) and the uplift needed to
 //     recover it at a chosen pass-through
-//   · credit value per car for over-compliers (headroom × credit price)
+//   · headroom value per car for over-compliers. Where a regime issues a
+//     tradable instrument that is a credit price; where it does not (the EU
+//     pools rather than trades) it is the SHADOW price — the fine one unit of
+//     surplus removes — and the surface says so rather than implying a market.
 //   · a model-level price ladder for the focused maker: which nameplates carry
 //     the burden, which generate credit value
 //   · market tax context (GST/VAT/cess/LCT) so uplifts read as on-road money
@@ -16,6 +19,7 @@ import { useCompliance } from '../lib/useCompliance'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
 import type { CountryId } from '../engine/types'
 import { Stat, Section, BasisChip } from '../components/ui'
+import Verdict from '../components/Verdict'
 import Icon from '../components/Icon'
 
 // Effective point-of-sale tax context per market (indicative, editable below).
@@ -40,8 +44,10 @@ export default function Pricing() {
   const patchScenario = useStore((s) => s.patchScenario)
   const [passThrough, setPassThrough] = useState(100)
   const [taxPct, setTaxPct] = useState(Math.round(TAX[country].rate * 100))
-  // no credit market (EU) → value headroom at the shadow price (the fine rate)
+  // No credit market (EU pools rather than issuing an instrument) → value
+  // headroom at the shadow price, i.e. the fine one unit of surplus removes.
   const price = scenario.creditPrice ?? pack.creditPrice ?? pack.fineRate
+  const pooled = pack.transfer.kind === 'pool'
   const tax = taxPct / 100
 
   const makers = useMemo(() => (tree.children ?? []).filter((c) => c.rawUnits > 0).sort((a, b) => b.fine - a.fine), [tree])
@@ -69,13 +75,35 @@ export default function Pricing() {
   }, [parent, pack, price, focus])
   const maxBurden = Math.max(...ladder.map((l) => Math.max(l.burden, l.credit)), 1)
 
+  // ── the answer: what compliance costs a car, and who carries it ───────────
+  const vWorst = makers[0]
+  const vBurden = ladder.filter((l) => l.burden > 0)
+  const vTopModel = vBurden[0]
+  const vHeadline = totalFine === 0
+    ? <>Compliance costs {pack.name} nothing per car in {scenario.year} \u2014 every manufacturer clears its limit.</>
+    : <>Compliance adds <b>{fmtMoney(marketPerUnit, pack.currency)}</b> to the average {pack.name} car in {scenario.year}{vWorst ? <>, and <b>{vWorst.label.split(' ').slice(0, 2).join(' ')}</b> carries the most of it</> : null}.</>
+
   return (
     <div className="space-y-5">
+      <Verdict
+        question={`What does compliance cost per car in ${pack.name}?`}
+        headline={vHeadline}
+        figure={fmtMoney(marketPerUnit, pack.currency)}
+        figureUnit={`per car sold \u00b7 ${scenario.year}`}
+        tone={marketPerUnit > 0 ? 'bad' : 'good'}
+        stats={[
+          { label: `${focus?.label.split(' ')[0] ?? '\u2014'} cost / car`, value: fmtMoney(focusPerUnit, pack.currency), sub: focus?.status === 'fine' ? 'fine \u00f7 units' : 'compliant \u2014 no fine', tone: focusPerUnit > 0 ? 'bad' : 'good' },
+          { label: pooled ? 'Pooling value / car' : 'Credit value / car', value: fmtMoney(focusCreditPerUnit, pack.currency), sub: focusCreditPerUnit > 0 ? (pooled ? 'headroom \u00d7 shadow price' : 'headroom \u00d7 credit price') : 'no surplus at current mix', tone: focusCreditPerUnit > 0 ? 'good' : 'neutral' },
+          { label: 'Heaviest nameplate', value: vTopModel ? vTopModel.model : '\u2014', sub: vTopModel ? `${fmtMoney(vTopModel.burden, pack.currency)} per car` : 'none carry a burden' },
+        ]}
+        footnote={<>Sticker uplift at {passThrough}% pass-through: <b>{fmtMoney(uplift * (1 + tax), pack.currency)}</b> on the road, incl. {TAX[country].label}</>}
+      />
+
       {/* KPI band */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-density="detail">
         <Stat className="rise" label="Market compliance cost" value={fmtMoney(marketPerUnit, pack.currency)} sub={`per car sold · ${scenario.year}`} accent={marketPerUnit > 0 ? 'text-danger' : 'text-safe'} />
         <Stat className="rise [animation-delay:50ms]" label={`${focus?.label.split(' ')[0] ?? '—'} cost / car`} value={fmtMoney(focusPerUnit, pack.currency)} sub={country === 'CN' ? (focusPerUnit > 0 ? 'CAFC credit cost ÷ units' : 'CAFC-clear — no cost') : (focus?.status === 'fine' ? 'fine ÷ units' : 'compliant — no fine')} accent={focusPerUnit > 0 ? 'text-danger' : 'text-safe'} />
-        <Stat className="rise [animation-delay:100ms]" label="Credit value / car" value={fmtMoney(focusCreditPerUnit, pack.currency)} sub={focusCreditPerUnit > 0 ? 'headroom × credit price' : 'no surplus at current mix'} accent={focusCreditPerUnit > 0 ? 'text-safe' : undefined} />
+        <Stat className="rise [animation-delay:100ms]" label={pooled ? 'Pooling value / car' : 'Credit value / car'} value={fmtMoney(focusCreditPerUnit, pack.currency)} sub={focusCreditPerUnit > 0 ? (pooled ? 'headroom × shadow price' : 'headroom × credit price') : 'no surplus at current mix'} accent={focusCreditPerUnit > 0 ? 'text-safe' : undefined} />
         <Stat className="rise [animation-delay:150ms]" label="Sticker uplift needed" value={fmtMoney(uplift, pack.currency)} sub={`at ${passThrough}% pass-through`} />
         <Stat className="rise [animation-delay:200ms]" label="On-road uplift" value={fmtMoney(uplift * (1 + tax), pack.currency)} sub={`incl. ${TAX[country].label}`} />
       </div>
@@ -158,7 +186,7 @@ export default function Pricing() {
 
       <div className="grid gap-5 xl:grid-cols-2">
         {/* maker economics */}
-        <Section title={`Compliance cost per car · ${scenario.year}`} right={<span className="text-[11px] text-ink-500">click a maker to load its ladder</span>}>
+        <Section density="detail" title={`Compliance cost per car · ${scenario.year}`} right={<span className="text-[11px] text-ink-500">click a maker to load its ladder</span>}>
           <div className="max-h-[46vh] overflow-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-[#FFFEFB]/95 backdrop-blur">
@@ -215,7 +243,7 @@ export default function Pricing() {
             {ladder.length === 0 && <p className="py-6 text-center text-xs text-ink-500">No models with volume for this maker-year.</p>}
           </div>
           <p className="mt-3 text-[10.5px] leading-relaxed text-ink-500">
-            Red = per-car burden priced on-road at your pass-through and tax; green = credit value the model generates per car (headroom × credit price).
+            Red = per-car burden priced on-road at your pass-through and tax; green = the value the model generates per car (headroom × {pooled ? 'shadow' : 'credit'} price).
             {pack.fineFor ? ' Statutory fines here are stepped — model-level figures use the linear-equivalent rate; maker totals are exact.' : ''}
           </p>
         </Section>

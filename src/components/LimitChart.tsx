@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { RulePack } from '../engine/types'
 import { fmtInt, fmtNum } from '../engine/engine'
 import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
+import { ptColor, ptRing } from '../lib/palette'
 
 export interface ChartPoint {
   key: string
@@ -14,9 +15,6 @@ export interface ChartPoint {
   powertrain?: string
 }
 
-const PT_COLORS: Record<string, string> = {
-  BEV: '#3ddc97', PHEV: '#5b8def', HEV: '#8b7ff0', MHEV: '#ffb454', ICE: '#ff5d6c', 'Strong Hybrid': '#8b7ff0',
-}
 
 /** Direct manipulation: drag a bubble to a target position and the caller
  *  SOLVES the levers that get it there (the chart never invents physics —
@@ -81,6 +79,12 @@ interface Props {
   /** Override the line's pill label. China isn't a pass/fail limit — the line is
    *  the CAFC target (达标值 · the zero-credit boundary), so it's relabelled. */
   limitLabel?: string
+  /** Where a point SAT before the user moved it (its position with that scope's
+   *  own override removed). Drawn as a hollow origin marker and a dashed arrow
+   *  to the current position, so a direct-manipulation edit reads as a MOVE
+   *  rather than silently redrawing the bubble somewhere else. Persists for as
+   *  long as the override does. */
+  moved?: Map<string, { mass: number; metric: number }>
   /** Monthly trajectory per point key, oldest → newest (the connected-scatter
    *  convention). A scatter shows a position; the trail shows a DIRECTION —
    *  down the page is cleaner, right is heavier. Each entry is that month
@@ -95,13 +99,17 @@ export interface TrailPoint { mass: number; metric: number; label: string; units
  * marker. Below the line is safe (green), above means a fine (red). Everything
  * re-renders instantly when the scenario changes — no animation gate.
  */
-export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine, limitLabel, trails }: Props) {
+export default function LimitChart({ pack, limitAt, points, onPick, height = 360, colorBy = 'status', unitRef, drag, logos, ghosts, corridor, stringency, view = 'line', draftLine, limitLabel, trails, moved }: Props) {
   const [hover, setHover] = useState<string | null>(null)
   const [logoFailed, setLogoFailed] = useState<Set<string>>(new Set())
   const failLogo = (key: string) => setLogoFailed((prev) => { const n = new Set(prev); n.add(key); return n })
   const svgRef = useRef<SVGSVGElement>(null)
   const [ghost, setGhost] = useState<{ key: string; mass: number; metric: number; lines: string[] } | null>(null)
   const dragRef = useRef<{ key: string; startMass: number; startMetric: number; moved: boolean; lastPreview: number } | null>(null)
+  // A `click` fires AFTER `pointerup`, by which time endDrag has already cleared
+  // dragRef — so guarding the click on dragRef alone always passed and a drag
+  // also drilled into the next hierarchy level. This survives that gap.
+  const swallowClickRef = useRef(false)
   // stringency line-drag (draft regimes, Model workbench)
   const [lineDrag, setLineDrag] = useState<{ pct: number } | null>(null)
   const lineDragRef = useRef<boolean>(false)
@@ -153,6 +161,9 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     return { mass, metric: gap ? val + limitAt(mass) : val }
   }
   const startDrag = (p: ChartPoint) => (e: React.PointerEvent) => {
+    // Cleared on EVERY pointerdown, including non-draggable points, so a drag
+    // that ended off-canvas can never swallow an unrelated later click.
+    swallowClickRef.current = false
     if (!drag || !drag.enabled(p)) return
     e.preventDefault(); e.stopPropagation()
     ;(e.target as Element).setPointerCapture?.(e.pointerId)
@@ -185,6 +196,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
     }
     const d = dragRef.current
     dragRef.current = null
+    if (d?.moved) swallowClickRef.current = true
     if (d && ghost && d.moved) drag?.commit(ghost.key, ghost.mass, ghost.metric)
     setGhost(null)
   }
@@ -372,7 +384,7 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
           const dim = hover && hover !== key
           const on = hover === key
           const statusColor = pt.status === 'fine' ? '#ff5d6c' : pt.status === 'compliant' ? '#3ddc97' : pt.status === 'exempt' ? '#ffb454' : '#8C8273'
-          const col = colorBy === 'powertrain' ? (PT_COLORS[pt.powertrain ?? ''] ?? '#8C8273') : statusColor
+          const col = colorBy === 'powertrain' ? ptColor(pt.powertrain ?? '') : statusColor
           const xy = tp.map((q) => ({ x: sx(q.mass), y: syAt(q.mass, q.metric), q }))
           const last = xy.length - 1
           // How far the entity actually travelled, in pixels. A maker whose mix
@@ -414,12 +426,41 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
         })}
 
         {/* points */}
+        {/* MOVE TRACE — where a directly-manipulated point started, and the path
+            it took. Drawn under the bubbles so it never competes with them, and
+            only for points the user actually moved. */}
+        {moved && points.map((p) => {
+          const from = moved.get(p.key)
+          if (!from || p.mass <= 0) return null
+          const x0 = sx(from.mass), y0 = syAt(from.mass, from.metric)
+          const x1 = sx(p.mass), y1 = syAt(p.mass, p.metric)
+          const dx = x1 - x0, dy = y1 - y0
+          const len = Math.hypot(dx, dy)
+          if (len < 6) return null
+          // stop the arrow just short of the bubble so the head stays visible
+          const r = Math.max(7, Math.min(26, Math.sqrt((p.units / (unitRef || Math.max(...points.map((q) => q.units), 1))) * 900)))
+          const ux = dx / len, uy = dy / len
+          const ex = x1 - ux * (r + 3), ey = y1 - uy * (r + 3)
+          const improved = p.metric < from.metric
+          const col = improved ? '#3ddc97' : '#ffb454'
+          const ah = 5.5
+          return (
+            <g key={`mv-${p.key}`} className="lc-move" pointerEvents="none">
+              <circle cx={x0} cy={y0} r={6} fill="none" stroke={col} strokeWidth="1.4" strokeDasharray="2.5 2.5" opacity="0.75" />
+              <line x1={x0} y1={y0} x2={ex} y2={ey} stroke={col} strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" />
+              <path
+                d={`M${ex},${ey} L${ex - ux * ah + -uy * ah * 0.62},${ey - uy * ah + ux * ah * 0.62} L${ex - ux * ah + uy * ah * 0.62},${ey - uy * ah - ux * ah * 0.62} Z`}
+                fill={col} opacity="0.85" />
+            </g>
+          )
+        })}
+
         {points.map((p) => {
           if (p.mass <= 0) return null
           const cx = sx(p.mass)
           const cy = syAt(p.mass, p.metric)
           const statusColor = p.status === 'fine' ? '#ff5d6c' : p.status === 'compliant' ? '#3ddc97' : p.status === 'exempt' ? '#ffb454' : '#8C8273'
-          const color = p.isFleet ? statusColor : colorBy === 'powertrain' ? (PT_COLORS[p.powertrain ?? ''] ?? '#8C8273') : statusColor
+          const color = p.isFleet ? statusColor : colorBy === 'powertrain' ? ptColor(p.powertrain ?? '') : statusColor
           const r = p.isFleet ? 9 : 5 + Math.sqrt(Math.min(1, Math.max(0, p.units) / sizeRef)) * 18
           const active = hover === p.key
           const target = limitAt(p.mass)
@@ -428,7 +469,12 @@ export default function LimitChart({ pack, limitAt, points, onPick, height = 360
             <g key={p.key} style={{ cursor: drag?.enabled(p) ? 'grab' : onPick ? 'pointer' : 'default', transition: 'all .25s', opacity: ghost && ghost.key === p.key ? 0.35 : 1 }}
               onMouseEnter={() => setHover(p.key)} onMouseLeave={() => setHover(null)}
               onPointerDown={startDrag(p)}
-              onClick={() => { if (!dragRef.current?.moved) onPick?.(p.key) }}>
+              onClick={() => {
+                // read-and-clear: a drag consumes exactly one click, a plain
+                // click still drills.
+                if (swallowClickRef.current) { swallowClickRef.current = false; return }
+                onPick?.(p.key)
+              }}>
               {/* the line is personal: leader + tick at THIS entity's own target */}
               {(p.isFleet || active) && (
                 <g>

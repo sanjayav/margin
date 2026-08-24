@@ -1,11 +1,8 @@
 import { useMemo } from 'react'
 import type { Aggregate, RulePack, Scenario } from '../engine/types'
 import { fmtInt, fmtNum } from '../engine/engine'
+import { ptColor } from '../lib/palette'
 
-const PT_COLOR: Record<string, string> = {
-  BEV: '#3ddc97', PHEV: '#5b8def', HEV: '#8b7ff0', MHEV: '#ffb454', ICE: '#ff5d6c', 'Strong Hybrid': '#8b7ff0',
-}
-const ptColor = (p: string) => PT_COLOR[p] ?? '#8C8273'
 
 interface Row { pt: string; rawUnits: number; effUnits: number; avg: number; contribution: number; share: number }
 

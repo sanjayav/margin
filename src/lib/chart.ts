@@ -1,10 +1,8 @@
 import type { Aggregate, RulePack, Scenario, Vehicle } from '../engine/types'
 import type { ChartPoint } from '../components/LimitChart'
 
-export const PT_COLORS: Record<string, string> = {
-  BEV: '#3ddc97', PHEV: '#5b8def', HEV: '#8b7ff0', MHEV: '#ffb454', ICE: '#ff5d6c', 'Strong Hybrid': '#8b7ff0',
-}
-export const ptColor = (p: string) => PT_COLORS[p] ?? '#5a6b86'
+// Data colour lives in one place — see lib/palette.ts for why.
+export { PT_COLORS, ptColor, ptRing, ptSoft, PT_ORDER, ptRank } from './palette'
 
 /** One bubble per model·powertrain: x=mass, y=emissions (after credits),
  *  size=sales, colour=powertrain. Added variants appear as new bubbles. */

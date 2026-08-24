@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { ptColor, ptRing } from '../lib/palette'
 import { useStore, defaultScenario } from '../state/store'
 import { getFleet, getMeta, setLiveFleet } from '../data/fleet'
 import { getPack } from '../engine/rulepacks'
@@ -675,7 +676,7 @@ export default function Data() {
                       case 'parent': return <td key={c.k} className="whitespace-nowrap px-3 py-2 font-medium text-ink-100">{r.parent}</td>
                       case 'model': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-200">{r.model}</td>
                       case 'variant': return <td key={c.k} className="whitespace-nowrap px-3 py-2 text-ink-400">{variantLabel(r)}</td>
-                      case 'powertrain': return <td key={c.k} className="px-3 py-2"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(r.powertrain)}40`, background: `${ptColor(r.powertrain)}14`, color: ptColor(r.powertrain) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
+                      case 'powertrain': return <td key={c.k} className="px-3 py-2"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(r.powertrain)}40`, background: `${ptColor(r.powertrain)}14`, color: ptRing(r.powertrain) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(r.powertrain) }} />{r.powertrain}</span></td>
                       case 'year': return <td key={c.k} className="num px-3 py-2 text-right text-ink-300">{r.year}</td>
                       case 'co2': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${r.co2 === 0 ? 'text-safe' : 'text-ink-100'}`}>{fmtNum(r.co2, 0)}</td>
                       case 'metric': return <td key={c.k} className={`num px-3 py-2 text-right font-semibold ${m === 0 ? 'text-safe' : 'text-brand'}`}>{fmtNum(m, 1)}</td>
@@ -817,7 +818,7 @@ function CompareModal({ items, pack, metricOf, onRemove, onClose }: {
                     {items.map((r) => {
                       const v = s.get(r)
                       if (v == null || v === '') return <td key={cmpCol(r)} className="px-3 py-2.5 text-ink-600">—</td>
-                      if (s.pill) return <td key={cmpCol(r)} className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(String(v))}40`, background: `${ptColor(String(v))}14`, color: ptColor(String(v)) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(String(v)) }} />{String(v)}</span></td>
+                      if (s.pill) return <td key={cmpCol(r)} className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold" style={{ borderColor: `${ptColor(String(v))}40`, background: `${ptColor(String(v))}14`, color: ptRing(String(v)) }}><i className="h-1.5 w-1.5 rounded-full" style={{ background: ptColor(String(v)) }} />{String(v)}</span></td>
                       const isBest = best != null && Number(v) === best
                       return (
                         <td key={cmpCol(r)} className={`px-3 py-2.5 ${s.num ? 'num font-semibold' : ''} ${isBest ? 'text-safe' : 'text-ink-200'}`}>
@@ -972,10 +973,3 @@ function RowEditor({ initial, isNew, pack, makers, powertrains, fuels, onSave, o
 }
 
 // local copy to avoid a cross-import cycle through chart.ts
-function ptColor(pt: string) {
-  const m: Record<string, string> = {
-    BEV: '#0E9F6E', PHEV: '#3B82F6', HEV: '#8B5CF6', MHEV: '#F59E0B', ICE: '#EF4444',
-    'Strong Hybrid': '#8B5CF6', 'Range-Extender Hybrid': '#6366F1', 'Flex Fuel Ethanol': '#F59E0B',
-  }
-  return m[pt] ?? '#9CA3AF'
-}

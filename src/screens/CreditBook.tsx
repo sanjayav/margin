@@ -22,11 +22,14 @@ import { Stat, Section, BasisChip } from '../components/ui'
 import BrandChip from '../components/BrandChip'
 import { brandLogoUrl, brandInitials, brandColor } from '../lib/brands'
 import { useCountUp } from '../lib/useCountUp'
+import Verdict from '../components/Verdict'
 import Icon from '../components/Icon'
 
 const short = (name: string) => name.split(/\s+/).slice(0, 2).join(' ')
 
-// ── the credit market map ────────────────────────────────────────────────────
+// ── the flow map: who can carry whom ────────────────────────────────────────
+// Titled per regime — a 'credit market' where an instrument exists, a 'pooling
+// map' where it does not (the EU), because the flows mean different things.
 interface Flow { seller: string; buyer: string; qty: number }
 
 /** Greedy largest-to-largest allocation of surplus to deficit — the natural
@@ -159,11 +162,17 @@ export default function CreditBook() {
   const actualsBase = useMemo(() => defaultScenario(country), [country])
   const scenario = basisSel === 'actuals' ? actualsBase : liveScenario
   const overrides = basisSel === 'actuals' ? {} : liveOverrides
+  // A regime either has an instrument that moves between makers, or it does not.
+  // The EU does not: Article 6 shares one fleet average and issues nothing. So
+  // every noun on this screen comes from pack.transfer rather than being
+  // hard-coded to the language of a credit market.
+  const xfer = pack.transfer
+  const pooled = xfer.kind === 'pool'
   const hasMarket = pack.creditPrice != null
   const price = (basisSel === 'scenario' ? liveScenario.creditPrice : null) ?? pack.creditPrice ?? pack.fineRate
   const priceLabel = hasMarket
     ? (pack.creditPriceLabel ?? `at ${pack.currency}${fmtNum(price, 0)} per unit`)
-    : `shadow price = fine rate (${pack.name} pools rather than trades)`
+    : `shadow price = the fine one unit of headroom removes — ${pack.name} issues no tradable ${xfer.unit.includes('credit') ? 'credit' : 'instrument'}`
 
   const byYear = useMemo(() =>
     pack.years.map((year) => ({ year, rows: standings(raw, pack, { ...scenario, year }, overrides) })),
@@ -205,10 +214,47 @@ export default function CreditBook() {
 
   const animKey = `${focus.year}-${basisSel}`
 
+  // ── the answer: does the market clear itself, and what is unsold ──────────
+  const vNet = surplus - deficit
+  const vCovers = vNet >= 0
+  const vTopSeller = [...sellers].sort((a, b) => b.creditBalance - a.creditBalance)[0]
+  const vHeadline = deficit === 0
+    ? <>No manufacturer is short in {focus.year} \u2014 nobody needs a {xfer.supplier}.</>
+    : vCovers
+      ? <>The {pack.name} surplus <b>covers</b> every deficit in {focus.year}{vTopSeller ? <>, with <b>{vTopSeller.parent.split(' ').slice(0, 2).join(' ')}</b> the largest {xfer.supplier}</> : null}.</>
+      : <>The {pack.name} surplus <b>falls short</b> by <b>{fmtInt(Math.abs(vNet))} {pack.metricUnit}\u00b7units</b> in {focus.year} \u2014 some deficit cannot be {pooled ? 'pooled' : 'traded'} away.</>
+
   return (
     <div className="space-y-5">
+      <Verdict
+        question={`Can ${pack.name} ${xfer.verb} its way out in ${focus.year}?`}
+        headline={vHeadline}
+        figure={fmtMoney(atRisk, pack.currency)}
+        figureUnit={pooled ? 'at risk if no pool forms' : 'at risk if nothing trades'}
+        tone={deficit === 0 ? 'good' : vCovers ? 'warn' : 'bad'}
+        stats={[
+          { label: pooled ? 'Headroom available' : 'Surplus for sale', value: `+${fmtInt(surplus)}`, sub: `${sellers.length} ${xfer.supplier}${sellers.length === 1 ? '' : 's'}`, tone: 'good' },
+          { label: 'Deficit to cover', value: `\u2212${fmtInt(deficit)}`, sub: `${buyers.length} ${xfer.taker}${buyers.length === 1 ? '' : 's'}`, tone: deficit > 0 ? 'bad' : 'good' },
+          { label: hasMarket ? 'Surplus market value' : 'Surplus shadow value', value: fmtMoney(surplus * price, pack.currency), sub: priceLabel },
+        ]}
+        footnote={<>{basisSel === 'actuals' ? 'Book of record' : 'Working assumptions'} \u00b7 {pack.coverage.label}</>}
+      />
+
+      {/* The mechanism, stated plainly. On a pooling-only regime this is the
+          single most important caveat on the screen: the positions below are
+          real, but there is no instrument to sell and no bank to carry. */}
+      {pooled && (
+        <div className="rise flex items-start gap-3 rounded-xl border border-amber-300/30 bg-amber-50/60 px-4 py-3 text-[12px] leading-relaxed text-ink-300">
+          <Icon name="scale" size={15} className="mt-0.5 shrink-0 text-amber-600" />
+          <span>
+            <b className="font-semibold text-ink-100">{pack.name} issues no compliance credit.</b> {xfer.note}
+            {' '}Positions below are therefore <b>headroom</b>, not holdings — valued at the shadow price so you can see what a pool partner is worth.
+          </span>
+        </div>
+      )}
+
       {/* KPI band — count-up morphs */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-density="detail">
         <Stat className="rise" label="Net market position" value={`${netA >= 0 ? '+' : '−'}${fmtInt(Math.abs(netA))}`} sub={`${pack.metricUnit}·units · ${focus.year}`} accent={surplus >= deficit ? 'text-safe' : 'text-danger'} />
         <Stat className="rise [animation-delay:50ms]" label="Surplus for sale" value={`+${fmtInt(surplusA)}`} sub={`${sellers.length} sellers`} accent="text-safe" />
         <Stat className="rise [animation-delay:100ms]" label="Deficit to cover" value={`−${fmtInt(deficitA)}`} sub={`${buyers.length} buyers`} accent="text-danger" />
@@ -252,7 +298,7 @@ export default function CreditBook() {
 
       {/* THE CREDIT MARKET MAP */}
       <Section className="rise [animation-delay:240ms]"
-        title={<span className="flex items-center gap-2"><Icon name="activity" size={15} className="text-brand" /> Credit market map · {focus.year}</span>}
+        title={<span className="flex items-center gap-2"><Icon name="activity" size={15} className="text-brand" /> {pooled ? 'Pooling map' : 'Credit market map'} · {focus.year}</span>}
         right={<span className="hidden text-[11px] text-ink-500 md:inline">surplus streams to deficit — engine balances, greedy clearing</span>}>
         <div key={animKey} className="screen-in">
           <MarketMap sellers={sellers} buyers={buyers} unit={pack.metricUnit}
@@ -263,7 +309,7 @@ export default function CreditBook() {
 
       <div className="grid gap-5 xl:grid-cols-[1fr_380px]">
         {/* maker ledger with brand identity */}
-        <Section className="rise [animation-delay:280ms]" title={`Positions · ${focus.year}`} right={<span className="text-[11px] text-ink-500">click a maker to track its banked position</span>}>
+        <Section density="detail" className="rise [animation-delay:280ms]" title={`Positions · ${focus.year}`} right={<span className="text-[11px] text-ink-500">click a maker to track its banked position</span>}>
           <div className="max-h-[46vh] overflow-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead className="sticky top-0 z-10 bg-[#FFFEFB]/95 backdrop-blur">
@@ -306,7 +352,7 @@ export default function CreditBook() {
 
         <div className="space-y-5">
           {/* banked position */}
-          <Section className="rise [animation-delay:320ms]" title={<span className="flex items-center gap-2"><BrandChip name={selectedParent} size={20} /> Banked position · {short(selectedParent)}</span>}>
+          <Section density="detail" className="rise [animation-delay:320ms]" title={<span className="flex items-center gap-2"><BrandChip name={selectedParent} size={20} /> Banked position · {short(selectedParent)}</span>}>
             <div className="space-y-1.5">
               {bank.map(({ year, bal, cum }) => (
                 <div key={year} className="flex items-center gap-2 text-[11px]">
