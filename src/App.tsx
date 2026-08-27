@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ComponentType } from 'react'
-import { getMarket } from './markets'
 import { useStore, type ScreenId } from './state/store'
 import { useCompliance } from './lib/useCompliance'
 import { buildTree, fmtMoney, fmtNum, scopeToMonth } from './engine/engine'
@@ -47,7 +45,6 @@ import type { CountryId } from './engine/types'
 // book of record; levers live in Scenario); Pooling is the add-on (only some
 // regimes allow pooled averages). `addon` items appear only when owned.
 const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 'pooling'; country?: CountryId }[] = [
-  { id: 'brief', label: 'Brief', icon: 'gauge', tier: 'CORE' },
   { id: 'copilot', label: 'Co-pilot', icon: 'spark', tier: 'Core' },
   { id: 'analyse', label: 'Plan', icon: 'scatter', tier: 'Core' },
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
@@ -63,7 +60,7 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
 // instead of a flat wall of seven. Co-pilot stays standalone (the front door).
 const SCENARIO_SCREENS: ScreenId[] = ['scenario'] // tabs resolve to screen:'scenario'
 const HUBS: { label: string; icon: IconName; hint: string; items: ScreenId[] }[] = [
-  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['brief', 'analyse', 'scenario', 'forecast'] },
+  { label: 'Compliance', icon: 'gauge', hint: 'position · fix · forecast', items: ['analyse', 'scenario', 'forecast'] },
   { label: 'Credits', icon: 'scale', hint: 'ledger · pool · price', items: ['creditbook', 'pooling', 'pricing'] },
 ]
 
@@ -245,7 +242,6 @@ function TopBar() {
   const c = useCompliance(screen === 'analyse' || screen === 'creditbook' ? 'actuals' : 'live')
   const { pack, scenario } = c
   const year = useStore((s) => s.scenario.year)
-  const tbCountry = useStore((s) => s.country)
   // …and Plan can read the year at a point in its monthly filing, so the header
   // follows it there. Anywhere else the scope is not applied, so the verdict
   // stays the whole period.
@@ -262,12 +258,7 @@ function TopBar() {
     return headScope.mode === 'month' ? `${m} ${year}` : `${year} to ${m}`
   }, [headScope, year, pack])
   const openCmdK = useCmdK((s) => s.setOpen)
-  // A registered market names its own modules — the legacy NAV table still calls
-  // `analyse` "Plan", which is not what this market calls it.
-  const registered = getMarket(tbCountry)?.modules[screen]
-  const item = registered
-    ? { id: screen, label: registered.label, icon: registered.icon }
-    : NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
+  const item = NAV.find((n) => n.id === screen) ?? UTIL.find((n) => n.id === screen)
   // Board verdict for the whole market: fines are per-maker, so exposure = Σ.
   const makers = (tree.children ?? []).filter((c) => c.rawUnits > 0)
   const marketFine = makers.reduce((a, c) => a + c.fine, 0)
@@ -303,9 +294,7 @@ function TopBar() {
         </button>
         <div className="h-10 w-px bg-white/[0.10]" />
         <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-1.5 ${under ? 'border-safe/25 bg-safe/[0.08]' : 'border-danger/25 bg-danger/[0.08]'}`}>
-          {/* The pulse was an alarm that never stopped ringing. A steady dot
-              states the position; it does not demand attention every second. */}
-          <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger'}`} />
+          <span className={`h-2 w-2 rounded-full ${under ? 'bg-safe' : 'bg-danger animate-pulse'}`} />
           <div className="leading-tight">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9A9082]">{pack.name} {periodTag} · {isCN ? `${dc!.totals.makers - dc!.totals.makersOver} of ${dc!.totals.makers} credit-clear` : under ? 'Under the line' : 'Over the line'}</div>
             <div className="num text-[13px] font-bold text-white">
@@ -318,19 +307,11 @@ function TopBar() {
             </div>
           </div>
         </div>
-        {/* Deliberately absent on the Brief. Opening a market with a penalty
-            makes the tool read as an accusation before the reader knows what to
-            do about it — the whole reason the Brief exists. The figure is one
-            line down on that screen, and permanent everywhere else. */}
-        {screen !== 'brief' && (
-          <>
-            <div className="h-10 w-px bg-white/[0.10]" />
-            <div className="text-right">
-              <div className="label text-[#8A8174]">{pack.currency}-at-risk</div>
-              <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}<span className="ml-1.5 text-[11px] font-medium text-[#9A9082]">{over} of {makers.length} over</span></div>
-            </div>
-          </>
-        )}
+        <div className="h-10 w-px bg-white/[0.10]" />
+        <div className="text-right">
+          <div className="label text-[#8A8174]">{pack.currency}-at-risk</div>
+          <div className="dnum mt-0.5 text-[18px] font-bold text-white">{fmtMoney(marketFine, pack.currency)}<span className="ml-1.5 text-[11px] font-medium text-[#9A9082]">{over} of {makers.length} over</span></div>
+        </div>
       </div>
     </header>
   )
@@ -383,45 +364,11 @@ function ModuleShell() {
   const CN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'CN' ? { analyse: AnalyseActualsCN, forecast: ForecastCN, creditbook: DualCredit } : {}
   // India-only intelligence cockpit — replaces the generic event feed for IN.
   const IN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'IN' ? { intel: IntelligenceIN } : {}
-  // A registered market owns its own screens (src/markets/<id>). CN_FORKS and
-  // IN_FORKS are the ad-hoc predecessor of that idea and stay as the fallback
-  // for markets not yet migrated; the shared map below is the last resort.
-  // A registered market owns its own screens (src/markets/<id>). CN_FORKS and
-  // IN_FORKS are the ad-hoc predecessor of that idea and stay as the fallback
-  // for markets not yet migrated; the shared map below is the last resort. A
-  // screen a market has not registered and the shared map does not know falls
-  // back to that market's home rather than rendering nothing.
-  const market = getMarket(country)
-  const SHARED: Partial<Record<ScreenId, ComponentType>> = {
+  const Screen = CN_FORKS[screen] ?? IN_FORKS[screen] ?? {
     copilot: CoPilot, analyse: AnalyseActuals, forecast: Forecast, scenario: ScenarioScreen, creditbook: CreditBook,
     pricing: Pricing, pooling: Pooling, dualcredit: DualCredit, data: Data, intel: Intelligence, admin: Admin,
-  }
-  const Screen: ComponentType =
-    market?.modules[screen]?.component
-    ?? (CN_FORKS[screen] as ComponentType | undefined)
-    ?? (IN_FORKS[screen] as ComponentType | undefined)
-    ?? SHARED[screen]
-    ?? (market ? market.modules[market.home].component : AnalyseActuals)
+  }[screen]
   const gated = screen === 'pooling' && !poolingAddon
-
-  // A rebuilt module brings its own shell (nav + working surface + Inspector).
-  // Rendering it inside the legacy chrome produced two navigations and two
-  // inspectors side by side, so the legacy frame steps aside for it entirely.
-  if (market?.modules[screen]?.ownsChrome && !gated) {
-    return (
-      <div className="flex h-screen overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar />
-          <ErrorBoundary screenKey={screen}>
-            <div key={screen} className="screen-in flex min-h-0 flex-1">
-              <Screen />
-            </div>
-          </ErrorBoundary>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
