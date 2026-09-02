@@ -19,6 +19,21 @@ import type { AgentRun, Citation, Finding, RunStep, Validation } from '../kernel
 import { SEVERITY_TONE, STATUS_LABEL, STATUS_TONE, isRunning } from '../kernel'
 import { getAgent } from '../registry'
 
+/* ── cost ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Share of this run's prompt that was read from cache rather than paid for at
+ * the full input rate. Null when the run predates cache reporting, so an old
+ * run shows nothing instead of a misleading 0%.
+ */
+function cacheHit(u: NonNullable<AgentRun['usage']>): number | null {
+  const read = u.cacheReadTokens ?? 0
+  const written = u.cacheWriteTokens ?? 0
+  if (read + written === 0) return null
+  const total = read + written + u.inputTokens
+  return total > 0 ? Math.round((read / total) * 100) : null
+}
+
 /* ── citations ────────────────────────────────────────────────────────────── */
 
 export function Citations({ items, dense }: { items?: Citation[]; dense?: boolean }) {
@@ -314,6 +329,12 @@ export function RunTrace({ run, canApprove, onDecide, onApply }: {
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-[var(--ink-5)]">
             <span>Run {run.id}</span>
             <span>{run.usage.inputTokens.toLocaleString()} in · {run.usage.outputTokens.toLocaleString()} out</span>
+            {cacheHit(run.usage) !== null && (
+              <span title="Cached tokens bill at a tenth of the input rate, so a high hit rate means the run re-used its context instead of buying it again.">
+                {(run.usage.cacheReadTokens ?? 0).toLocaleString()} cached · {cacheHit(run.usage)}% hit
+              </span>
+            )}
+            {run.usage.model && <span>{run.usage.model}</span>}
             <span>Market {run.country}</span>
           </div>
         </>

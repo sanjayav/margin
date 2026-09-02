@@ -23,7 +23,12 @@ export type AgentEvent =
   | { type: 'proposal'; proposal: Proposal }
   | { type: 'validation'; validation: Validation }
   | { type: 'summary'; text: string }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; ms: number }
+  | {
+      type: 'usage'
+      inputTokens: number; outputTokens: number
+      cacheWriteTokens?: number; cacheReadTokens?: number
+      model?: string; ms: number
+    }
   | { type: 'error'; message: string }
   | { type: 'done'; status: RunStatus }
 
@@ -148,7 +153,13 @@ function applyEvent(id: string, ev: AgentEvent) {
     case 'summary':
       patchRun(id, { summary: ev.text }); break
     case 'usage':
-      patchRun(id, { usage: { inputTokens: ev.inputTokens, outputTokens: ev.outputTokens, ms: ev.ms } }); break
+      patchRun(id, {
+        usage: {
+          inputTokens: ev.inputTokens, outputTokens: ev.outputTokens,
+          cacheWriteTokens: ev.cacheWriteTokens ?? 0, cacheReadTokens: ev.cacheReadTokens ?? 0,
+          model: ev.model, ms: ev.ms,
+        },
+      }); break
     case 'error':
       fail(id, ev.message); break
     case 'done':

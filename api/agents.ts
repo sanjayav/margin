@@ -41,8 +41,51 @@ import { DRIVER_META, DRIVER_DEFAULTS, outlookRun, type DriverKey, type DriverSe
 import { poolingAllowed } from '../src/engine/blocks.js'
 import { buildTree } from '../src/engine/engine.js'
 
-const MODEL = 'claude-opus-5'
+/**
+ * Opus sits at the wrong end of the price curve for this loop. The agent
+ * decides which engine tool to call next and narrates what came back — the
+ * compliance arithmetic is already deterministic TypeScript behind the
+ * validation gate, so the model is orchestrating, not calculating. Sonnet is
+ * strong at exactly that and roughly five times cheaper.
+ *
+ * Overridable per deployment, so changing tier is an env change rather than a
+ * redeploy if a pass ever needs more depth.
+ */
+const MODEL = process.env.AGENT_MODEL || 'claude-sonnet-5'
 const MAX_TURNS = 12
+
+/**
+ * Prompt caching. Without it a pass pays for the same tokens over and over:
+ * every turn re-sends the system prompt, ~4.5k tokens of tool schemas and the
+ * entire accumulated transcript at full input price, so a 12-turn run bills the
+ * first turn's tool results twelve times. Linear work, quadratic cost.
+ *
+ * Two breakpoints, which is what the shape of this loop wants:
+ *   · static  — tools + system, byte-identical on every turn of every run
+ *   · rolling — the end of the transcript, moved forward each turn so a turn
+ *               reads everything before it from cache instead of re-buying it
+ *
+ * A cache read bills at a tenth of an input token, so the rolling breakpoint is
+ * where nearly all of the saving comes from. Only the newest turn is paid for
+ * at full rate.
+ */
+export function rollCacheBreakpoint(messages: any[]): void {
+  // At most four breakpoints may exist, and a stale one costs a write for a
+  // prefix nothing will read again — so clear before re-marking.
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) continue
+    for (const b of m.content) if (b && typeof b === 'object') delete b.cache_control
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const c = messages[i].content
+    if (!Array.isArray(c) || !c.length) continue
+    const last = c[c.length - 1]
+    if (last && typeof last === 'object') {
+      last.cache_control = { type: 'ephemeral' }
+      return
+    }
+  }
+}
 
 /** Which engine tools each agent may reach. An agent that cannot touch a tool
  *  cannot be talked into touching it — the allowlist is applied here, not in
@@ -541,7 +584,13 @@ export default async function handler(req: any, res: any) {
     const ctxNote = typeof body.context === 'object' && body.context
       ? Object.entries(body.context).map(([k, v]) => `• ${k}: ${JSON.stringify(v)}`).join('\n')
       : ''
-    const system = systemPrompt(agentId, country, year, ctxNote)
+    // The static breakpoint sits on the system block, which caches the tool
+    // schemas with it: the wire order is tools, then system, then messages.
+    const system = [{
+      type: 'text' as const,
+      text: systemPrompt(agentId, country, year, ctxNote),
+      cache_control: { type: 'ephemeral' as const },
+    }]
 
     const messages: any[] = [{
       role: 'user',
@@ -552,13 +601,14 @@ export default async function handler(req: any, res: any) {
 
     let proposalRaw: any = null
     let summary = ''
-    let inTok = 0, outTok = 0
+    let inTok = 0, outTok = 0, cacheWriteTok = 0, cacheReadTok = 0
     let step = 1
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       send({ type: 'status', status: turn === 0 ? 'gathering' : 'reasoning' })
 
       let msg: any
+      rollCacheBreakpoint(messages)
       try {
         msg = await anthropic.messages.create({ model: MODEL, max_tokens: 4096, system, tools, messages })
       } catch (e: any) {
@@ -574,6 +624,8 @@ export default async function handler(req: any, res: any) {
 
       inTok += msg.usage?.input_tokens ?? 0
       outTok += msg.usage?.output_tokens ?? 0
+      cacheWriteTok += msg.usage?.cache_creation_input_tokens ?? 0
+      cacheReadTok += msg.usage?.cache_read_input_tokens ?? 0
       messages.push({ role: 'assistant', content: msg.content })
 
       const text = msg.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('').trim()
@@ -687,7 +739,12 @@ export default async function handler(req: any, res: any) {
             citations: p ? [{ label: `${pack.name} dataset`, ref: `${p.source ?? pack.source} · version ${p.dataVersion ?? 'bundled'}`, asOf: p.lastRefreshed ?? undefined }] : undefined,
           },
         })
-        results.push({ type: 'tool_result', tool_use_id: call.id, content: JSON.stringify(out.result).slice(0, 24000) })
+        // 24k characters is ~6.6k tokens, and a tool result is not read once —
+        // it stays in the transcript and is re-sent on every later turn, so an
+        // oversized one is paid for repeatedly. The engine's own step data is
+        // already streamed to the UI in full; the model only needs enough to
+        // decide what to do next.
+        results.push({ type: 'tool_result', tool_use_id: call.id, content: JSON.stringify(out.result).slice(0, 6000) })
       }
 
       if (!results.length) break
@@ -716,7 +773,12 @@ export default async function handler(req: any, res: any) {
     }
 
     if (summary) send({ type: 'summary', text: summary })
-    send({ type: 'usage', inputTokens: inTok, outputTokens: outTok, ms: Date.now() - t0 })
+    send({
+      type: 'usage',
+      inputTokens: inTok, outputTokens: outTok,
+      cacheWriteTokens: cacheWriteTok, cacheReadTokens: cacheReadTok,
+      model: MODEL, ms: Date.now() - t0,
+    })
     send({ type: 'done', status })
   } catch (e: any) {
     send({ type: 'error', message: String(e?.message ?? e) })

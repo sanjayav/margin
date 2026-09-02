@@ -174,7 +174,18 @@ export interface AgentRun {
   finishedAt?: string
   /** Decision record — the audit trail's whole reason for existing. */
   decision?: { by: string; at: string; verdict: 'approved' | 'rejected'; note?: string }
-  usage?: { inputTokens: number; outputTokens: number; ms: number }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    /**
+     * Tokens written to and read from the prompt cache. A cache read bills at
+     * a tenth of an input token, so a high read share is the run being cheap.
+     */
+    cacheWriteTokens?: number
+    cacheReadTokens?: number
+    model?: string
+    ms: number
+  }
 }
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
