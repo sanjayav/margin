@@ -6,7 +6,7 @@
    is rendered verbatim before a run: nobody should have to guess what an agent
    is about to touch.
    ─────────────────────────────────────────────────────────────────────────── */
-import type { AgentDef, AgentId, ModuleId } from './kernel'
+import type { AgentDef, AgentId, ModuleId } from './kernel.js'
 
 export const AGENTS: AgentDef[] = [
   {

@@ -31,3 +31,4 @@ dist-ssr/
 
 # typescript incremental build cache (regenerated; not source)
 *.tsbuildinfo
+.lambdacheck/

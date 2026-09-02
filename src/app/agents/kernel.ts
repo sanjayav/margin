@@ -22,8 +22,8 @@
       cannot be traced to a source is worthless in an audit.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import type { CountryId } from '../../engine/types'
-import type { Autonomy, Permission } from '../auth/rbac'
+import type { CountryId } from '../../engine/types.js'
+import type { Autonomy, Permission } from '../auth/rbac.js'
 
 export type ModuleId = 'plan' | 'forecast' | 'scenario' | 'creditbook' | 'pooling' | 'data' | 'regai'
 

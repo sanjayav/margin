@@ -10,8 +10,8 @@
    that has no meaning here is not disabled — it is absent, because showing a
    control that cannot legally do anything is worse than not showing it.
    ─────────────────────────────────────────────────────────────────────────── */
-import type { RulePack } from '../../../engine/types'
-import { poolingAllowed } from '../../../engine/blocks'
+import type { RulePack } from '../../../engine/types.js'
+import { poolingAllowed } from '../../../engine/blocks.js'
 
 export interface LeverSpec {
   key: string
