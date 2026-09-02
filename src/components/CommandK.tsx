@@ -4,6 +4,7 @@ import { useStore } from '../state/store'
 import { MODULE_META, ALL_MODULES } from '../lib/modules'
 import { getFleet, parentsFor } from '../data/fleet'
 import { parentPoolMap } from '../engine/pooling'
+import { hasCreditBook } from '../engine/rulepacks'
 import { buildShareUrl } from '../lib/share'
 import Icon, { type IconName } from './Icon'
 
@@ -82,7 +83,7 @@ export default function CommandK() {
         { label: 'Scenario · Model', icon: 'sliders' as IconName, go: () => setScreen('model'), sub: 'the workbench — levers on the live drill' },
         { label: 'Scenario · Action plan', icon: 'target', go: () => setScreen('under'), sub: 'cheapest path to compliance' },
         { label: 'Scenario · Compare', icon: 'layers', go: () => setScreen('compare'), sub: 'saved scenarios side-by-side' },
-        { label: 'Credit book', icon: 'scale' as IconName, go: () => setScreen('creditbook'), sub: 'positions, banking & trades' },
+        ...(hasCreditBook(country) ? [{ label: 'Credit book', icon: 'scale' as IconName, go: () => setScreen('creditbook'), sub: 'positions, banking & trades' }] : []),
         { label: 'Pricing', icon: 'card' as IconName, go: () => setScreen('pricing'), sub: 'compliance cost per car · price & tax' },
         ...(poolingAddon ? [{ label: 'Pooling', icon: 'handshake' as IconName, go: () => setScreen('pooling'), sub: 'pools, value-split & trading' }] : []),
         { label: 'Data & imports', icon: 'database', go: () => setScreen('data'), sub: 'expert table · facets · import studio' },

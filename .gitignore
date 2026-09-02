@@ -28,3 +28,6 @@ dist-ssr/
 *.sln
 .vercel
 .env*.local
+
+# typescript incremental build cache (regenerated; not source)
+*.tsbuildinfo

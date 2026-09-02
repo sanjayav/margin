@@ -9,7 +9,7 @@ import Icon, { type IconName } from './components/Icon'
 import Flag from './components/Flag'
 import { buildDualCredit } from './engine/china/dualcredit'
 import { fmtInt } from './engine/engine'
-import { getPack } from './engine/rulepacks'
+import { getPack, hasCreditBook } from './engine/rulepacks'
 import { ScenarioRail } from './components/ScenarioRail'
 import FactsRail from './components/FactsRail'
 import Assistant from './components/Assistant'
@@ -39,6 +39,7 @@ import ForecastCN from './screens/cn/ForecastCN'
 import IntelligenceIN from './screens/in/IntelligenceIN'
 import CoPilot from './screens/CoPilot'
 import Login from './screens/Login'
+import TrueRegApp from './screens/truereg/TrueRegApp'
 import type { CountryId } from './engine/types'
 
 // The five workspace modules — Analyse is the ACTUALS monitoring surface (the
@@ -50,7 +51,9 @@ const NAV: { id: ScreenId; label: string; icon: IconName; tier: string; addon?: 
   { id: 'forecast', label: 'Forecast', icon: 'trending', tier: 'Core' },
   { id: 'scenario', label: 'Scenario', icon: 'target', tier: 'Core' },
   // Credit book — for China this IS the dual-credit ledger (both axes), routed
-  // via CN_FORKS below; other markets get the generic credit book.
+  // via CN_FORKS below; other markets get the generic credit book. Regimes with
+  // no transferable instrument (the EU: Article 6 pooling only) have no ledger
+  // to keep, so the module is hidden there — see hasCreditBook().
   { id: 'creditbook', label: 'Credit book', icon: 'scale', tier: 'Core' },
   { id: 'pricing', label: 'Pricing', icon: 'card', tier: 'Core' },
   { id: 'pooling', label: 'Pooling', icon: 'handshake', tier: 'Add-on', addon: 'pooling' },
@@ -91,6 +94,7 @@ function Sidebar() {
   const nav = NAV
     .filter((n) => !n.addon || (n.addon === 'pooling' && poolingAddon))
     .filter((n) => !n.country || n.country === country) // CN-only bespoke screens
+    .filter((n) => n.id !== 'creditbook' || hasCreditBook(country)) // no instrument, no ledger
   const byId = Object.fromEntries(nav.map((n) => [n.id, n]))
   const copilot = byId['copilot']
   const [openHubs, setOpenHubs] = useState<Set<string>>(new Set())
@@ -359,7 +363,8 @@ function ModuleShell() {
   // A country-specific screen (China's Dual-credit) falls back to Plan when the
   // active module doesn't own it — e.g. after switching away from China.
   const navItem = NAV.find((n) => n.id === screenRaw)
-  const screen = navItem?.country && navItem.country !== country ? 'analyse' : screenRaw
+  const missing = (navItem?.country && navItem.country !== country) || (screenRaw === 'creditbook' && !hasCreditBook(country))
+  const screen = missing ? 'analyse' : screenRaw
   // China-only restyled forks — identical functionality, elevated presentation.
   const CN_FORKS: Partial<Record<ScreenId, () => JSX.Element | null>> = country === 'CN' ? { analyse: AnalyseActualsCN, forecast: ForecastCN, creditbook: DualCredit } : {}
   // India-only intelligence cockpit — replaces the generic event feed for IN.
@@ -413,6 +418,7 @@ export default function App() {
   const authChecked = useStore((s) => s.authChecked)
   const checkSession = useStore((s) => s.checkSession)
   const view = useStore((s) => s.view)
+  const exitToPlatform = useStore((s) => s.exitToPlatform)
   const loadFleet = useStore((s) => s.loadFleet)
   // Ask the server who we are before deciding what to render — a valid cookie
   // must not flash the login screen on reload.
@@ -424,7 +430,8 @@ export default function App() {
   if (!session) return <Login />
   return (
     <>
-      {view === 'platform' ? <PlatformShell /> : <ModuleShell />}
+      {view === 'truereg' ? <TrueRegApp onExit={() => exitToPlatform('home')} />
+        : view === 'platform' ? <PlatformShell /> : <ModuleShell />}
       <CommandK />
     </>
   )

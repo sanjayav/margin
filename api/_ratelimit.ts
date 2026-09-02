@@ -30,6 +30,9 @@ export const LIMITS = {
   ask: { perMinute: 20, burst: 8 },
   forecast: { perMinute: 10, burst: 4 },
   copilot: { perMinute: 20, burst: 8 },
+  // A TrueReg goal fans out over several agent turns in one request, so the
+  // per-minute ceiling is lower than the single-question routes.
+  truereg: { perMinute: 8, burst: 3 },
 } satisfies Record<string, Limit>
 
 export interface Verdict { ok: boolean; retryAfter: number }

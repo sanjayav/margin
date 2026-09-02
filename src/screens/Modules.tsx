@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { useStore } from '../state/store'
 import { MODULE_META, ALL_MODULES, AI_PRICE_GBP, POOLING_PRICE_GBP, moduleSummary } from '../lib/modules'
 import { fmtInt, fmtMoney, fmtNum } from '../engine/engine'
-import { getPack } from '../engine/rulepacks'
-import type { CoverageTier } from '../engine/types'
+import { getPack, hasCreditBook } from '../engine/rulepacks'
+import type { CountryId, CoverageTier } from '../engine/types'
 import Icon from '../components/Icon'
 import Flag from '../components/Flag'
 
@@ -15,13 +15,20 @@ const COVERAGE_CHIP: Record<CoverageTier, { label: string; cls: string }> = {
   preview: { label: 'Preview data',  cls: 'bg-black/[0.05] text-ink-500' },
 }
 
-const INCLUDED = ['Plan (actuals drill-down)', 'Forecast studio', 'Scenario workbench & compare', 'Credit book', 'Pricing & tax']
+// What a module subscription buys. The Credit book only exists where an
+// instrument moves between makers — the EU issues none, so its card doesn't
+// promise a ledger it will never show.
+const included = (c: CountryId) => [
+  'Plan (actuals drill-down)', 'Forecast studio', 'Scenario workbench & compare',
+  ...(hasCreditBook(c) ? ['Credit book'] : []), 'Pricing & tax',
+]
 
 export default function Modules() {
   const owned = useStore((s) => s.subscribedModules)
   const ai = useStore((s) => s.aiEnabled)
   const pooling = useStore((s) => s.poolingAddon)
   const enter = useStore((s) => s.enterModule)
+  const enterTrueReg = useStore((s) => s.enterTrueReg)
   const goto = useStore((s) => s.setPlatformScreen)
   const dataVersion = useStore((s) => s.dataVersion)
   const summaries = useMemo(() => Object.fromEntries(ALL_MODULES.map((c) => [c, moduleSummary(c)])), [dataVersion])
@@ -75,7 +82,7 @@ export default function Modules() {
               )}
 
               <div className="mt-4 flex flex-wrap gap-1.5">
-                {INCLUDED.map((f) => <span key={f} className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[10px] text-ink-500">{f}</span>)}
+                {included(c).map((f) => <span key={f} className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[10px] text-ink-500">{f}</span>)}
               </div>
 
               <div className="mt-5 flex items-center justify-between border-t border-black/[0.05] pt-4">
@@ -87,6 +94,35 @@ export default function Modules() {
             </div>
           )
         })}
+      </div>
+
+      {/* TrueReg — a second product line on the same platform. It is deliberately
+          NOT a country module: it reads a product record rather than a fleet, so
+          it carries its own workspace and its own obligation graph. */}
+      <div className="card rise relative overflow-hidden p-5">
+        <span className="absolute inset-x-0 top-0 h-1" style={{ background: 'linear-gradient(90deg,#E8223B,#F66864 55%,transparent)' }} />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/12 text-brand"><Icon name="shield" size={20} /></span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-display text-[16px] font-bold text-ink-100">TrueReg</span>
+                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-bold text-brand">Agentic regulatory intelligence</span>
+              </div>
+              <p className="mt-1.5 max-w-[64ch] text-[11.5px] leading-relaxed text-ink-500">
+                Prove your carbon number, keep the account. An agent workforce assembles, verifies and defends the
+                compliance data European buyers now need — starting with CBAM. Works in Chinese, cites in EU legal
+                text, and shows its reasoning at every step.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {['CBAM EU · live', 'UK CBAM', 'Deterministic engine', 'Bilingual term base', 'Nothing auto-submitted'].map((f) => (
+                  <span key={f} className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[10px] text-ink-500">{f}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <button onClick={enterTrueReg} className="btn-primary shrink-0 px-4 py-2 text-xs"><Icon name="shield" size={14} /> Open TrueReg</button>
+        </div>
       </div>
 
       {/* add-ons */}

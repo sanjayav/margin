@@ -2,7 +2,7 @@
 // rulepacks/ with no screen changes — these assert the parts of that contract a
 // new pack can silently get wrong, and that no pack overstates its data.
 import { describe, it, expect } from 'vitest'
-import { PACK_LIST, getPack } from '../rulepacks'
+import { PACK_LIST, getPack, hasCreditBook } from '../rulepacks'
 import { buildTree } from '../engine'
 import { getFleet } from '../../data/fleet'
 import { defaultScenario } from '../../state/store'
@@ -84,6 +84,17 @@ describe('rule packs · contract', () => {
     // three-manufacturer sample (scripts/ingest-eu-eea.mjs).
     const market = PACK_LIST.filter((p) => p.coverage.tier === 'market').map((p) => p.id)
     expect(market).toEqual(['EU', 'IN'])
+  })
+
+  it('keeps a Credit book only where an instrument actually moves', () => {
+    // The EU issues no compliance credit — Article 6 pooling shares ONE fleet
+    // average and nothing is banked, priced or traded. The Credit book module is
+    // hidden there (sidebar, ⌘K, module card, co-pilot navigation); every other
+    // market trades and keeps its ledger.
+    expect(hasCreditBook('EU')).toBe(false)
+    for (const p of PACK_LIST) {
+      expect(hasCreditBook(p.id), `${p.id} credit book should follow its transfer kind`).toBe(p.transfer.kind === 'trade')
+    }
   })
 
   it('routes every country id to its own pack', () => {

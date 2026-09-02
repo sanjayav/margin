@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { CountryId, Scenario, Vehicle } from '../engine/types'
 import type { MonthScope } from '../engine/engine'
-import { getPack, PACK_LIST } from '../engine/rulepacks'
+import { getPack, hasCreditBook, PACK_LIST } from '../engine/rulepacks'
 import { getMeta, parentsFor, setLiveFleet } from '../data/fleet'
 
 // Workspace modules: Analyse (the ACTUALS monitoring surface — book of record,
@@ -15,7 +15,10 @@ export type ScenarioTab = 'model' | 'under' | 'compare'
 export type PlanTab = ScenarioTab | 'forecast'
 // The two-level shell: 'platform' = global launcher (home/modules/subscription);
 // 'module' = a single country workspace (the plan/forecast/… sidebar).
-export type AppView = 'platform' | 'module'
+// 'truereg' is a peer of the country workspaces, not one of them. It reads a
+// product record rather than a fleet, so it carries its own shell and its own
+// state (src/truereg/ui/state.ts) instead of borrowing this one.
+export type AppView = 'platform' | 'module' | 'truereg'
 export type PlatformScreen = 'home' | 'modules' | 'subscription'
 // How much of a screen to show. The workspace carries an analyst's density by
 // design; a board reader wants the verdict, one chart and the next action. Same
@@ -64,6 +67,8 @@ interface UIState {
   setGuideStep: (i: number) => void
   endGuide: () => void
   enterModule: (c: CountryId) => void
+  /** Open the TrueReg workspace (agentic regulatory intelligence). */
+  enterTrueReg: () => void
   exitToPlatform: (to?: PlatformScreen) => void
   setPlatformScreen: (p: PlatformScreen) => void
   subscribe: (c: CountryId) => void
@@ -251,6 +256,7 @@ export const useStore = create<UIState>((set, get) => ({
       scenarioTab: 'model',
     })
   },
+  enterTrueReg: () => set({ view: 'truereg' }),
   exitToPlatform: (to) => set({ view: 'platform', ...(to ? { platformScreen: to } : {}) }),
   setPlatformScreen: (p) => set({ platformScreen: p }),
   subscribe: (c) => { const m = [...new Set([...get().subscribedModules, c])]; saveEnt(m, get().aiEnabled, get().poolingAddon); set({ subscribedModules: m }) },
@@ -347,6 +353,10 @@ export const useStore = create<UIState>((set, get) => ({
     if (s === 'pool') set({ screen: 'pooling' })
     else if (s === 'model' || s === 'under' || s === 'compare') set({ screen: 'scenario', scenarioTab: s })
     else if (s === 'analyze' || s === 'plan' || s === 'cockpit' || s === 'chart' || s === 'maker' || s === 'analytics') set({ screen: 'analyse' })
+    // The Credit book doesn't exist where nothing is issued or traded (the EU).
+    // Deep-links, the co-pilot and old persisted state can still ask for it —
+    // land on the surface that DOES hold the value there: Pooling.
+    else if (s === 'creditbook' && !hasCreditBook(get().country)) set({ screen: get().poolingAddon ? 'pooling' : 'analyse' })
     else set({ screen: s })
   },
   setParent: (p) => set({ selectedParent: p }),

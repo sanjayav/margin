@@ -178,7 +178,7 @@ export const TOOL_SPECS: ToolSpec[] = [
         screen: {
           type: 'string',
           enum: ['analyse', 'scenario', 'model', 'under', 'compare', 'forecast', 'creditbook', 'pricing', 'pooling', 'data', 'intel', 'admin'],
-          description: 'analyse = Plan, the actuals book of record (no levers reach it); scenario/model = the modelling workbench; under = the action plan; compare = scenario comparison; forecast = the multi-year studio; creditbook = the positions ledger; pricing = cost per car; data = imports & quality.',
+          description: 'analyse = Plan, the actuals book of record (no levers reach it); scenario/model = the modelling workbench; under = the action plan; compare = scenario comparison; forecast = the multi-year studio; creditbook = the positions ledger; pricing = cost per car; data = imports & quality. NEVER open `creditbook` for the EU — that market issues no instrument, so it has no Credit book at all; headroom there is realised on `pooling`.',
         },
         parent: MAKER,
         drillPath: { type: 'array', items: { type: 'string' }, description: 'Drill scope: [maker] or [maker, model].' },

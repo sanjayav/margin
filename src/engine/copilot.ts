@@ -25,7 +25,7 @@ const RANK: Record<Severity, number> = { critical: 0, high: 1, watch: 2, clear: 
 export interface Metric { label: string; value: string; tool: string; inputs: Record<string, unknown> }
 export interface Option { title: string; detail: string; action?: FindingAction }
 /** What the user can approve a finding into. */
-export interface FindingAction { kind: 'model' | 'draft' | 'creditbook' | 'forecast' | 'data'; maker?: string; year: number; scenario?: Record<string, unknown> }
+export interface FindingAction { kind: 'model' | 'draft' | 'creditbook' | 'pooling' | 'forecast' | 'data'; maker?: string; year: number; scenario?: Record<string, unknown> }
 
 export interface Finding {
   id: string
@@ -222,7 +222,11 @@ export function runCoPilot(ctx: ToolContext, country: CountryId, opts: ScanOptio
         { label: `Market ${ledger.verb} capacity`, value: `${fmtInt(ledger.totalSurplus)} vs ${fmtInt(ledger.totalDeficit)} short`, tool: 'credit_ledger', inputs: { country, year } },
         ...(tradeable ? [{ label: 'Estimated value', value: fmtMoney(best.value!, cur), tool: 'credit_ledger', inputs: { country, year } } as Metric] : []),
       ],
-      options: [{ title: 'Open the Credit book', detail: `see every ${ledger.supplierLabel ?? 'surplus'} position`, action: { kind: 'creditbook', maker: best.maker, year } }],
+      // Where nothing is issued or traded (the EU) there is no ledger to open —
+      // the surplus is realised by pooling, so that is where the option points.
+      options: [tradeable
+        ? { title: 'Open the Credit book', detail: `see every ${ledger.supplierLabel ?? 'surplus'} position`, action: { kind: 'creditbook' as const, maker: best.maker, year } }
+        : { title: 'Open Pooling', detail: `see every ${ledger.supplierLabel ?? 'surplus'} position and model the partnership`, action: { kind: 'pooling' as const, maker: best.maker, year } }],
       recommendation: tradeable
         ? 'Bank the surplus for a tighter year or list it — either monetises headroom that otherwise expires.'
         : `There is no instrument to sell here. The value is realised by ${ledger.verb}ing with a short maker — model the partnership before it is negotiated.`,
