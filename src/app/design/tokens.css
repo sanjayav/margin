@@ -1,0 +1,348 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   AiRE Design System — token layer
+   ---------------------------------------------------------------------------
+   ONE rule: no component may write a raw colour. Every surface, line, text and
+   state reads a token from here. That is what makes a theme swap a data change
+   instead of a refactor, and it is why the dark palette below is a 30-line
+   block rather than a second stylesheet.
+
+   The palette is deliberately quiet. This is a regulatory instrument: the
+   numbers on screen decide fines, so the interface around them is neutral
+   greys and hairlines, and SATURATION IS RESERVED FOR MEANING — brand red for
+   the primary action and for a breach, green for a cleared position, amber for
+   a position that needs attention. Nothing else is allowed to be colourful.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── surfaces ─────────────────────────────────────────────────────────── */
+  --canvas:        #FAFAF9;   /* the page behind everything */
+  --surface-1:     #FFFFFF;   /* cards, panels, tables */
+  --surface-2:     #F6F6F5;   /* inset wells, table headers, muted rows */
+  --surface-3:     #EFEEEC;   /* pressed / selected fill */
+  --surface-inv:   #17161A;   /* inverted chips, tooltips, code */
+  --chrome:        #FFFFFF;   /* top bar and the agent rail */
+  --chrome-sub:    #FAFAF9;
+
+  /* The navigation rail is dark in BOTH themes, deliberately. A permanently
+     dark rail against a light workspace does three things at once: it frames
+     the data instead of competing with it, it makes the workspace read as the
+     bright object on screen, and it gives the product a silhouette you
+     recognise from across an open-plan office. Its tokens are separate from
+     --chrome so the top bar can stay light without argument. */
+  --nav-bg:        #16151A;
+  --nav-bg-sub:    #1C1B21;
+  --nav-fg:        #EDEBE8;
+  --nav-fg-dim:    #8B8681;
+  --nav-fg-faint:  #6A6560;
+  --nav-line:      rgba(255,255,255,.075);
+  --nav-line-soft: rgba(255,255,255,.045);
+  --nav-hover:     rgba(255,255,255,.055);
+  --nav-active:    rgba(255,255,255,.10);
+
+  /* ── lines ────────────────────────────────────────────────────────────── */
+  --line:          #E7E5E2;   /* the default hairline */
+  --line-soft:     #F0EFED;   /* internal dividers inside a card */
+  --line-strong:   #D6D3CE;   /* emphasis, focused inputs */
+
+  /* ── ink ──────────────────────────────────────────────────────────────── */
+  --ink-1:         #16150F;   /* headings, primary numbers */
+  --ink-2:         #3B3833;   /* body */
+  --ink-3:         #6B6660;   /* secondary, labels */
+  --ink-4:         #96908A;   /* captions, placeholders */
+  --ink-5:         #B8B2AB;   /* disabled, watermark */
+  --ink-inv:       #FFFFFF;
+
+  /* ── brand ────────────────────────────────────────────────────────────── */
+  --brand:         #E8223B;
+  --brand-hover:   #CE1B32;
+  --brand-press:   #B01528;
+  --brand-tint:    #FDECEE;   /* 6% wash for selected/brand surfaces */
+  --brand-line:    #F6C9D0;
+  --brand-ink:     #A8112A;   /* brand text on a light tint — passes AA */
+
+  /* ── semantics ────────────────────────────────────────────────────────── */
+  --pos:           #0E8C60;  --pos-tint:  #E7F6F0;  --pos-line: #B7E3D2;  --pos-ink: #076B49;
+  --warn:          #B26A00;  --warn-tint: #FDF3E3;  --warn-line: #F0DCB4;  --warn-ink: #8A5100;
+  --neg:           #C81E1E;  --neg-tint:  #FDECEC;  --neg-line: #F5C6C6;  --neg-ink: #9E1717;
+  --info:          #2F5FD0;  --info-tint: #EDF2FE;  --info-line: #C7D6F7;  --info-ink: #23479C;
+  /* agent state — a fifth semantic family, because "an agent is thinking" is
+     not success, failure or a warning and must not borrow their colours. */
+  --agent:         #6A4BC4;  --agent-tint:#F2EEFC;  --agent-line:#D9CEF3;  --agent-ink:#4C3391;
+
+  /* ── data-visualisation ramp ──────────────────────────────────────────────
+     Fixed order, never cycled. Validated with the dataviz six checks against
+     this surface: lightness band, chroma floor, adjacent-pair CVD separation
+     (worst ΔE 8.3 protan), normal-vision floor and 3:1 contrast — ALL PASS.
+     Series 7+ folds into "Other"; it does not get a generated hue.            */
+  --dv-1: #2F5FD0;  --dv-2: #B26A00;  --dv-3: #0E8C60;
+  --dv-4: #7C4DD8;  --dv-5: #0E93AE;  --dv-6: #C2306E;
+  --dv-other: #A9A39C;                    /* the explicit 7th-and-beyond bucket */
+  --dv-grid: #EFEEEC;  --dv-axis: #96908A;
+  --dv-band: rgba(47,95,208,.08);         /* target / tolerance band fill      */
+  --dv-ref:  #96908A;                     /* reference & target lines          */
+
+  /* ── elevation ────────────────────────────────────────────────────────── */
+  /* Layered. A single drop shadow reads as a sticker; two or three stops with
+     different blurs read as an object sitting on a surface. The hairline stop
+     does the work at rest, the wide stop only shows on lift. */
+  --sh-0: none;
+  --sh-1: 0 0 0 .5px rgba(22,21,15,.035), 0 1px 1px rgba(22,21,15,.035), 0 2px 4px -2px rgba(22,21,15,.04);
+  --sh-2: 0 0 0 .5px rgba(22,21,15,.04), 0 1px 2px rgba(22,21,15,.05), 0 8px 18px -8px rgba(22,21,15,.13);
+  --sh-3: 0 0 0 .5px rgba(22,21,15,.05), 0 2px 4px rgba(22,21,15,.05), 0 18px 44px -16px rgba(22,21,15,.20);
+  --sh-4: 0 0 0 .5px rgba(22,21,15,.06), 0 4px 10px rgba(22,21,15,.07), 0 32px 72px -20px rgba(22,21,15,.30);
+  /* The inset top highlight that makes a light surface look lit rather than
+     filled. One pixel, and it is most of the difference. */
+  --sh-lit: inset 0 1px 0 rgba(255,255,255,.7);
+  --ring:  0 0 0 3px rgba(22,21,15,.14);
+
+  /* ── geometry ─────────────────────────────────────────────────────────── */
+  --r-xs: 5px;  --r-sm: 7px;  --r-md: 9px;  --r-lg: 12px;  --r-xl: 16px;  --r-full: 999px;
+
+  /* ── motion ───────────────────────────────────────────────────────────── */
+  --ease:      cubic-bezier(.2,0,0,1);
+  --ease-out:  cubic-bezier(.16,1,.3,1);
+  --t-fast:    120ms;
+  --t-base:    180ms;
+  --t-slow:    280ms;
+
+  /* ── layout ───────────────────────────────────────────────────────────── */
+  --nav-w:     236px;
+  --nav-w-sm:  62px;
+  --console-w: 396px;
+  --top-h:     54px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --canvas: #0E0E10;  --surface-1: #17171A;  --surface-2: #1D1D21;  --surface-3: #26262B;
+  --surface-inv: #F2F1EF;  --chrome: #131316;  --chrome-sub: #0E0E10;
+  --line: #2A2A2F;  --line-soft: #202024;  --line-strong: #3A3A41;
+  /* In dark mode the rail recedes BELOW the canvas rather than sitting on it,
+     so the hierarchy survives the theme swap. */
+  --nav-bg: #0A0A0C;  --nav-bg-sub: #101013;
+  --nav-fg: #EDEBE8;  --nav-fg-dim: #7E7A75;  --nav-fg-faint: #5C5853;
+  --ink-1: #F5F4F2;  --ink-2: #D6D3CE;  --ink-3: #9A958E;  --ink-4: #746F69;  --ink-5: #55514C;
+  --ink-inv: #16150F;
+  --brand: #FF4A5F;  --brand-hover: #FF6274;  --brand-press: #E8223B;
+  --brand-tint: #2A1418;  --brand-line: #4A1F26;  --brand-ink: #FF8E9B;
+  --pos: #2BB183;  --pos-tint: #10241D;  --pos-line: #1E4437;  --pos-ink: #5CD3AA;
+  --warn: #D89230;  --warn-tint: #251B0C;  --warn-line: #453317;  --warn-ink: #F0B45C;
+  --neg: #F0574F;  --neg-tint: #26100F;  --neg-line: #4A1E1C;  --neg-ink: #FF8880;
+  --info: #5B87E8;  --info-tint: #101728;  --info-line: #1F2E4D;  --info-ink: #8DAEF5;
+  --agent: #9B82E8;  --agent-tint: #17122A;  --agent-line: #2E244D;  --agent-ink: #BCA8F5;
+  --dv-1: #5A82E8;  --dv-2: #C98420;  --dv-3: #1BA372;
+  --dv-4: #9070E0;  --dv-5: #1EA3BC;  --dv-6: #D4457E;
+  --dv-other: #6E6862;
+  --dv-grid: #232327;  --dv-axis: #746F69;
+  --dv-band: rgba(90,130,232,.12);
+  --dv-ref:  #746F69;
+  --sh-1: 0 0 0 .5px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  --sh-2: 0 0 0 .5px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4), 0 8px 18px -8px rgba(0,0,0,.6);
+  --sh-3: 0 0 0 .5px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.5), 0 18px 44px -16px rgba(0,0,0,.7);
+  --sh-4: 0 0 0 .5px rgba(0,0,0,.6), 0 4px 10px rgba(0,0,0,.55), 0 32px 72px -20px rgba(0,0,0,.8);
+  --sh-lit: inset 0 1px 0 rgba(255,255,255,.055);
+  --ring: 0 0 0 3px rgba(245,244,242,.22);
+  color-scheme: dark;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Base
+   ─────────────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink-2);
+  font-family: Geist, Aptos, Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 13.5px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
+  text-rendering: optimizeLegibility;
+}
+
+/* Every number in a compliance product is read in a column and compared to the
+   number above it. Proportional digits make that comparison lie, so numerals
+   are tabular everywhere by default and the exceptions opt out, not in. The
+   slashed zero is not decoration: a dataset full of model codes puts 0 and O
+   next to each other constantly. */
+.n, .num, .tabular-nums, table td, table th, input[type='number'] {
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 1, 'cv11' 1;
+}
+
+::selection { background: var(--brand-tint); color: var(--brand-ink); }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--r-sm);
+}
+
+/* Scrollbars — present but recessive. */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--line-strong); border: 3px solid transparent; background-clip: content-box; border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-5); background-clip: content-box; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   TYPE
+   ---------------------------------------------------------------------------
+   A scale, not a pile of pixel values. Three rules do most of the work:
+
+   1. TRACKING IS A FUNCTION OF SIZE. Type set at 30px and type set at 10px
+      want opposite treatment — large sizes tighten, small sizes open up. Most
+      interfaces apply one tracking everywhere and read cheap for exactly this
+      reason.
+   2. WEIGHT CARRIES HIERARCHY, SIZE CARRIES STRUCTURE. There are four sizes
+      above body and two below. Anything that needs more emphasis than that gets
+      weight or colour, never another size.
+   3. FIGURES ARE TYPESET, NOT TYPED. Tabular, lining, slashed zero. A column of
+      numbers that does not align is a column you cannot scan, and an unslashed
+      zero next to an O is a reading error waiting to happen.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --t-display-lg: 30px;
+  --t-display:    21px;
+  --t-title:      15px;
+  --t-title-sm:   13px;
+  --t-body:       13.5px;
+  --t-sub:        12.5px;
+  --t-cap:        11.5px;
+  --t-label:      10.5px;
+}
+
+/* Headings ragged by the browser look accidental; `balance` makes a two-line
+   title break where a typesetter would. */
+h1, h2, h3, .t-display-lg, .t-display, .t-title { text-wrap: balance; }
+p, .t-sub, .t-cap { text-wrap: pretty; }
+
+.t-display-lg {
+  font-size: var(--t-display-lg); font-weight: 640; line-height: 1.08;
+  letter-spacing: -.032em; color: var(--ink-1); font-feature-settings: 'ss01' 1, 'cv11' 1;
+}
+.t-display {
+  font-size: var(--t-display); font-weight: 640; line-height: 1.18;
+  letter-spacing: -.024em; color: var(--ink-1); font-feature-settings: 'ss01' 1, 'cv11' 1;
+}
+.t-title {
+  font-size: var(--t-title); font-weight: 600; line-height: 1.35;
+  letter-spacing: -.012em; color: var(--ink-1);
+}
+.t-title-sm {
+  font-size: var(--t-title-sm); font-weight: 600; line-height: 1.4;
+  letter-spacing: -.006em; color: var(--ink-1);
+}
+.t-body { font-size: var(--t-body); line-height: 1.55; color: var(--ink-2); }
+.t-sub  { font-size: var(--t-sub);  line-height: 1.5;  color: var(--ink-3); }
+.t-cap  { font-size: var(--t-cap);  line-height: 1.45; color: var(--ink-4); letter-spacing: .002em; }
+
+/* Small caps set at 10px need air, or they set as a grey smudge. */
+.t-label {
+  font-size: var(--t-label); font-weight: 650; line-height: 1;
+  letter-spacing: .075em; text-transform: uppercase; color: var(--ink-4);
+}
+
+/* Figures. `zero` gives the slashed zero, `tnum` the alignment, and the
+   negative tracking pulls back the extra width tabular figures introduce. */
+.t-num {
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 1, 'cv11' 1;
+  letter-spacing: -.012em;
+}
+.t-metric {
+  font-size: 26px; font-weight: 650; line-height: 1.06; color: var(--ink-1);
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'zero' 1;
+  letter-spacing: -.03em;
+}
+.t-mono {
+  font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; letter-spacing: -.01em;
+  font-feature-settings: 'zero' 1;
+}
+
+/* ── motion primitives ───────────────────────────────────────────────────── */
+@keyframes aire-fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes aire-fade    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aire-scale   { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes aire-slide-r { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes aire-pulse   { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes aire-sweep   { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes aire-spin    { to { transform: rotate(360deg); } }
+@keyframes aire-float   { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+@keyframes aire-sheen   { 0% { transform: translateX(-130%) rotate(18deg) } 55%,100% { transform: translateX(230%) rotate(18deg) } }
+@keyframes aire-ring    { 0% { transform: scale(.72); opacity: 0 } 18% { opacity: .5 } 100% { transform: scale(1.75); opacity: 0 } }
+@keyframes aire-drift   { 0% { transform: translate3d(0,0,0) } 50% { transform: translate3d(14px,-18px,0) } 100% { transform: translate3d(0,0,0) } }
+@keyframes aire-mark-in { 0% { opacity: 0; transform: scale(.82) rotate(-16deg) } 60% { opacity: 1 } 100% { opacity: 1; transform: none } }
+
+@keyframes aire-aurora  { 0% { transform: translate3d(-6%,-4%,0) scale(1) } 33% { transform: translate3d(8%,3%,0) scale(1.14) } 66% { transform: translate3d(-3%,6%,0) scale(.94) } 100% { transform: translate3d(-6%,-4%,0) scale(1) } }
+@keyframes aire-orbit   { to { transform: rotate(360deg) } }
+@keyframes aire-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+@keyframes aire-caret   { 0%,45% { opacity: 1 } 50%,95% { opacity: 0 } 100% { opacity: 1 } }
+@keyframes aire-rise    { from { opacity: 0; transform: translateY(6px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes aire-draw    { to { stroke-dashoffset: 0 } }
+
+/* A surface that is doing something. The aurora is deliberately slow and very
+   low-contrast — it should register as "alive" in peripheral vision and never
+   compete with the text sitting on it. */
+.aurora::before {
+  content: ''; position: absolute; inset: -40%;
+  background:
+    radial-gradient(38% 44% at 22% 30%, color-mix(in srgb, var(--agent) 24%, transparent) 0%, transparent 62%),
+    radial-gradient(34% 40% at 78% 62%, color-mix(in srgb, var(--brand) 18%, transparent) 0%, transparent 62%);
+  animation: aire-aurora 22s var(--ease) infinite;
+  pointer-events: none;
+  opacity: .5;
+}
+[data-theme='dark'] .aurora::before { opacity: .34; }
+
+/* The lift every interactive card shares, so "this responds" is one gesture
+   across the product rather than five slightly different ones. */
+.lift { transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease), border-color var(--t-base) var(--ease); }
+.lift:hover { transform: translateY(-2px); box-shadow: var(--sh-3); }
+
+/* The mark lands, then breathes. Two animations rather than one because the
+   arrival should be decisive and the idle should not be. */
+.brand-mark      { animation: aire-mark-in 900ms var(--ease-out) both; }
+.brand-mark-idle { animation: aire-float 6.5s var(--ease) infinite; }
+
+.anim-in    { animation: aire-fade-up var(--t-slow) var(--ease-out) both; }
+.anim-fade  { animation: aire-fade var(--t-base) var(--ease) both; }
+.anim-scale { animation: aire-scale var(--t-base) var(--ease-out) both; }
+.anim-slide { animation: aire-slide-r var(--t-base) var(--ease-out) both; }
+
+/* Stagger without a JS animation library: children inherit an index delay. */
+.stagger > * { animation: aire-fade-up 320ms var(--ease-out) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms }
+.stagger > *:nth-child(2) { animation-delay: 34ms }
+.stagger > *:nth-child(3) { animation-delay: 68ms }
+.stagger > *:nth-child(4) { animation-delay: 102ms }
+.stagger > *:nth-child(5) { animation-delay: 136ms }
+.stagger > *:nth-child(6) { animation-delay: 170ms }
+.stagger > *:nth-child(7) { animation-delay: 204ms }
+.stagger > *:nth-child(8) { animation-delay: 238ms }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 200% 100%;
+  animation: aire-sweep 1.4s linear infinite;
+  border-radius: var(--r-sm);
+}
+
+/* Anyone who has asked their OS to stop moving things means it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

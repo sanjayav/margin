@@ -128,6 +128,17 @@ export const EU: RulePack = {
   // M1 and N1 are separate obligations with separate Article 8 premiums.
   classSeparateCompliance: true,
   pooling: { enabled: true, note: 'Article 6 — makers may pool registrations and share one average.' },
+  // Reg (EU) 2025/1214 lets 2025–2027 be met on a three-year average rather
+  // than year by year. It is the same mechanism as India's blocks and the same
+  // trap: a maker over the line in 2025 alone does not breach if the three
+  // years together clear. Nothing is banked or traded — this is time, not an
+  // instrument — so credits do not lapse because there are no credits.
+  complianceBlocks: [
+    {
+      id: 'eu-2527', label: 'Three-year averaging · 2025–2027', years: [2025, 2026, 2027],
+      note: 'Reg (EU) 2025/1214 permits compliance across 2025, 2026 and 2027 to be assessed on the three-year average. Nothing is issued or banked; this is a timing flexibility, not a credit.',
+    },
+  ],
   transfer: {
     kind: 'pool',
     unit: 'g/km · car of pooled headroom',

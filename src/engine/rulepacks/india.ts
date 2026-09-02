@@ -30,6 +30,24 @@ const D3: Record<number, number> = {
 }
 /** First year past the end of the drafted CAFE III schedule. */
 const BEYOND_DRAFT_FROM = 2032
+
+// ── The 16 July 2026 draft's structural provisions ──────────────────────────
+// The pack's TARGET CURVE is still the 25 Sep 2025 draft (see the header). What
+// follows is structure the later draft added and the earlier one did not have,
+// and which changes answers rather than numbers:
+//
+//   · compliance is judged over BLOCKS, not years
+//   · credits LAPSE at the end of their block
+//   · the buyout price is a SCHEDULE, ₹2,500/g in FY2027-28 rising ₹500 a year
+//   · voluntary POOLING between manufacturers is permitted
+//
+// Reg AI reconciles the two drafts side by side, dated and cited, rather than
+// this file silently adopting figures from a consultation that is still open.
+
+/** BEE buyout price per gCO₂/km, converted to the pack's L/100km credit unit. */
+const BUYOUT_PER_G: Record<number, number> = {
+  2027: 2500, 2028: 3000, 2029: 3500, 2030: 4000, 2031: 4500,
+}
 // CAFE II (in force): 113 gCO₂/km at 1,145 kg reference ⇒ petrol-equivalent
 const C2 = 1145
 const D2 = 113 / 23.7135 // ≈ 4.765 L/100km
@@ -79,7 +97,23 @@ export const IN: RulePack = {
   fineRate: FINE_TIER1 / FINE_STEP,
   fineRateLabel: '₹25,000/car (≤0.2 L/100km over) · ₹50,000/car beyond · EC Act 2022',
   creditPrice: CREDIT_PER_L,
-  creditPriceLabel: '≈₹2,500 per gCO₂/km per car (draft CAFE III trading price, FY28)',
+  creditPriceLabel: '₹2,500/gCO₂/km in FY2027-28, rising ₹500 a year to ₹4,500 by FY2031-32 (BEE buyout, draft 16 Jul 2026)',
+  // A five-year book valued at the FY28 price understates its back end by 80%.
+  creditPriceByYear: Object.fromEntries(
+    Object.entries(BUYOUT_PER_G).map(([y, g]) => [Number(y), Math.round(g * PETROL_DIV)]),
+  ),
+  complianceBlocks: [
+    {
+      id: 'in-b1', label: 'Block 1 · FY2027-28 → FY2029-30', years: [2027, 2028, 2029],
+      creditsLapse: true, draft: true,
+      note: 'Compliance is assessed on the volume-weighted average across the three years, not year by year. Credits earned inside the block lapse when it closes.',
+    },
+    {
+      id: 'in-b2', label: 'Block 2 · FY2030-31 → FY2031-32', years: [2030, 2031],
+      creditsLapse: true, draft: true,
+      note: 'The second, two-year block. Credits do not carry across from Block 1 — anything unused when Block 1 closed is gone.',
+    },
+  ],
   // 2025 (FY2025-26) is the complete 12-month actual. 2026 (FY2026-27) is a
   // 3-month YTD part-year — carried as recorded and badged, since a
   // sales-weighted average is volume-invariant and so compliance is unaffected;
@@ -93,14 +127,22 @@ export const IN: RulePack = {
   defaultYear: 2027,
   classes: ['Passenger car'],
   smallVolumeThreshold: 1000,
-  pooling: { enabled: false, note: 'CAFE is assessed per manufacturer; the draft provides credit trading between makers, not pooled averages.' },
+  // CAFE II assesses every manufacturer standalone. The 16 Jul 2026 CAFE III
+  // draft adds voluntary pooling between manufacturers — so this is enabled for
+  // the draft years, with the note carrying the distinction rather than the
+  // surfaces having to guess it.
+  pooling: {
+    enabled: true,
+    fromYear: CAFE3_FROM,
+    note: 'Under CAFE II (to 31 Mar 2027) every manufacturer is assessed standalone — there is no pooling. The draft CAFE III (16 Jul 2026) adds VOLUNTARY pooling: makers may exchange compliance credits with each other, alongside carry-forward inside a block and a BEE buyout. Nothing here is notified.',
+  },
   transfer: {
     kind: 'trade',
     unit: 'credit',
     verb: 'trade',
     supplier: 'seller',
     taker: 'buyer',
-    note: 'CAFE is assessed per manufacturer — there is no pooled average. Draft CAFE III provides banked credits that trade between makers at a notified price; none of this exists under CAFE II.',
+    note: 'Under CAFE II there is no instrument at all. Draft CAFE III creates compliance credits that carry forward INSIDE a block, may be exchanged with other manufacturers by voluntary pooling, or bought out from BEE at the published price — and that LAPSE when their block closes. None of this exists until the norms are notified.',
   },
   credits: 'Draft CAFE III: super-credits multiply clean-tech volume (BEV ×3, PHEV ×2.5, strong hybrid ×2), carbon-neutral fuels (E20, CNG) discount fuel use, and banked credits trade at a notified price. None of these exist under CAFE II.',
   limitNote: 'CAFE III (draft): 0.002 × (kerb mass − 1,170 kg) + a constant tightening 3.73 → 3.01 L/100km by FY2031-32. Before FY2027-28, CAFE II applies: 0.002 × (mass − 1,145) + 4.765 (113 gCO₂/km equivalent). Draft years can be stress-tested with the stringency lever.',

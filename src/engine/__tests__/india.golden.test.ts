@@ -225,8 +225,17 @@ describe('India · market totals', () => {
     expect(makers.filter((m) => m.status === 'fine')).toHaveLength(1)
   })
 
-  it('assesses each maker standalone — India does not pool', () => {
-    expect(IN.pooling.enabled).toBe(false)
+  it('assesses each maker standalone under CAFE II, and only pools from draft CAFE III', async () => {
+    const { poolingAllowed } = await import('../blocks')
+    // The regime has the concept — but not yet.
+    expect(IN.pooling.enabled).toBe(true)
+    expect(IN.pooling.fromYear).toBe(2027)
+    // CAFE II: every manufacturer standalone, no pool to join.
+    expect(poolingAllowed(IN, 2025)).toBe(false)
+    expect(poolingAllowed(IN, 2026)).toBe(false)
+    // Draft CAFE III adds voluntary pooling from FY2027-28.
+    expect(poolingAllowed(IN, 2027)).toBe(true)
+    expect(poolingAllowed(IN, 2031)).toBe(true)
   })
 })
 

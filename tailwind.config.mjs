@@ -103,6 +103,15 @@ export default {
   				'monospace'
   			]
   		},
+  		transitionDuration: {
+  			fast: 'var(--t-fast)',
+  			base: 'var(--t-base)',
+  			slow: 'var(--t-slow)'
+  		},
+  		transitionTimingFunction: {
+  			std: 'var(--ease)',
+  			decel: 'var(--ease-out)'
+  		},
   		boxShadow: {
   			glow: '0 0 0 1px rgba(242,81,14,0.25), 0 10px 30px -12px rgba(242,81,14,0.30)',
   			card: '0 1px 2px rgba(80,60,30,0.05), 0 14px 30px -18px rgba(120,90,50,0.25)'

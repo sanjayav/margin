@@ -30,7 +30,7 @@ export default async function handler(req: any, res: any) {
   if (method === 'GET') {
     const s = sessionFrom(req)
     if (!s) { res.status(401).json({ error: 'Not signed in.' }); return }
-    res.status(200).json({ email: s.email, name: s.name, workspace: s.workspace, exp: s.exp })
+    res.status(200).json({ email: s.email, name: s.name, workspace: s.workspace, role: s.role ?? 'analyst', exp: s.exp })
     return
   }
 
@@ -71,7 +71,7 @@ export default async function handler(req: any, res: any) {
 
   fails.delete(ip)
   setSessionCookie(res, issue(user))
-  res.status(200).json({ email: user.email, name: user.name, workspace: user.workspace })
+  res.status(200).json({ email: user.email, name: user.name, workspace: user.workspace, role: user.role ?? 'analyst' })
 }
 
 function safeParse(s: string): any {

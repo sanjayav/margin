@@ -204,6 +204,29 @@ export interface DataCoverage {
   detail?: string
 }
 
+/** A multi-year compliance period.
+ *
+ *  Several regimes stopped judging a manufacturer year by year. India's draft
+ *  CAFE III assesses over blocks (FY2027-28 → FY2029-30, then FY2030-31 →
+ *  FY2031-32) and the EU's Reg (EU) 2025/1214 lets 2025–2027 be met on a
+ *  three-year average. The difference is not cosmetic: a maker over the line in
+ *  one year and under it in the next two does NOT breach, and a platform that
+ *  reports an annual breach there is giving a wrong answer with money attached.
+ *
+ *  Where a pack declares no blocks, compliance is annual and every surface
+ *  behaves exactly as before. */
+export interface ComplianceBlock {
+  id: string
+  label: string
+  /** Compliance years inside the block, in order. */
+  years: number[]
+  /** Credits earned in the block lapse at its end rather than carrying on. */
+  creditsLapse?: boolean
+  /** True while the block itself is only drafted. */
+  draft?: boolean
+  note: string
+}
+
 export interface RulePack {
   id: CountryId
   name: string
@@ -219,6 +242,14 @@ export interface RulePack {
   illustrativeRates?: boolean
   creditPrice?: number    // price of one credit (per metric-unit · per vehicle) where trading exists
   creditPriceLabel?: string
+  /** Where the price is a published SCHEDULE rather than one number. India's
+   *  draft buyout ramps ₹2,500/g in FY2027-28 by ₹500 a year to ₹4,500/g in
+   *  FY2031-32, so valuing a five-year book at a single price understates the
+   *  back end by nearly half. Keys are compliance years; `creditPrice` remains
+   *  the fallback for years the schedule does not name. */
+  creditPriceByYear?: Record<number, number>
+  /** Multi-year compliance periods, in order. Absent means annual compliance. */
+  complianceBlocks?: ComplianceBlock[]
   years: number[]
   /** Landing year for a fresh scenario. Defaults to years[0] when omitted — set
    *  it when the chronological first year (e.g. a historic actuals baseline) is
@@ -241,7 +272,13 @@ export interface RulePack {
    *  van headroom cannot pay down a car deficit. Regimes that assess one blended
    *  fleet leave this unset. */
   classSeparateCompliance?: boolean
-  pooling: { enabled: boolean; note: string }
+  /** `enabled` is whether this regime EVER pools — it drives whether the
+   *  module exists at all. `fromYear` is when it starts, for a market whose
+   *  pooling arrives with a new regime rather than with the pack: India has no
+   *  pooling under CAFE II and voluntary pooling under draft CAFE III, and a
+   *  single boolean answers that question wrongly in one direction or the
+   *  other. Use `poolingAllowed(pack, year)` for the per-year answer. */
+  pooling: { enabled: boolean; fromYear?: number; note: string }
   credits: string         // human description of the credit system
 
   /** How compliance moves BETWEEN compliance entities in this regime.

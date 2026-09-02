@@ -1,0 +1,19 @@
+/* ───────────────────────────────────────────────────────────────────────────
+   Base stylesheet for the rebuilt workspace.
+   Tailwind's layers, the brand typeface, then the token layer — in that order,
+   so tokens.css always wins over Tailwind's preflight for `body` and friends.
+   Nothing else belongs in here: component styling lives with the component.
+   ─────────────────────────────────────────────────────────────────────────── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AiRE brand typeface, self-hosted. Geist and Inter are loaded from the font
+   CDN in index.html as fallbacks, so text never drops to a system face. */
+@font-face { font-family: 'Aptos'; font-weight: 300; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Light.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 400; font-style: normal; font-display: swap; src: url('/fonts/Aptos.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 500; font-style: normal; font-display: swap; src: url('/fonts/Aptos.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 600; font-style: normal; font-display: swap; src: url('/fonts/Aptos-SemiBold.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 700; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Bold.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 800; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Black.ttf') format('truetype'); }
+@font-face { font-family: 'Aptos'; font-weight: 900; font-style: normal; font-display: swap; src: url('/fonts/Aptos-Black.ttf') format('truetype'); }

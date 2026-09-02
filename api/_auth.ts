@@ -21,12 +21,18 @@
 // rather than silently accepting the demo password.
 // ───────────────────────────────────────────────────────────────────────────
 import { createHmac, timingSafeEqual, scryptSync, randomBytes } from 'node:crypto'
+import type { Role } from '../src/app/auth/rbac.js'
 
 export interface Session {
   email: string
   name: string
   /** Tenant boundary. Every store read and write is scoped to this. */
   workspace: string
+  /** What this user is allowed to do. Carried in the SIGNED token, never sent
+   *  by the client: a role the browser could assert is not an authorisation
+   *  model. Absent on tokens issued before roles existed — treated as the
+   *  least-privileged role, not the most. */
+  role?: Role
   /** Seconds since epoch. */
   exp: number
 }
@@ -35,6 +41,9 @@ export interface User {
   email: string
   name: string
   workspace: string
+  /** Defaults to 'analyst' when AUTH_USERS omits it — a configuration slip
+   *  must under-grant, never over-grant. */
+  role?: Role
   /** `scrypt:<saltHex>:<hashHex>` — never a plaintext password. */
   passwordHash: string
 }
@@ -64,7 +73,7 @@ function devUsers(): User[] {
   // Hash generated at load so the plaintext never sits in the bundle as a
   // comparable constant. Password: "marginio" (the previous demo credential,
   // kept so existing demo scripts still work locally).
-  return [{ email: 'vijay@margin.io', name: 'Vijay', workspace: 'demo', passwordHash: hashPassword('marginio') }]
+  return [{ email: 'vijay@margin.io', name: 'Vijay', workspace: 'demo', role: 'owner', passwordHash: hashPassword('marginio') }]
 }
 
 /** AUTH_USERS='[{"email":"a@oem.com","name":"A","workspace":"maruti","passwordHash":"scrypt$..."}]'
@@ -131,6 +140,7 @@ function sign(payload: string): string {
 export function issue(user: User): string {
   const body: Session = {
     email: user.email, name: user.name, workspace: user.workspace,
+    role: user.role ?? 'analyst',
     exp: Math.floor(Date.now() / 1000) + TTL_SECONDS,
   }
   const payload = b64(Buffer.from(JSON.stringify(body)))
