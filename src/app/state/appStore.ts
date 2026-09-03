@@ -198,7 +198,20 @@ export const useApp = create<AppState>()(persist((set, get) => ({
       session: st.session ? { ...st.session, persona, role: role ?? st.session.role } : st.session,
     }))
   },
-  signOut: () => set({ session: null, onboarded: false, runs: [], activeRunId: null }),
+  /**
+   * Signing out has to reach the server. The session cookie is HttpOnly, so
+   * only the server can revoke it — clearing local state alone leaves a valid
+   * cookie behind, and SignIn restores from it on mount precisely so an
+   * existing session does not ask for a password again. The two together mean
+   * a purely local sign-out is undone by the next page load.
+   *
+   * Local state is cleared whether or not the request lands: someone on a
+   * dead network who clicks Sign out must still leave the screen.
+   */
+  signOut: () => {
+    void fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {})
+    set({ session: null, onboarded: false, runs: [], activeRunId: null })
+  },
 
   autonomy: 'propose',
   setAutonomy: (a) => set({ autonomy: a }),
