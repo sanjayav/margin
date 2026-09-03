@@ -42,16 +42,21 @@ import { poolingAllowed } from '../src/engine/blocks.js'
 import { buildTree } from '../src/engine/engine.js'
 
 /**
- * Opus sits at the wrong end of the price curve for this loop. The agent
- * decides which engine tool to call next and narrates what came back — the
- * compliance arithmetic is already deterministic TypeScript behind the
- * validation gate, so the model is orchestrating, not calculating. Sonnet is
- * strong at exactly that and roughly five times cheaper.
+ * The cheapest tier, by explicit choice. This loop mostly decides which engine
+ * tool to call next and narrates what came back — the compliance arithmetic is
+ * deterministic TypeScript behind the validation gate, so the model is
+ * orchestrating, not calculating, and a wrong number cannot reach the user
+ * through it.
  *
- * Overridable per deployment, so changing tier is an env change rather than a
- * redeploy if a pass ever needs more depth.
+ * The trade is real and worth stating: Haiku is weaker at long multi-step
+ * reasoning and at regulatory narrative, so expect shallower findings and
+ * plainer write-ups, and watch whether passes start needing more turns to
+ * reach the same place — more cheap turns can cost more than fewer good ones.
+ *
+ * AGENT_MODEL overrides, so moving a deployment back up a tier is an env
+ * change rather than a redeploy.
  */
-const MODEL = process.env.AGENT_MODEL || 'claude-sonnet-5'
+const MODEL = process.env.AGENT_MODEL || 'claude-haiku-4-5-20251001'
 const MAX_TURNS = 12
 
 /**
@@ -556,6 +561,19 @@ export default async function handler(req: any, res: any) {
   const send = (ev: unknown) => { res.write(`${JSON.stringify(ev)}\n`) }
   const t0 = Date.now()
 
+  /**
+   * Whether the reader is still there. Aborting the fetch client-side — a stop,
+   * a sign-out, a closed tab — ends the response, but nothing about that stops
+   * this function on its own: it would keep calling the model, turn after turn,
+   * and bill every one of them to write a report into a closed socket.
+   *
+   * Checked between turns rather than mid-request, because a call already in
+   * flight is paid for either way. This bounds the spend at one turn past the
+   * disconnect instead of the full twelve.
+   */
+  let clientGone = false
+  res.on('close', () => { clientGone = true })
+
   try {
     const fleet = await loadFleets(session.workspace)
     const ctx: ToolContext = { fleet, allowed: PACK_LIST.map((p) => p.id), pooling: true, actions: [] }
@@ -605,6 +623,7 @@ export default async function handler(req: any, res: any) {
     let step = 1
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      if (clientGone) return
       send({ type: 'status', status: turn === 0 ? 'gathering' : 'reasoning' })
 
       let msg: any

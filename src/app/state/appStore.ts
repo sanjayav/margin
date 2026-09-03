@@ -7,6 +7,7 @@
    they can never go stale behind a cached copy.
    ─────────────────────────────────────────────────────────────────────────── */
 import { create } from 'zustand'
+import { stopAllRuns } from '../agents/inflight'
 import { persist } from 'zustand/middleware'
 import type { CountryId, Scenario } from '../../engine/types'
 import { getPack, PACK_LIST } from '../../engine/rulepacks'
@@ -209,6 +210,12 @@ export const useApp = create<AppState>()(persist((set, get) => ({
    * dead network who clicks Sign out must still leave the screen.
    */
   signOut: () => {
+    // Stop live runs FIRST. An agent started by the person leaving must not
+    // keep running against a session that no longer exists — it would stream
+    // into a cleared store, and go on paying the model for a report nobody
+    // will ever see. Aborting also closes the connection, which is the signal
+    // the server watches for to abandon the rest of the pass.
+    stopAllRuns()
     void fetch('/api/session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {})
     set({ session: null, onboarded: false, runs: [], activeRunId: null })
   },

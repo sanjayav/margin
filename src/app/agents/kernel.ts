@@ -77,6 +77,9 @@ export interface AgentDef {
 export type RunStatus =
   | 'queued' | 'planning' | 'gathering' | 'reasoning' | 'drafting'
   | 'validating' | 'awaiting_approval' | 'applied' | 'rejected' | 'failed' | 'done'
+  /** Deliberately ended — the user stopped it, or signed out. Distinct from
+   *  'failed', which means the run tried to finish and could not. */
+  | 'stopped'
 
 export const RUN_STAGE_ORDER: RunStatus[] = ['planning', 'gathering', 'reasoning', 'drafting', 'validating']
 
@@ -196,12 +199,14 @@ export const STATUS_TONE: Record<RunStatus, 'neutral' | 'agent' | 'pos' | 'warn'
   queued: 'neutral', planning: 'agent', gathering: 'agent', reasoning: 'agent',
   drafting: 'agent', validating: 'info', awaiting_approval: 'warn',
   applied: 'pos', done: 'pos', rejected: 'neutral', failed: 'neg',
+  stopped: 'neutral',
 }
 
 export const STATUS_LABEL: Record<RunStatus, string> = {
   queued: 'Queued', planning: 'Planning', gathering: 'Gathering', reasoning: 'Reasoning',
   drafting: 'Drafting', validating: 'Validating', awaiting_approval: 'Needs approval',
   applied: 'Applied', done: 'Complete', rejected: 'Rejected', failed: 'Failed',
+  stopped: 'Stopped',
 }
 
 export const isRunning = (s: RunStatus) =>

@@ -11,6 +11,7 @@ import type { CountryId } from '../../engine/types'
 import type { AgentId, AgentRun, Finding, Proposal, RunStatus, RunStep, Validation } from './kernel'
 import { newRunId } from './kernel'
 import { useApp } from '../state/appStore'
+import { register, release } from './inflight'
 import type { EvidenceItem, ForecastCase } from '../modules/forecast/cases'
 
 export type AgentEvent =
@@ -60,6 +61,10 @@ export function startRun(req: RunRequest, by = 'you'): { id: string; done: Promi
 
   const done = (async (): Promise<AgentRun | null> => {
     const ctl = new AbortController()
+    // Registered so the run can be stopped — by a stop control, or by signing
+    // out. Without this the controller is unreachable and the run cannot be
+    // interrupted at all.
+    register(id, ctl)
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
@@ -94,7 +99,16 @@ export function startRun(req: RunRequest, by = 'you'): { id: string; done: Promi
       }
       if (buf.trim()) applyEvent(id, JSON.parse(buf.trim()) as AgentEvent)
     } catch (e) {
-      fail(id, e instanceof Error ? e.message : 'The run could not be completed.')
+      // An abort is a decision, not a fault: someone stopped the run or signed
+      // out. Reporting it as a failure would put a red error in the trace for
+      // something that worked exactly as asked.
+      if ((e as { name?: string } | null)?.name === 'AbortError') {
+        useApp.getState().patchRun(id, { status: 'stopped', finishedAt: new Date().toISOString() })
+      } else {
+        fail(id, e instanceof Error ? e.message : 'The run could not be completed.')
+      }
+    } finally {
+      release(id)
     }
     return useApp.getState().runs.find((r) => r.id === id) ?? null
   })()

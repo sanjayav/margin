@@ -18,6 +18,7 @@ import Icon from '../../design/icons'
 import type { AgentRun, Citation, Finding, RunStep, Validation } from '../kernel'
 import { SEVERITY_TONE, STATUS_LABEL, STATUS_TONE, isRunning } from '../kernel'
 import { getAgent } from '../registry'
+import { stopRun } from '../inflight'
 
 /* ── cost ─────────────────────────────────────────────────────────────────── */
 
@@ -290,6 +291,11 @@ export function RunTrace({ run, canApprove, onDecide, onApply }: {
             {run.usage && ` · ${(run.usage.ms / 1000).toFixed(1)}s`}
           </div>
         </div>
+        {running && (
+          <Button size="sm" variant="quiet" onClick={() => stopRun(run.id)} title="Stop this run. A pass bills for as long as it lasts.">
+            Stop
+          </Button>
+        )}
       </header>
 
       {run.prompt && (
