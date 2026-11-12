@@ -70,7 +70,13 @@ export function startRun(req: RunRequest, by = 'you'): { id: string; done: Promi
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ ...req, runId: id, autonomy: store.autonomy }),
+        // The Regulatory watch carries the workspace's own brief: which
+        // regulations it tracks and how the agent is tuned. The server
+        // re-validates every field, so this is a request, not a grant.
+        body: JSON.stringify({
+          ...req, runId: id, autonomy: store.autonomy,
+          ...(req.agentId === 'reg.watch' ? { watch: { ...store.regWatch, tracked: store.regTracked } } : {}),
+        }),
         signal: ctl.signal,
       })
 
@@ -98,6 +104,11 @@ export function startRun(req: RunRequest, by = 'you'): { id: string; done: Promi
         }
       }
       if (buf.trim()) applyEvent(id, JSON.parse(buf.trim()) as AgentEvent)
+      // A completed watch pass resets the cadence clock in Reg AI.
+      const finished = useApp.getState().runs.find((r) => r.id === id)
+      if (req.agentId === 'reg.watch' && finished && finished.status !== 'failed' && finished.status !== 'stopped') {
+        useApp.getState().setRegLastPass(new Date().toISOString())
+      }
     } catch (e) {
       // An abort is a decision, not a fault: someone stopped the run or signed
       // out. Reporting it as a failure would put a red error in the trace for

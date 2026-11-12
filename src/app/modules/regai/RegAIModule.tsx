@@ -1,64 +1,64 @@
 /* ───────────────────────────────────────────────────────────────────────────
    REG AI — the regulatory intelligence module.
    ---------------------------------------------------------------------------
-   Every other module in the platform answers "given the rules, where are we?".
-   This one owns the prior question, and it is a different kind of product:
+   Every other module answers "given the rules, where are we?". This one owns
+   the prior question — which rules, how settled, and what is about to move —
+   across every market and every kind of regulation a workspace chooses to
+   track: vehicle CO₂ and CAFE, CBAM, emissions trading, type-approval.
 
-     RADAR       Every instrument across every market you file in, on one
-                 timeline, in stage lanes. The stage is the whole point — the
-                 difference between something you plan for and something you
-                 file against is not a detail, it is the decision.
-
-     INSTRUMENTS A reader. Instrument list, clause text, and — the part that
-                 makes this more than a bookmark folder — WHICH ENGINE
-                 PARAMETER each clause drives, with the value read live from the
-                 loaded rule pack. If you disagree with a number anywhere in the
-                 product, this is where you find the clause it came from.
-
-     IMPACT      A change, expressed as a delta against the rule pack, with your
-                 own position re-derived under it. Prose about a consultation is
-                 worth very little; the same consultation priced against your
-                 fleet is worth the subscription.
-
-     BRIEFING    What the Regulatory watch found, cited.
+     WATCHTOWER  The front page: what you track, what bites next, what the
+                 watch found.
+     LIBRARY     Every regulation Reg AI knows, by market — and the switch
+                 that tracks it. The tracked set is the lens for every tab.
+     RADAR       Tracked instruments on one timeline, in stage lanes.
+     READER      Clause-level reading, with the live rule-pack value each
+                 clause drives where the engine prices it.
+     RECONCILE   What the loaded rule pack holds against the current text.
+     IMPACT      A change, priced against your own fleet.
+     AGENT       Tune the Regulatory watch — scope, cadence, sensitivity,
+                 depth, voice — with the guardrails shown and locked.
    ─────────────────────────────────────────────────────────────────────────── */
 import React, { useMemo, useState } from 'react'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import {
   Badge, Button, Callout, Card, CountUp, cx, Divider, EmptyState, Metric, MetricRow,
   Panel, Progress, Segmented, Slider, StatusDot, Table, Td, Th, Tooltip, Tr, relTime,
 } from '../../design/primitives'
 import Icon, { type IconName } from '../../design/icons'
-import { DV, LineChart } from '../../design/charts'
 import { ModulePage } from '../../shell/AppShell'
 import { AgentLauncher } from '../../agents/ui/AgentConsole'
-import { Citations } from '../../agents/ui/RunTrace'
 import { useApp } from '../../state/appStore'
 import { usePosition } from '../../state/usePosition'
-import { clientContext, regulationBrief } from '../../../engine/tools'
 import { buildTree, fmtMoney, fmtNum } from '../../../engine/engine'
 import { getPack, PACK_LIST } from '../../../engine/rulepacks'
 import { baseScenario } from '../../state/appStore'
-import { SEVERITY_TONE } from '../../agents/kernel'
 import {
   DRIVES_LABEL, INSTRUMENTS, STAGE_META, STAGE_ORDER, instrumentsFor,
   type Drives, type Instrument, type Stage,
 } from './catalogue'
 import type { CountryId } from '../../../engine/types'
 import { RECONCILIATIONS, VERDICT_META, reconSummary, reconciliationFor } from './reconcile'
+import { MARKET_NAME, MARKET_ORDER, REG_BY_ID, instrumentsOf, type Regulation } from './regulations'
+import { Watchtower } from './Watchtower'
+import { Library } from './Library'
+import { AgentStudio } from './AgentStudio'
+import { RegDrawer } from './ui/RegDrawer'
+import { Flag } from './ui/assets'
+import { page } from './ui/motion'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    1 · RADAR
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function Radar({ onOpen }: { onOpen: (i: Instrument) => void }) {
-  const markets = useApp((s) => s.markets)
+function Radar({ onOpen, goLibrary }: { onOpen: (i: Instrument) => void; goLibrary: () => void }) {
+  const tracked = useApp((s) => s.regTracked)
   const country = useApp((s) => s.country)
   const setCountry = useApp((s) => s.setCountry)
   const [scope, setScope] = useState<'all' | 'this'>('all')
 
   const items = useMemo(
-    () => INSTRUMENTS.filter((i) => markets.includes(i.market) && (scope === 'all' || i.market === country)),
-    [markets, scope, country],
+    () => INSTRUMENTS.filter((i) => tracked.includes(i.regulation) && (scope === 'all' || i.market === country)),
+    [tracked, scope, country],
   )
 
   const span = useMemo(() => {
@@ -72,6 +72,14 @@ function Radar({ onOpen }: { onOpen: (i: Instrument) => void }) {
   // against", not "what might change one day".
   const lanes = [...STAGE_ORDER].reverse().filter((s) => items.some((i) => i.stage === s))
   const thisYear = new Date().getFullYear()
+
+  if (!items.length) {
+    return (
+      <EmptyState art="search" title={scope === 'all' ? 'Nothing tracked yet' : `Nothing tracked in ${getPack(country).name}`}
+        body="The radar shows the instruments behind the regulations you track. Choose some in the Library."
+        action={<Button variant="primary" icon={<Icon name="list" size={13} />} onClick={goLibrary}>Open the Library</Button>} />
+    )
+  }
 
   return (
     <>
@@ -88,7 +96,7 @@ function Radar({ onOpen }: { onOpen: (i: Instrument) => void }) {
 
       <Panel
         title="Regulatory radar"
-        sub="Every instrument the platform reads, positioned over the compliance years it governs and grouped by how settled it is."
+        sub="Every instrument behind the regulations you track, positioned over the years it governs and grouped by how settled it is."
         icon={<Icon name="regai" size={14} />}
         actions={
           <Segmented size="sm" value={scope} onChange={setScope}
@@ -126,7 +134,7 @@ function Radar({ onOpen }: { onOpen: (i: Instrument) => void }) {
                         <button onClick={() => { setCountry(i.market); onOpen(i) }}
                           className="w-[142px] shrink-0 truncate text-left text-[11.5px] text-[var(--ink-2)] hover:text-[var(--ink-1)] hover:underline"
                           title={i.title}>
-                          <span className="mr-1.5 text-[10px] font-semibold text-[var(--ink-4)]">{i.market}</span>
+                          <Flag market={i.market} size={13} className="mr-1.5 align-[-1px]" />
                           {i.shortTitle}
                         </button>
                         <span className="relative h-[22px] flex-1 rounded-[var(--r-xs)] bg-[var(--surface-2)]">
@@ -259,21 +267,45 @@ function packValue(drives: Drives, country: CountryId, year: number, limit: numb
   }
 }
 
-function InstrumentReader({ open, setOpen }: { open: Instrument | null; setOpen: (i: Instrument | null) => void }) {
+function InstrumentReader({ open, setOpen, goLibrary }: { open: Instrument | null; setOpen: (i: Instrument | null) => void; goLibrary: () => void }) {
   const country = useApp((s) => s.country)
+  const setCountry = useApp((s) => s.setCountry)
+  const tracked = useApp((s) => s.regTracked)
   const { pack, tree, scenario } = usePosition('actuals')
-  const list = useMemo(() => instrumentsFor(country), [country])
+  const list = useMemo(() => instrumentsFor(country).filter((i) => tracked.includes(i.regulation)), [country, tracked])
+  const perMarket = useMemo(() => Object.fromEntries(MARKET_ORDER.map((m) => [m, instrumentsFor(m).filter((i) => tracked.includes(i.regulation)).length])), [tracked])
   const active = open && open.market === country ? open : list[0]
   const [clauseRef, setClauseRef] = useState<string | null>(null)
   const clause = active?.clauses.find((c) => c.ref === clauseRef) ?? active?.clauses[0] ?? null
   const live = clause ? packValue(clause.drives, country, scenario.year, tree.limit) : null
 
+  const marketBar = (
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      {MARKET_ORDER.map((m) => (
+        <button key={m} onClick={() => { setCountry(m); setClauseRef(null) }} aria-pressed={country === m}
+          className={cx('inline-flex h-[32px] items-center gap-2 rounded-[var(--r-full)] border px-3 text-[12px] font-medium transition-colors',
+            country === m ? 'border-[var(--ink-2)] bg-[var(--surface-1)] text-[var(--ink-1)] shadow-[var(--sh-1)]' : 'border-transparent text-[var(--ink-3)] hover:bg-[var(--surface-1)] hover:text-[var(--ink-1)]')}>
+          <Flag market={m} size={16} />{MARKET_NAME[m]}
+          <span className="tabular-nums text-[10.5px] text-[var(--ink-4)]">{perMarket[m]}</span>
+        </button>
+      ))}
+    </div>
+  )
+
   if (!list.length) {
-    return <EmptyState icon={<Icon name="book" size={20} />} title={`No instruments catalogued for ${pack.name} yet`}
-      body="The rule pack is loaded and the engine uses it; the clause-level reading for this market has not been written." />
+    return (
+      <>
+        {marketBar}
+        <EmptyState art="search" title={`Nothing tracked in ${pack.name}`}
+          body="The reader shows the instruments behind the regulations you track. Track one for this market in the Library."
+          action={<Button variant="primary" icon={<Icon name="list" size={13} />} onClick={goLibrary}>Open the Library</Button>} />
+      </>
+    )
   }
 
   return (
+    <>
+    {marketBar}
     <div className="grid gap-4 xl:grid-cols-[258px_minmax(0,1fr)_308px]">
       {/* ── pane 1 · instruments ── */}
       <Panel flush title={`${pack.name} instruments`} icon={<Icon name="book" size={14} />} bodyClass="!p-1.5">
@@ -393,6 +425,7 @@ function InstrumentReader({ open, setOpen }: { open: Instrument | null; setOpen:
         </Panel>
       </div>
     </div>
+    </>
   )
 }
 
@@ -659,165 +692,78 @@ function ImpactSimulator() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   4 · BRIEFING
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const WATCH: Record<string, { body: string; what: string; url?: string }[]> = {
-  EU: [
-    { body: 'EUR-Lex', what: 'Amendments to Regulation (EU) 2019/631 and its implementing acts', url: 'https://eur-lex.europa.eu' },
-    { body: 'European Commission · DG CLIMA', what: 'Consultations, review clauses and delegated acts' },
-    { body: 'EEA', what: 'The CO₂ monitoring dataset and its provisional/final revisions' },
-  ],
-  IN: [
-    { body: 'Gazette of India', what: 'CAFE notifications under the Energy Conservation Act' },
-    { body: 'Bureau of Energy Efficiency', what: 'Draft norms, CNF treatment and cycle transition' },
-    { body: 'MoRTH / CMVR technical committee', what: 'Homologation cycle and test-procedure changes' },
-  ],
-  UK: [
-    { body: 'legislation.gov.uk', what: 'The Vehicle Emissions Trading Schemes Order and amendments', url: 'https://www.legislation.gov.uk' },
-    { body: 'DfT / DESNZ', what: 'ZEV mandate consultations and flexibility reviews' },
-  ],
-  AU: [
-    { body: 'Federal Register of Legislation', what: 'The New Vehicle Efficiency Standard and its rules' },
-    { body: 'Department of Infrastructure', what: 'Break points, categories and penalty determinations' },
-  ],
-  CN: [
-    { body: 'MIIT', what: 'Dual-credit measures, NEV credit ratios and CAFC targets' },
-    { body: 'GB standards committee', what: 'GB 27999 fuel-consumption limit curves' },
-  ],
-}
-
-function Briefing() {
-  const { pack, scenario, tree, country } = usePosition('actuals')
-  const markets = useApp((s) => s.markets)
-  const runs = useApp((s) => s.runs)
-  const setConsole = useApp((s) => s.setConsole)
-  const run = runs.find((r) => r.agentId === 'reg.watch')
-  const watch = WATCH[country] ?? []
-
-  const brief = useMemo(() => {
-    try { return regulationBrief(clientContext(markets, true), country, scenario.year).value }
-    catch { return null }
-  }, [markets, country, scenario.year])
-
-  return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="space-y-4">
-        {brief && (
-          <Panel title="The target trajectory as loaded"
-            sub={brief.massBasedLimit
-              ? `The statutory target for every year in the rule pack. Because this limit is mass-based, the line your fleet actually faces is that target adjusted for your average mass — ${fmtNum(tree.limit, 1)} ${brief.unit} in ${scenario.year}.`
-              : 'The statutory target for every year in the rule pack. This regime does not adjust it for fleet mass, so it is also the line your fleet faces.'}
-            icon={<Icon name="forecast" size={14} />}>
-            <LineChart
-              x={brief.limitByYear.map((l) => l.year)} unit={brief.unit} height={220}
-              series={[{ name: 'Statutory target', points: brief.limitByYear.map((l) => l.limit), color: DV[3], area: true }]} />
-          </Panel>
-        )}
-
-        <Panel title="Change feed" icon={<Icon name="bell" size={14} />}
-          sub={run ? `Regulatory watch · ${relTime(run.startedAt)}` : 'Nothing checked yet'}
-          actions={run && <Button size="xs" variant="ghost" onClick={() => { useApp.getState().setActiveRun(run.id); setConsole(true) }}>Full trace</Button>}>
-          {run?.findings.length ? (
-            <ul className="space-y-3">
-              {run.findings.map((f) => (
-                <li key={f.id} className="border-b border-[var(--line-soft)] pb-3 last:border-0 last:pb-0">
-                  <div className="flex items-start gap-2">
-                    <StatusDot size={7} tone={SEVERITY_TONE[f.severity]} />
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[12.5px] font-semibold text-[var(--ink-1)]">{f.title}</span>
-                        {f.subject && <Badge tone="neutral">{f.subject}</Badge>}
-                      </div>
-                      <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{f.detail}</p>
-                      <Citations items={f.citations} dense />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState art="agent" compact icon={<Icon name="regai" size={18} />} title="No changes reported"
-              body="Run the Regulatory watch to check the official sources for this market, classify anything that has moved by stage, and quantify it against your position."
-              action={<AgentLauncher moduleId="regai" />} />
-          )}
-        </Panel>
-      </div>
-
-      <div className="space-y-4">
-        <Panel title="What is being watched" icon={<Icon name="search" size={14} />} sub={`Official sources monitored for ${pack.name}.`}>
-          <ul className="space-y-3">
-            {watch.map((w) => (
-              <li key={w.body} className="flex gap-2.5">
-                <span className="mt-[3px] grid h-6 w-6 shrink-0 place-items-center rounded-[var(--r-sm)] bg-[var(--surface-2)] text-[var(--ink-4)]">
-                  <Icon name={w.url ? 'globe' : 'file'} size={12} />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[12px] font-semibold text-[var(--ink-1)]">{w.body}</div>
-                  <p className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--ink-3)]">{w.what}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Callout tone="info" icon={<Icon name="shield" size={14} />} title="How a rule change becomes a number">
-          The watch does not hand you prose. It expresses a change as a delta against the loaded rule pack — which parameter moves, by how
-          much, from when — so the engine can re-derive your position under it on the Impact tab. Anything it cannot express that way is
-          reported as a finding for a human, not applied.
-        </Callout>
-      </div>
-    </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    The module
    ═══════════════════════════════════════════════════════════════════════════ */
 
+type RTab = 'watchtower' | 'library' | 'radar' | 'instruments' | 'reconcile' | 'impact' | 'agent'
+const TABS: RTab[] = ['watchtower', 'library', 'radar', 'instruments', 'reconcile', 'impact', 'agent']
+
 export default function RegAIModule() {
   const { pack, scenario, country } = usePosition('actuals')
-  type RTab = 'radar' | 'instruments' | 'reconcile' | 'impact' | 'briefing'
+  const tracked = useApp((s) => s.regTracked)
+  const cfg = useApp((s) => s.regWatch)
+  const setCountry = useApp((s) => s.setCountry)
   const storedTab = useApp((s) => s.moduleTab.regai)
   const setStoredTab = useApp((s) => s.setModuleTab)
-  const tab = (storedTab as RTab) ?? 'radar'
+  // A tab id persisted by an older build (e.g. 'briefing') falls back to the front page.
+  const tab: RTab = TABS.includes(storedTab as RTab) ? (storedTab as RTab) : 'watchtower'
   const setTab = (t: RTab) => setStoredTab('regai', t)
   const recon = reconciliationFor(country)
   const openGaps = recon ? reconSummary(recon).open : 0
   const [open, setOpen] = useState<Instrument | null>(null)
+  const [reg, setReg] = useState<Regulation | null>(null)
   const regime = pack.regimeFor?.(scenario.year)
 
+  const readReg = (r: Regulation) => {
+    const first = instrumentsOf(r.id)[0]
+    setReg(null)
+    setCountry(r.market)
+    if (first) setOpen(first)
+    setTab('instruments')
+  }
+
   return (
-    <ModulePage wide
-      title="Reg AI"
-      sub={`The rules themselves — what governs ${pack.name} today, what is moving, and what a change would do to your position before it is in force.`}
-      actions={<AgentLauncher moduleId="regai" hint="Check official sources and quantify anything that has moved" />}>
+    <MotionConfig reducedMotion="user">
+      <ModulePage wide
+        title="Reg AI"
+        sub="Every regulation that shapes your position — vehicle CO₂ and CAFE, CBAM, emissions trading, type-approval — tracked by market, read clause by clause, and watched by an agent you tune."
+        actions={<AgentLauncher moduleId="regai" hint={`Run ${cfg.name} over the ${tracked.length} regulations you track`} />}
+        toolbar={
+          <Segmented value={tab} onChange={setTab}
+            options={[
+              { id: 'watchtower', label: 'Watchtower', icon: <Icon name="regai" size={13} />, hint: 'What you track, what bites next, what the watch found' },
+              { id: 'library', label: <span>Library <span className="ml-0.5 tabular-nums text-[var(--ink-4)]">{tracked.length}</span></span>, icon: <Icon name="list" size={13} />, hint: 'Choose the regulations you track, by market' },
+              { id: 'radar', label: 'Radar', icon: <Icon name="activity" size={13} />, hint: 'Tracked instruments on one timeline, by stage' },
+              { id: 'instruments', label: 'Reader', icon: <Icon name="book" size={13} />, hint: 'The clause-level reader' },
+              { id: 'reconcile', label: openGaps ? `Reconcile · ${openGaps}` : 'Reconcile', icon: <Icon name="shield" size={13} />, hint: 'What the loaded rule pack holds against what the current instrument says' },
+              { id: 'impact', label: 'Impact', icon: <Icon name="target" size={13} />, hint: 'A change, priced against your own fleet' },
+              { id: 'agent', label: 'Agent', icon: <Icon name="agent" size={13} />, hint: 'Tune the Regulatory watch' },
+            ]} />
+        }>
 
-      {regime?.draft && (
-        <Callout className="mb-4" tone="warn" icon={<Icon name="alert" size={15} />}
-          title={`${regime.name} is drafted, not notified`}>
-          The limits the platform holds for {scenario.year} are the draft trajectory. Until the norms are notified they can move — which is
-          exactly what the Impact tab is for.
-          <Button className="ml-2" size="xs" variant="secondary" onClick={() => setTab('impact')}>Price the risk</Button>
-        </Callout>
-      )}
+        {regime?.draft && (tab === 'radar' || tab === 'instruments' || tab === 'impact') && (
+          <Callout className="mb-4" tone="warn" icon={<Icon name="alert" size={15} />}
+            title={`${regime.name} is drafted, not notified`}>
+            The limits the platform holds for {scenario.year} are the draft trajectory. Until the norms are notified they can move — which is
+            exactly what the Impact tab is for.
+            {tab !== 'impact' && <Button className="ml-2" size="xs" variant="secondary" onClick={() => setTab('impact')}>Price the risk</Button>}
+          </Callout>
+        )}
 
-      <Segmented className="mb-4" value={tab} onChange={setTab}
-        options={[
-          { id: 'radar', label: 'Radar', icon: <Icon name="regai" size={13} />, hint: 'Every instrument, across every market, by stage' },
-          { id: 'instruments', label: 'Instruments', icon: <Icon name="book" size={13} />, hint: 'The clause-level reader' },
-          { id: 'reconcile', label: openGaps ? `Reconcile · ${openGaps}` : 'Reconcile', icon: <Icon name="shield" size={13} />, hint: 'What the loaded rule pack holds against what the current instrument says' },
-          { id: 'impact', label: 'Impact', icon: <Icon name="target" size={13} />, hint: 'A change, priced against your own fleet' },
-          { id: 'briefing', label: 'Briefing', icon: <Icon name="bell" size={13} />, hint: 'What the watch found' },
-        ]} />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={tab} variants={page} initial="hidden" animate="show" exit="exit">
+            {tab === 'watchtower' && <Watchtower onOpen={setReg} goTo={setTab} />}
+            {tab === 'library' && <Library onOpen={setReg} />}
+            {tab === 'radar' && <Radar onOpen={(i) => { setOpen(i); setTab('instruments') }} goLibrary={() => setTab('library')} />}
+            {tab === 'instruments' && <InstrumentReader open={open} setOpen={setOpen} goLibrary={() => setTab('library')} />}
+            {tab === 'reconcile' && <Reconcile />}
+            {tab === 'impact' && <ImpactSimulator />}
+            {tab === 'agent' && <AgentStudio goTo={setTab} />}
+          </motion.div>
+        </AnimatePresence>
 
-      <div key={tab} className="anim-in">
-        {tab === 'radar' && <Radar onOpen={(i) => { setOpen(i); setTab('instruments') }} />}
-        {tab === 'instruments' && <InstrumentReader open={open} setOpen={setOpen} />}
-        {tab === 'reconcile' && <Reconcile />}
-        {tab === 'impact' && <ImpactSimulator />}
-        {tab === 'briefing' && <Briefing />}
-      </div>
-    </ModulePage>
+        <RegDrawer reg={reg} onClose={() => setReg(null)} onRead={readReg} />
+      </ModulePage>
+    </MotionConfig>
   )
 }

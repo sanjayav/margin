@@ -31,8 +31,9 @@ import { TOOL_SPECS } from '../src/engine/toolspec.js'
 import { fleetSourceFrom, getPosition, runToolSafe, type ToolContext } from '../src/engine/tools.js'
 import type { CountryId, Scenario, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
-import { requireSession } from './_auth.js'
-import { allow } from './_ratelimit.js'
+import { clip, guardAi, publicError } from './_guard.js'
+import { AI_MODEL, withFallback } from '../src/ai/model.js'
+import { DEPTH_META, composeBrief, sanitizeWatch } from '../src/app/modules/regai/watch.js'
 import { AGENT_BY_ID } from '../src/app/agents/registry.js'
 import { can } from '../src/app/auth/rbac.js'
 import type { AgentId } from '../src/app/agents/kernel.js'
@@ -42,21 +43,18 @@ import { poolingAllowed } from '../src/engine/blocks.js'
 import { buildTree } from '../src/engine/engine.js'
 
 /**
- * The cheapest tier, by explicit choice. This loop mostly decides which engine
- * tool to call next and narrates what came back — the compliance arithmetic is
- * deterministic TypeScript behind the validation gate, so the model is
- * orchestrating, not calculating, and a wrong number cannot reach the user
- * through it.
+ * Claude Sonnet 5.5, by explicit choice — the one model the platform runs (see
+ * src/ai/model.ts). The compliance arithmetic is deterministic TypeScript behind
+ * the validation gate, so the model is orchestrating and narrating, not
+ * calculating, and a wrong number cannot reach the user through it. There is no
+ * env override: the model cannot drift per deployment.
  *
- * The trade is real and worth stating: Haiku is weaker at long multi-step
- * reasoning and at regulatory narrative, so expect shallower findings and
- * plainer write-ups, and watch whether passes start needing more turns to
- * reach the same place — more cheap turns can cost more than fewer good ones.
- *
- * AGENT_MODEL overrides, so moving a deployment back up a tier is an env
- * change rather than a redeploy.
+ * Effort 'medium' is the recommended starting point for multistep tool use on
+ * this model; adaptive thinking is on by default and its blocks are passed back
+ * unchanged with each turn.
  */
-const MODEL = process.env.AGENT_MODEL || 'claude-haiku-4-5-20251001'
+const MODEL = AI_MODEL
+const EFFORT = 'medium' as const
 const MAX_TURNS = 12
 
 /**
@@ -525,16 +523,40 @@ function systemPrompt(agentId: AgentId, country: CountryId, year: number, ctxNot
 
 // ── the route ───────────────────────────────────────────────────────────────
 
-export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only.' }); return }
+/** Context keys the client may pass into the system prompt. Anything else is
+ *  dropped: the system prompt is the operator channel, and free-form client
+ *  text there is a prompt-injection path. Values are clipped. */
+const CONTEXT_KEYS = ['year', 'module', 'parent', 'maker', 'screen', 'scenario', 'trackedRegulations', 'evShare', 'massShiftKg', 'focus'] as const
 
-  const session = requireSession(req, res)
-  if (!session) return
+function safeContext(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return ''
+  return CONTEXT_KEYS
+    .filter((k) => (raw as any)[k] != null)
+    .map((k) => `• ${k}: ${clip(JSON.stringify((raw as any)[k]), 600)}`)
+    .join('\n')
+}
+
+/**
+ * The Regulatory watch's workspace brief, re-validated field by field. Every
+ * value is clamped to a known option; the free-text instructions are clipped
+ * and placed in the USER turn, labelled as the workspace's request — never in
+ * the system prompt, which is the operator channel. The tool allowlist, the
+ * gate and the autonomy ceiling are not configurable and are not touched here.
+ */
+export function watchBrief(raw: unknown): { text: string; webSearch: boolean; maxSearches: number } | null {
+  const w = sanitizeWatch(raw)
+  if (!w) return null
+  return { text: composeBrief(w.cfg, w.tracked), webSearch: w.cfg.webSearch, maxSearches: DEPTH_META[w.cfg.depth].searches }
+}
+
+export default async function handler(req: any, res: any) {
+  const g = await guardAi(req, res, 'agents')
+  if (!g) return
+  const { session, body } = g
 
   const key = process.env.ANTHROPIC_API_KEY
   if (!key) { res.status(503).json({ error: 'No model key configured.', code: 'no_model_key' }); return }
 
-  const body = req.body ?? {}
   const agentId = String(body.agentId ?? '') as AgentId
   const agent = AGENT_BY_ID[agentId]
   if (!agent) { res.status(400).json({ error: `Unknown agent “${body.agentId}”.` }); return }
@@ -544,10 +566,6 @@ export default async function handler(req: any, res: any) {
   if (!can(role, agent.requires) || !can(role, 'agent.run')) {
     res.status(403).json({ error: `Your role (${role}) cannot run ${agent.name}.` }); return
   }
-  // Agent runs are the most expensive thing a session can do, so they share the
-  // co-pilot's per-workspace budget rather than getting an unmetered one.
-  if (!allow(res, session.workspace, 'copilot')) return
-
   const country = (String(body.country ?? 'IN') as CountryId)
   if (!PACK_LIST.some((p) => p.id === country)) { res.status(400).json({ error: 'Unknown market.' }); return }
   const pack = getPack(country)
@@ -591,17 +609,16 @@ export default async function handler(req: any, res: any) {
     const allowedTools = new Set(AGENT_TOOLS[agentId])
     const engineTools = TOOL_SPECS.filter((t) => allowedTools.has(t.name))
       .map((t) => ({ name: t.name, description: t.description, input_schema: t.input_schema }))
-    const wantsWeb = agent.tools.some((t) => t.external)
+    const brief = agentId === 'reg.watch' ? watchBrief(body.watch) : null
+    const wantsWeb = agent.tools.some((t) => t.external) && (brief ? brief.webSearch : true)
     const tools: any[] = [...engineTools, REPORT_FINDING, PROPOSE_CHANGE]
     // Only the agents that actually watch a feed get to write to it.
     if (agentId === 'forecast.horizon' || agentId === 'reg.watch') tools.push(POST_EVIDENCE)
     if (agentId === 'forecast.horizon') tools.push(PROPOSE_CASE)
-    if (wantsWeb) tools.unshift({ type: 'web_search_20250305', name: 'web_search', max_uses: 6 })
+    if (wantsWeb) tools.unshift({ type: 'web_search_20260209', name: 'web_search', max_uses: brief?.maxSearches ?? 6 })
 
     const anthropic = new Anthropic({ apiKey: key })
-    const ctxNote = typeof body.context === 'object' && body.context
-      ? Object.entries(body.context).map(([k, v]) => `• ${k}: ${JSON.stringify(v)}`).join('\n')
-      : ''
+    const ctxNote = safeContext(body.context)
     // The static breakpoint sits on the system block, which caches the tool
     // schemas with it: the wire order is tools, then system, then messages.
     const system = [{
@@ -610,12 +627,10 @@ export default async function handler(req: any, res: any) {
       cache_control: { type: 'ephemeral' as const },
     }]
 
-    const messages: any[] = [{
-      role: 'user',
-      content: body.prompt?.trim()
-        ? String(body.prompt).slice(0, 4000)
-        : `Run your standard pass for ${pack.name}, compliance year ${year}.`,
-    }]
+    const ask = typeof body.prompt === 'string' && body.prompt.trim()
+      ? clip(body.prompt, 4000)
+      : `Run your standard pass for ${pack.name}, compliance year ${year}.`
+    const messages: any[] = [{ role: 'user', content: brief ? `${brief.text}\n\n${ask}` : ask }]
 
     let proposalRaw: any = null
     let summary = ''
@@ -629,7 +644,9 @@ export default async function handler(req: any, res: any) {
       let msg: any
       rollCacheBreakpoint(messages)
       try {
-        msg = await anthropic.messages.create({ model: MODEL, max_tokens: 4096, system, tools, messages })
+        msg = await anthropic.beta.messages.create(withFallback({
+          model: MODEL, max_tokens: 16000, output_config: { effort: EFFORT }, system, tools, messages,
+        }) as any)
       } catch (e: any) {
         // A deployment without web-search entitlement must still be able to run
         // its engine-only work rather than failing the whole pass.
@@ -649,6 +666,13 @@ export default async function handler(req: any, res: any) {
 
       const text = msg.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('').trim()
       if (text) summary = text
+
+      if (msg.stop_reason === 'refusal') {
+        send({ type: 'step', step: { id: `s${step++}`, kind: 'note', status: 'warn', label: 'The model declined', detail: 'The pass stopped here. Every engine figure already shown stands on its own.' } })
+        break
+      }
+      // A server tool (web search) can pause a long turn; re-send to resume it.
+      if (msg.stop_reason === 'pause_turn') continue
 
       const calls = msg.content.filter((c: any) => c.type === 'tool_use')
       if (!calls.length) break
@@ -800,7 +824,7 @@ export default async function handler(req: any, res: any) {
     })
     send({ type: 'done', status })
   } catch (e: any) {
-    send({ type: 'error', message: String(e?.message ?? e) })
+    send({ type: 'error', message: publicError(e) })
   } finally {
     res.end()
   }

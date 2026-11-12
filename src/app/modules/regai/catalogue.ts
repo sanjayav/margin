@@ -17,7 +17,7 @@
       time. That way the catalogue can never quietly disagree with the engine —
       if the pack changes, this screen changes with it.
    ─────────────────────────────────────────────────────────────────────────── */
-import type { CountryId } from '../../../engine/types'
+import type { CountryId } from '../../../engine/types.js'
 
 export type Stage = 'consultation' | 'draft' | 'notified' | 'in force' | 'sunset'
 
@@ -47,6 +47,8 @@ export interface Clause {
 
 export interface Instrument {
   id: string
+  /** The regulation (programme) this instrument belongs to — see regulations.ts. */
+  regulation: string
   market: CountryId
   title: string
   shortTitle: string
@@ -66,7 +68,7 @@ export interface Instrument {
 export const INSTRUMENTS: Instrument[] = [
   /* ── European Union ─────────────────────────────────────────────────────── */
   {
-    id: 'eu-2019-631', market: 'EU', stage: 'in force', from: 2020, to: null,
+    id: 'eu-2019-631', regulation: 'eu-car-co2', market: 'EU', stage: 'in force', from: 2020, to: null,
     shortTitle: 'CO₂ standards for cars and vans',
     title: 'Regulation (EU) 2019/631 setting CO₂ emission performance standards for new passenger cars and new light commercial vehicles',
     citation: 'Regulation (EU) 2019/631', authority: 'European Parliament and Council',
@@ -95,7 +97,7 @@ export const INSTRUMENTS: Instrument[] = [
     ],
   },
   {
-    id: 'eu-2023-851', market: 'EU', stage: 'in force', from: 2025, to: null,
+    id: 'eu-2023-851', regulation: 'eu-car-co2', market: 'EU', stage: 'in force', from: 2025, to: null,
     shortTitle: '2030/2035 amendment',
     title: 'Regulation (EU) 2023/851 amending Regulation (EU) 2019/631 as regards strengthening the CO₂ emission performance standards',
     citation: 'Regulation (EU) 2023/851', authority: 'European Parliament and Council',
@@ -114,7 +116,7 @@ export const INSTRUMENTS: Instrument[] = [
 
   /* ── India ──────────────────────────────────────────────────────────────── */
   {
-    id: 'in-ec-act', market: 'IN', stage: 'in force', from: 2023, to: null,
+    id: 'in-ec-act', regulation: 'in-cafe', market: 'IN', stage: 'in force', from: 2023, to: null,
     shortTitle: 'Energy Conservation (Amendment) Act',
     title: 'The Energy Conservation (Amendment) Act, 2022',
     citation: 'Act No. 19 of 2022', authority: 'Parliament of India',
@@ -130,7 +132,7 @@ export const INSTRUMENTS: Instrument[] = [
     ],
   },
   {
-    id: 'in-cafe-2', market: 'IN', stage: 'in force', from: 2022, to: 2026,
+    id: 'in-cafe-2', regulation: 'in-cafe', market: 'IN', stage: 'in force', from: 2022, to: 2026,
     shortTitle: 'CAFE II',
     title: 'Corporate Average Fuel Efficiency norms, phase II',
     citation: 'BEE / Ministry of Power — CAFE II', authority: 'Bureau of Energy Efficiency',
@@ -146,7 +148,7 @@ export const INSTRUMENTS: Instrument[] = [
     ],
   },
   {
-    id: 'in-cafe-3', market: 'IN', stage: 'draft', from: 2027, to: 2032,
+    id: 'in-cafe-3', regulation: 'in-cafe', market: 'IN', stage: 'draft', from: 2027, to: 2032,
     shortTitle: 'CAFE III (draft)',
     title: 'Draft Corporate Average Fuel Efficiency norms, phase III',
     citation: 'BEE draft CAFE III', authority: 'Bureau of Energy Efficiency',
@@ -167,7 +169,7 @@ export const INSTRUMENTS: Instrument[] = [
 
   /* ── United Kingdom ─────────────────────────────────────────────────────── */
   {
-    id: 'uk-vets', market: 'UK', stage: 'in force', from: 2024, to: null,
+    id: 'uk-vets', regulation: 'uk-zev', market: 'UK', stage: 'in force', from: 2024, to: null,
     shortTitle: 'ZEV mandate (VETS)',
     title: 'The Vehicle Emissions Trading Schemes Order 2023',
     citation: 'SI 2023/1268', authority: 'Department for Transport',
@@ -192,7 +194,7 @@ export const INSTRUMENTS: Instrument[] = [
 
   /* ── Australia ──────────────────────────────────────────────────────────── */
   {
-    id: 'au-nves', market: 'AU', stage: 'in force', from: 2025, to: null,
+    id: 'au-nves', regulation: 'au-nves', market: 'AU', stage: 'in force', from: 2025, to: null,
     shortTitle: 'New Vehicle Efficiency Standard',
     title: 'New Vehicle Efficiency Standard Act 2024',
     citation: 'NVES Act 2024', authority: 'Commonwealth of Australia',
@@ -213,7 +215,7 @@ export const INSTRUMENTS: Instrument[] = [
 
   /* ── China ──────────────────────────────────────────────────────────────── */
   {
-    id: 'cn-dual-credit', market: 'CN', stage: 'in force', from: 2021, to: null,
+    id: 'cn-dual-credit', regulation: 'cn-dual-credit', market: 'CN', stage: 'in force', from: 2021, to: null,
     shortTitle: 'Dual-credit measures',
     title: 'Parallel Management Measures for Corporate Average Fuel Consumption and New Energy Vehicle Credits',
     citation: 'MIIT dual-credit measures', authority: 'Ministry of Industry and Information Technology',
@@ -232,7 +234,7 @@ export const INSTRUMENTS: Instrument[] = [
     ],
   },
   {
-    id: 'cn-gb27999', market: 'CN', stage: 'in force', from: 2021, to: null,
+    id: 'cn-gb27999', regulation: 'cn-dual-credit', market: 'CN', stage: 'in force', from: 2021, to: null,
     shortTitle: 'GB 27999 fuel-consumption limits',
     title: 'GB 27999 — Fuel consumption evaluation methods and targets for passenger cars',
     citation: 'GB 27999', authority: 'National standards committee',
@@ -245,6 +247,187 @@ export const INSTRUMENTS: Instrument[] = [
       { ref: 'Method', heading: 'Evaluation method', drives: 'cycle',
         text: 'The test procedure and the aggregation method used to compute the corporate average.',
         soWhat: 'Determines whether a declared figure is comparable to the one in your own dataset.' },
+    ],
+  },
+
+  /* ── Beyond vehicle CO₂ — the carbon instruments an OEM's supply chain and
+        operations answer to. No rule pack computes these, so every clause here
+        drives 'none' or 'scope': the reader shows the rule, the Impact tab does
+        not price it. ──────────────────────────────────────────────────────── */
+  {
+    id: 'eu-2023-956', regulation: 'eu-cbam', market: 'EU', stage: 'in force', from: 2026, to: null,
+    shortTitle: 'CBAM',
+    title: 'Regulation (EU) 2023/956 establishing a carbon border adjustment mechanism',
+    citation: 'Regulation (EU) 2023/956', authority: 'European Parliament and Council',
+    url: 'https://eur-lex.europa.eu/eli/reg/2023/956/oj',
+    summary:
+      'Puts a carbon price on the embedded emissions of imported cement, iron and steel, aluminium, fertilisers, electricity and hydrogen, mirroring the EU ETS price. The transitional reporting period ran from October 2023 to the end of 2025; the definitive period, with surrendered certificates, applies from 2026. Amended in 2025 to simplify it for small importers — read the consolidated text for current thresholds and dates.',
+    clauses: [
+      { ref: 'Art. 2 · Annex I', heading: 'Scope', drives: 'scope',
+        text: 'Applies to goods listed in Annex I originating outside the customs territory of the Union, including specified downstream iron, steel and aluminium products.',
+        soWhat: 'A finished vehicle is not in scope, but steel and aluminium inputs — and some fasteners and parts — are. The cost lands in your purchase price.' },
+      { ref: 'Art. 5 · 17', heading: 'Authorised declarant', drives: 'none',
+        text: 'Only an authorised CBAM declarant may import CBAM goods above the applicable threshold in the definitive period.',
+        soWhat: 'An operational gate, not a price: an importer without the status cannot clear the goods.' },
+      { ref: 'Art. 6', heading: 'Annual CBAM declaration', drives: 'none',
+        text: 'The declarant submits an annual declaration of the quantity of goods imported, their embedded emissions and the certificates to be surrendered.',
+        soWhat: 'Embedded-emissions data from your suppliers becomes a filing input. Default values apply where it is missing, and they are set to be unfavourable.' },
+      { ref: 'Art. 20–22', heading: 'Certificates', drives: 'none',
+        text: 'CBAM certificates are sold at a price reflecting the EU ETS auction price and surrendered against declared embedded emissions.',
+        soWhat: 'The carbon price you pay tracks the EU ETS. A supplier with verified low emissions is worth more than a cheaper one on defaults.' },
+    ],
+  },
+  {
+    id: 'eu-2003-87', regulation: 'eu-ets', market: 'EU', stage: 'in force', from: 2005, to: null,
+    shortTitle: 'EU ETS',
+    title: 'Directive 2003/87/EC establishing a system for greenhouse gas emission allowance trading within the Union',
+    citation: 'Directive 2003/87/EC', authority: 'European Parliament and Council',
+    url: 'https://eur-lex.europa.eu/eli/dir/2003/87/oj',
+    summary:
+      'The EU emissions trading system: a cap on emissions from power, heavy industry and aviation, with tradable allowances. It sets the carbon price CBAM mirrors, and free allocation to CBAM sectors phases out as CBAM phases in.',
+    clauses: [
+      { ref: 'Art. 9', heading: 'The cap', drives: 'none',
+        text: 'The Union-wide quantity of allowances decreases each year by a linear reduction factor.',
+        soWhat: 'A falling cap is a rising price over time — the input to every steel and aluminium cost forecast.' },
+      { ref: 'Art. 10a', heading: 'Free allocation and its phase-out', drives: 'none',
+        text: 'Free allocation to sectors covered by CBAM is reduced progressively as CBAM applies.',
+        soWhat: 'Your European suppliers lose free allowances on the same schedule your importers start paying CBAM.' },
+    ],
+  },
+  {
+    id: 'eu-2023-959', regulation: 'eu-ets2', market: 'EU', stage: 'notified', from: 2027, to: null,
+    shortTitle: 'ETS2 · road fuels',
+    title: 'Directive (EU) 2023/959 — emissions trading for buildings, road transport and additional sectors (Chapter IVa)',
+    citation: 'Directive (EU) 2023/959, Ch. IVa', authority: 'European Parliament and Council',
+    url: 'https://eur-lex.europa.eu/eli/dir/2023/959/oj',
+    summary:
+      'A separate trading system covering the fuel supplied for road transport and buildings, applied upstream at fuel suppliers. It puts a carbon price on petrol and diesel at the pump — which changes the running-cost case for zero-emission vehicles.',
+    clauses: [
+      { ref: 'Ch. IVa', heading: 'Upstream fuel obligation', drives: 'none',
+        text: 'Regulated entities releasing fuels for consumption in road transport and buildings surrender allowances for the emissions of those fuels.',
+        soWhat: 'Not an OEM obligation, but a demand driver: a higher pump price is an argument your ZEV forecast should carry.' },
+      { ref: 'Art. 30k', heading: 'Start-date safeguard', drives: 'none',
+        text: 'The start of allowance surrender can be postponed by one year where energy prices are exceptionally high.',
+        soWhat: 'The start year is conditional. Model the ZEV demand effect from either year.' },
+    ],
+  },
+  {
+    id: 'eu-2024-1257', regulation: 'eu-euro7', market: 'EU', stage: 'notified', from: 2026, to: null,
+    shortTitle: 'Euro 7',
+    title: 'Regulation (EU) 2024/1257 on type-approval of motor vehicles with respect to their emissions and battery durability (Euro 7)',
+    citation: 'Regulation (EU) 2024/1257', authority: 'European Parliament and Council',
+    url: 'https://eur-lex.europa.eu/eli/reg/2024/1257/oj',
+    summary:
+      'The pollutant-emissions and battery-durability type-approval regulation. It applies first to new types of cars and vans, then to all new registrations a year later, and adds brake-particle limits and minimum battery-durability requirements for electrified vehicles.',
+    clauses: [
+      { ref: 'Art. 20', heading: 'Application dates', drives: 'scope',
+        text: 'Applies to new types of M1 and N1 vehicles from 29 November 2026 and to all new M1 and N1 vehicles from 29 November 2027.',
+        soWhat: 'A carry-over model with no Euro 7 approval cannot be registered after the second date — a product-plan cliff, not a CO₂ one.' },
+      { ref: 'Annex I', heading: 'Battery durability', drives: 'none',
+        text: 'Minimum performance requirements for traction-battery durability over the vehicle’s life.',
+        soWhat: 'Durability becomes a type-approval condition, which matters for every ZEV volume your CO₂ plan depends on.' },
+    ],
+  },
+  {
+    id: 'eu-2023-1542', regulation: 'eu-battery', market: 'EU', stage: 'in force', from: 2024, to: null,
+    shortTitle: 'Battery Regulation',
+    title: 'Regulation (EU) 2023/1542 concerning batteries and waste batteries',
+    citation: 'Regulation (EU) 2023/1542', authority: 'European Parliament and Council',
+    url: 'https://eur-lex.europa.eu/eli/reg/2023/1542/oj',
+    summary:
+      'Life-cycle rules for batteries placed on the EU market: carbon-footprint declarations and performance classes for EV batteries, a digital battery passport, recycled-content targets and due diligence on raw materials. Most obligations phase in on dates tied to delegated and implementing acts.',
+    clauses: [
+      { ref: 'Art. 7', heading: 'Carbon footprint', drives: 'none',
+        text: 'Electric-vehicle batteries carry a carbon-footprint declaration, followed by performance classes and maximum thresholds, each applying from dates set by the delegated acts.',
+        soWhat: 'Battery CO₂ becomes something a regulator can cap — the first step toward life-cycle accounting for the ZEVs your fleet target relies on.' },
+      { ref: 'Art. 77', heading: 'Battery passport', drives: 'none',
+        text: 'EV batteries placed on the market carry an electronic battery passport from 18 February 2027.',
+        soWhat: 'A data obligation on your supply chain with a fixed date.' },
+    ],
+  },
+  {
+    id: 'uk-cbam', regulation: 'uk-cbam', market: 'UK', stage: 'draft', from: 2027, to: null,
+    shortTitle: 'UK CBAM',
+    title: 'UK carbon border adjustment mechanism (legislated through the Finance Bill)',
+    citation: 'UK CBAM — HM Treasury / HMRC', authority: 'HM Treasury',
+    summary:
+      'A UK carbon border charge on imports of aluminium, cement, fertiliser, hydrogen, and iron and steel, from 1 January 2027, set against the UK carbon price. Treated here as draft until the legislation and its regulations are confirmed in force — check the current status before filing.',
+    clauses: [
+      { ref: 'Scope', heading: 'Covered goods', drives: 'scope',
+        text: 'Applies to specified goods in the covered sectors imported into the UK, above a registration threshold.',
+        soWhat: 'Same exposure shape as EU CBAM for steel and aluminium inputs, on a different carbon price and its own forms.' },
+      { ref: 'Rate', heading: 'The charge', drives: 'none',
+        text: 'The charge is calculated from the embedded emissions of the goods and a CBAM rate reflecting the UK carbon price, less any carbon price paid abroad.',
+        soWhat: 'A carbon price paid in the country of origin reduces the charge — supplier evidence of that is worth money.' },
+    ],
+  },
+  {
+    id: 'uk-2020-1265', regulation: 'uk-ets', market: 'UK', stage: 'in force', from: 2021, to: null,
+    shortTitle: 'UK ETS',
+    title: 'The Greenhouse Gas Emissions Trading Scheme Order 2020',
+    citation: 'SI 2020/1265', authority: 'UK ETS Authority',
+    url: 'https://www.legislation.gov.uk/uksi/2020/1265/contents',
+    summary:
+      'The UK’s post-Brexit emissions trading scheme for power, heavy industry and aviation. It sets the carbon price that UK CBAM is pegged to.',
+    clauses: [
+      { ref: 'Cap', heading: 'Cap and trajectory', drives: 'none',
+        text: 'A cap on allowances that reduces over the scheme’s phases.',
+        soWhat: 'The price input for UK steel and aluminium costs and for the UK CBAM rate.' },
+    ],
+  },
+  {
+    id: 'in-ccts', regulation: 'in-ccts', market: 'IN', stage: 'in force', from: 2023, to: null,
+    shortTitle: 'Carbon Credit Trading Scheme',
+    title: 'Carbon Credit Trading Scheme, 2023',
+    citation: 'Ministry of Power — CCTS 2023', authority: 'Ministry of Power / Bureau of Energy Efficiency',
+    summary:
+      'India’s domestic carbon market, made under the Energy Conservation Act. Its compliance mechanism sets greenhouse-gas emission-intensity targets for obligated entities in energy-intensive sectors, starting with a first set of industrial sectors and expanding by notification.',
+    clauses: [
+      { ref: 'Compliance', heading: 'Emission-intensity targets', drives: 'none',
+        text: 'Obligated entities receive GHG emission-intensity targets; those that beat them earn tradable carbon credit certificates, those that miss them must surrender certificates.',
+        soWhat: 'Matters to an OEM through its steel, aluminium and component suppliers — and, over time, as a domestic carbon price that could be credited against CBAM-style charges abroad.' },
+      { ref: 'Offset', heading: 'Offset mechanism', drives: 'none',
+        text: 'Non-obligated entities may register projects to earn credits under the offset mechanism.',
+        soWhat: 'A route to credits outside the vehicle norms — not a substitute for CAFE compliance.' },
+    ],
+  },
+  {
+    id: 'cn-ets', regulation: 'cn-ets', market: 'CN', stage: 'in force', from: 2021, to: null,
+    shortTitle: 'National carbon market',
+    title: 'Interim Regulations on the Administration of Carbon Emissions Trading',
+    citation: 'State Council Decree No. 775', authority: 'State Council / Ministry of Ecology and Environment',
+    summary:
+      'China’s national emissions trading market. It began with the power sector and has been extended to further heavy industries, with steel, cement and aluminium smelting the first additions. The 2024 State Council regulations put the market on a firmer legal footing.',
+    clauses: [
+      { ref: 'Scope', heading: 'Covered sectors', drives: 'scope',
+        text: 'Key emitting entities in covered sectors are allocated allowances and must surrender allowances equal to verified emissions.',
+        soWhat: 'Steel and aluminium coverage means a domestic carbon cost in Chinese supply chains — and, for exports, a carbon price that may be credited under CBAM.' },
+    ],
+  },
+  {
+    id: 'au-safeguard', regulation: 'au-safeguard', market: 'AU', stage: 'in force', from: 2016, to: null,
+    shortTitle: 'Safeguard Mechanism',
+    title: 'National Greenhouse and Energy Reporting (Safeguard Mechanism) Rule, as reformed in 2023',
+    citation: 'NGER Act 2007 · Safeguard Rule', authority: 'Clean Energy Regulator',
+    summary:
+      'Baselines for Australia’s largest industrial emitters, declining each year to 2030 under the 2023 reforms, with tradable Safeguard Mechanism Credits for facilities that come in under their baseline.',
+    clauses: [
+      { ref: 'Baselines', heading: 'Declining baselines', drives: 'none',
+        text: 'Facility baselines decline on a set trajectory; facilities above baseline must surrender credits or units.',
+        soWhat: 'A carbon cost on domestic heavy industry — relevant through local steel and aluminium supply, not the vehicle standard.' },
+    ],
+  },
+  {
+    id: 'au-carbon-leakage', regulation: 'au-leakage', market: 'AU', stage: 'consultation', from: 2027, to: null,
+    shortTitle: 'Carbon leakage review',
+    title: 'Carbon Leakage Review — including options for a border carbon adjustment',
+    citation: 'DCCEEW carbon leakage review', authority: 'Department of Climate Change, Energy, the Environment and Water',
+    summary:
+      'A government review of carbon-leakage risk under the Safeguard Mechanism, including whether Australia should adopt a border carbon adjustment. It is a review, not an instrument: nothing here is law, and the dates on the radar are indicative.',
+    clauses: [
+      { ref: 'Options', heading: 'Policy options', drives: 'none',
+        text: 'Assessment of leakage risk by sector and of policy responses, including a border carbon adjustment on selected imports.',
+        soWhat: 'Track it, do not model it. If a border adjustment is proposed, it becomes a draft instrument here.' },
     ],
   },
 ]

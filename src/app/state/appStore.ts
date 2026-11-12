@@ -18,6 +18,8 @@ import type { DriverKey, DriverSet } from '../../engine/outlook'
 import { DRIVER_DEFAULTS } from '../../engine/outlook'
 import type { EvidenceItem, ForecastCase } from '../modules/forecast/cases'
 import { BUILTIN_CASES } from '../modules/forecast/cases'
+import { DEFAULT_TRACKED } from '../modules/regai/regulations'
+import { DEFAULT_WATCH, type WatchConfig } from '../modules/regai/watch'
 
 export interface SessionUser {
   email: string
@@ -95,6 +97,20 @@ interface AppState {
   setAutonomy: (a: Autonomy) => void
   markets: CountryId[]           // markets this workspace has switched on
   setMarkets: (m: CountryId[]) => void
+
+  /* ── Reg AI ── */
+  /** Regulation ids this workspace tracks (modules/regai/regulations.ts). */
+  regTracked: string[]
+  toggleReg: (id: string) => void
+  setRegTracked: (ids: string[]) => void
+  /** The Regulatory watch agent's brief. */
+  regWatch: WatchConfig
+  patchRegWatch: (p: Partial<WatchConfig>) => void
+  resetRegWatch: () => void
+  /** When the Regulatory watch last completed a pass (runs themselves are not
+   *  persisted, so cadence needs this to know a pass is due after a reload). */
+  regLastPass: string | null
+  setRegLastPass: (iso: string) => void
 
   /* ── navigation ── */
   country: CountryId
@@ -225,6 +241,17 @@ export const useApp = create<AppState>()(persist((set, get) => ({
   markets: PACK_LIST.map((p) => p.id),
   setMarkets: (m) => set({ markets: m }),
 
+  regTracked: DEFAULT_TRACKED,
+  toggleReg: (id) => set((s) => ({
+    regTracked: s.regTracked.includes(id) ? s.regTracked.filter((x) => x !== id) : [...s.regTracked, id],
+  })),
+  setRegTracked: (ids) => set({ regTracked: [...new Set(ids)] }),
+  regWatch: DEFAULT_WATCH,
+  patchRegWatch: (p) => set((s) => ({ regWatch: { ...s.regWatch, ...p } })),
+  resetRegWatch: () => set({ regWatch: DEFAULT_WATCH }),
+  regLastPass: null,
+  setRegLastPass: (iso) => set({ regLastPass: iso }),
+
   country: 'IN',
   module: 'plan',
   theme: 'light',
@@ -333,8 +360,15 @@ export const useApp = create<AppState>()(persist((set, get) => ({
   // The Assumption Book, the scenario board and the evidence feed DO persist:
   // they are the analyst's own work, and losing them on a reload would make the
   // module unusable. Runs do not, for the reason above.
+  // A persisted watch config from an older build may lack newer fields, so it
+  // is merged over the defaults rather than replacing them.
+  merge: (persisted: any, current) => ({
+    ...current, ...persisted,
+    regWatch: { ...DEFAULT_WATCH, ...(persisted?.regWatch ?? {}) },
+  }),
   partialize: (s) => ({
     session: s.session, onboarded: s.onboarded, autonomy: s.autonomy, markets: s.markets,
+    regTracked: s.regTracked, regWatch: s.regWatch, regLastPass: s.regLastPass,
     country: s.country, module: s.module, theme: s.theme, navCollapsed: s.navCollapsed,
     members: s.members, moduleTab: s.moduleTab, forecastTarget: s.forecastTarget,
     drivers: s.drivers, driverProvenance: s.driverProvenance,
