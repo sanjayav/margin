@@ -29,14 +29,13 @@ import { TOOL_SPECS } from '../src/engine/toolspec.js'
 import { fleetSourceFrom, runToolSafe, type ToolContext, type WorkspaceAction } from '../src/engine/tools.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
-import { requireSession } from './_auth.js'
-import { allow } from './_ratelimit.js'
+import { clip, guardAi, publicError } from './_guard.js'
+import { AI_MODEL, withFallback } from '../src/ai/model.js'
 
-const MODEL = 'claude-opus-5'
-/** Where a policy refusal is re-run server-side, so a benign compliance question
- *  never dead-ends on a classifier. Opt-in, and degraded gracefully below. */
-const FALLBACK_MODEL = 'claude-opus-4-8'
-const FALLBACK_BETA = 'server-side-fallback-2026-06-01'
+/** Claude Sonnet 5.5 — the platform's one model (src/ai/model.ts). A policy
+ *  refusal is re-run server-side on Sonnet 5 so a benign compliance question
+ *  never dead-ends on a classifier; opt-in, and degraded gracefully below. */
+const MODEL = AI_MODEL
 const MAX_TURNS = 10
 const ALL: CountryId[] = ['EU', 'IN', 'AU', 'UK', 'CN']
 
@@ -114,7 +113,10 @@ Formatting available to you: **bold**, \`code\` for figures worth isolating, - b
 function situation(ctx: any): string {
   const c = ctx?.country as CountryId | undefined
   const pack = c && ALL.includes(c) ? getPack(c) : null
-  const s = ctx?.scenario ?? {}
+  const raw = ctx?.scenario ?? {}
+  // Numbers only — a string here would be free text in the system prompt.
+  const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? v : undefined)
+  const s = { year: num(raw.year), evSharePct: num(raw.evSharePct), massShiftKg: num(raw.massShiftKg) }
   return `Right now the user is looking at: market=${pack?.name ?? ctx?.country ?? '—'}, maker=${ctx?.parent ?? '—'}, screen=${ctx?.screen ?? '—'}, year=${s.year ?? '—'}, forced zero-emission share=${s.evSharePct ?? 'as-sold'}, mass shift=${s.massShiftKg ?? 0}kg, reading depth=${ctx?.viewMode ?? 'analyst'}. Today is ${new Date().toISOString().slice(0, 10)}. Default to this market, maker and year when the user does not name one.`
 }
 
@@ -148,15 +150,13 @@ function toolResultForModel(r: { ok: boolean; result?: any; error?: any }): stri
 }
 
 export default async function handler(req: any, res: any) {
-  // This route spends the server's Anthropic key: a session, then a per-workspace
-  // ceiling. Without both, a deployed URL is an open frontier-model endpoint.
-  const session = requireSession(req, res)
-  if (!session) return
-  if (!allow(res, session.workspace, 'copilot')) return
-  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
-  if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set on the server.' }); return }
+  // This route spends the server's Anthropic key: method, session, origin, then
+  // per-user, per-workspace and daily ceilings — all in the shared guard.
+  const g = await guardAi(req, res, 'copilot')
+  if (!g) return
+  const { session, body } = g
+  if (!process.env.ANTHROPIC_API_KEY) { res.status(503).json({ error: 'The AI service is not configured on the server.' }); return }
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
   const mode: 'chat' | 'take' = body.mode === 'take' || (body.finding && !body.message) ? 'take' : 'chat'
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const send = sse(res)
@@ -165,12 +165,12 @@ export default async function handler(req: any, res: any) {
   if (mode === 'take') {
     if (!body.finding) { send('error', { error: 'finding is required' }); res.end(); return }
     try {
-      const stream = client.messages.stream({
-        model: MODEL, max_tokens: 600,
+      const stream = client.beta.messages.stream(withFallback({
+        model: MODEL, max_tokens: 2000,
         output_config: { effort: 'low' },
         system: TAKE_SYSTEM,
-        messages: [{ role: 'user', content: JSON.stringify(body.finding) }],
-      })
+        messages: [{ role: 'user', content: clip(JSON.stringify(body.finding), 8000) }],
+      }) as any)
       for await (const ev of stream) {
         if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') send('delta', { text: ev.delta.text })
       }
@@ -178,17 +178,26 @@ export default async function handler(req: any, res: any) {
       if (final.stop_reason === 'refusal') send('error', { error: 'The model declined to frame this finding. The engine numbers stand on their own.' })
       send('done', {})
     } catch (e: any) {
-      send('error', { error: String(e?.message ?? e) })
+      send('error', { error: publicError(e) })
     }
     res.end()
     return
   }
 
   // ── mode: chat ────────────────────────────────────────────────────────────
-  const message = String(body.message ?? '').trim()
+  const message = clip(body.message, 4000).trim()
   if (!message) { send('error', { error: 'message is required' }); res.end(); return }
 
-  const reqCtx = body.context ?? {}
+  // Context is interpolated into the system prompt, so every free-text field
+  // is clipped: the operator channel must not carry arbitrary client text.
+  const rawCtx = typeof body.context === 'object' && body.context ? body.context : {}
+  const reqCtx = {
+    ...rawCtx,
+    parent: rawCtx.parent == null ? undefined : clip(rawCtx.parent, 80),
+    screen: rawCtx.screen == null ? undefined : clip(rawCtx.screen, 40),
+    viewMode: rawCtx.viewMode == null ? undefined : clip(rawCtx.viewMode, 20),
+    country: rawCtx.country == null ? undefined : clip(rawCtx.country, 4),
+  }
   // Entitlement claims still originate on the client (billing is mocked — see
   // docs/PACKAGING.md). Clamping them to known markets and enforcing them in the
   // tool executor is the half that does not depend on the client being honest.
@@ -204,7 +213,7 @@ export default async function handler(req: any, res: any) {
     ...(Array.isArray(body.history) ? body.history : [])
       .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
       .slice(-10)
-      .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: String(m.content) })),
+      .map((m: any) => ({ role: m.role as 'user' | 'assistant', content: clip(m.content, 4000) })),
     { role: 'user', content: message },
   ]
 
@@ -219,8 +228,8 @@ export default async function handler(req: any, res: any) {
       const params = {
         model: MODEL,
         max_tokens: 8000,
-        // Adaptive thinking is on by default on Opus 5; asking for the summary is
-        // what makes the reasoning visible in the trace instead of a silent pause.
+        // Adaptive thinking is on by default on Sonnet 5.5; asking for the summary
+        // is what makes the reasoning visible in the trace instead of a silent pause.
         thinking: { type: 'adaptive' as const, display: 'summarized' as const },
         output_config: { effort: 'high' as const },
         system: [
@@ -237,9 +246,7 @@ export default async function handler(req: any, res: any) {
       let stream: ReturnType<typeof client.messages.stream>
       if (useFallback) {
         try {
-          stream = client.beta.messages.stream({
-            ...params, betas: [FALLBACK_BETA], fallbacks: [{ model: FALLBACK_MODEL }],
-          } as any) as any
+          stream = client.beta.messages.stream(withFallback(params) as any) as any
         } catch { useFallback = false; stream = client.messages.stream(params) }
       } else {
         stream = client.messages.stream(params)
@@ -313,7 +320,7 @@ export default async function handler(req: any, res: any) {
 
     send('error', { error: 'I could not finish that within the tool budget — try narrowing the question.' })
   } catch (e: any) {
-    send('error', { error: String(e?.message ?? e) })
+    send('error', { error: publicError(e) })
   }
   send('done', { stopReason: 'aborted', usage, toolCalls: audit.length })
   res.end()

@@ -13,8 +13,8 @@
 // emissions figure, limit, gap and fine comes from the deterministic engine.
 // ───────────────────────────────────────────────────────────────────────────
 import Anthropic from '@anthropic-ai/sdk'
-import { requireSession } from './_auth.js'
-import { allow } from './_ratelimit.js'
+import { clip, guardAi, publicError } from './_guard.js'
+import { AI_MODEL, withFallback } from '../src/ai/model.js'
 import { getPack, PACK_LIST } from '../src/engine/rulepacks/index.js'
 import { FLEET } from '../src/data/fleet.js'
 import {
@@ -30,7 +30,7 @@ import { buildTree } from '../src/engine/engine.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
 import { getCurrent } from './_store.js'
 
-const MODEL = 'claude-opus-4-8' // the most capable Claude — consistent with the co-pilot & analyst
+const MODEL = AI_MODEL // Claude Sonnet 5.5 — the platform's one model (src/ai/model.ts)
 type Fleets = Record<CountryId, Vehicle[]>
 
 const COLORS = ['emerald', 'amber', 'violet', 'sky', 'rose', 'teal', 'orange'] as const
@@ -223,22 +223,24 @@ const briefSystem = `You are the lead forecast analyst inside AiRE, writing the 
 Every figure is engine-computed — cite them exactly, never recompute. Use the market's units and currency.`
 
 export default async function handler(req: any, res: any) {
-  const session = requireSession(req, res)
-  if (!session) return
-  if (!allow(res, session.workspace, 'forecast')) return
-  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
-
-  // Validate the client's request before checking server config, so a malformed
-  // request gets a 4xx even when the key is unset.
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
-  const { prompt, context = {} } = body
+  // Method, session, origin, rate ceilings and a size-capped body — the shared guard.
+  // Validated before checking server config, so a malformed request gets a 4xx
+  // even when the key is unset.
+  const g = await guardAi(req, res, 'forecast')
+  if (!g) return
+  const { session, body } = g
+  const context = typeof body.context === 'object' && body.context ? body.context : {}
+  const prompt = clip(body.prompt, 2000).trim()
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return }
 
-  const country: CountryId = (context.country ?? 'EU') as CountryId
-  const owned: CountryId[] = context.ownedModules ?? ['EU', 'IN', 'AU', 'UK', 'CN']
+  const ALL_MARKETS: CountryId[] = ['EU', 'IN', 'AU', 'UK', 'CN']
+  const country = String(context.country ?? 'EU') as CountryId
+  if (!ALL_MARKETS.includes(country)) { res.status(400).json({ error: 'Unknown market.' }); return }
+  const owned: CountryId[] = (Array.isArray(context.ownedModules) ? context.ownedModules : ALL_MARKETS)
+    .filter((c: unknown): c is CountryId => ALL_MARKETS.includes(c as CountryId))
   if (!owned.includes(country)) { res.status(403).json({ error: `Market ${country} is not subscribed.` }); return }
 
-  if (!process.env.ANTHROPIC_API_KEY) { res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set on the server.' }); return }
+  if (!process.env.ANTHROPIC_API_KEY) { res.status(503).json({ error: 'The AI service is not configured on the server.' }); return }
 
   // Open the SSE stream. From here, failures surface as an `error` event.
   res.setHeader('Content-Type', 'text/event-stream')
@@ -301,7 +303,7 @@ export default async function handler(req: any, res: any) {
     // ── Pass A: generate scenario definitions (structured, grounded on baseline) ──
     const genParams: any = {
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: 16000,
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high', format: { type: 'json_schema', schema: SCENARIO_SCHEMA } },
       system: generationSystem(country, ownedNote),
@@ -310,7 +312,8 @@ export default async function handler(req: any, res: any) {
         content: `The user is forecasting ${baseline.target} in ${pack.name}. Their request:\n"${String(prompt)}"\n\nEngine-computed baseline (hold today's mix):\n${JSON.stringify(baseline)}\n\nThe Assumption Book (fundamentals) — registry, current values and engine-computed case economics:\n${JSON.stringify(bookContext)}`,
       }],
     }
-    const genResp = await client.messages.create(genParams)
+    const genResp: any = await client.beta.messages.create(withFallback(genParams) as any)
+    if (genResp.stop_reason === 'refusal') throw Object.assign(new Error('refused'), { refused: true })
     const jsonText = (genResp.content.find((b: any) => b.type === 'text') as any)?.text ?? '{}'
     let defs: ForecastScenarioDef[] = []
     let aiBook: { drivers: DriverSet; weights: { base: number; upside: number; downside: number }; narrative: string } | null = null
@@ -371,14 +374,16 @@ export default async function handler(req: any, res: any) {
       fineBridge: bridge ? { year: bridge.year, from: Math.round(bridge.from), to: Math.round(bridge.to), effects: bridge.effects.map((e) => ({ label: e.label, delta: Math.round(e.delta) })) } : null,
       aiProposedBook: aiBook,
     }
-    const stream = client.messages.stream({
+    const stream = client.beta.messages.stream(withFallback({
       model: MODEL,
-      max_tokens: 1200,
+      // Adaptive thinking spends from the same budget, so the brief needs room
+      // beyond its ~300 words of prose.
+      max_tokens: 6000,
       thinking: { type: 'adaptive' },
       system: briefSystem,
       messages: [{ role: 'user', content: JSON.stringify(briefInput) }],
-    })
-    for await (const ev of stream) {
+    }) as any)
+    for await (const ev of stream as any) {
       if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') send('brief_delta', { text: ev.delta.text })
     }
 
@@ -386,8 +391,9 @@ export default async function handler(req: any, res: any) {
     res.end()
   } catch (e: any) {
     // If the stream is open, emit an error event; otherwise fall back to JSON.
-    try { send('error', { error: String(e?.message ?? e) }); res.end() }
-    catch { if (!res.headersSent) res.status(500).json({ error: String(e?.message ?? e) }) }
+    const msg = e?.refused ? 'The model declined this request. The engine baseline stands on its own.' : publicError(e)
+    try { send('error', { error: msg }); res.end() }
+    catch { if (!res.headersSent) res.status(500).json({ error: msg }) }
   }
 }
 

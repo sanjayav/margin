@@ -30,6 +30,9 @@ export const LIMITS = {
   ask: { perMinute: 20, burst: 8 },
   forecast: { perMinute: 10, burst: 4 },
   copilot: { perMinute: 20, burst: 8 },
+  // An agent pass is up to 12 model turns in one request — the most expensive
+  // thing a session can start, so it gets the tightest per-user ceiling.
+  agents: { perMinute: 6, burst: 3 },
   // A TrueReg goal fans out over several agent turns in one request, so the
   // per-minute ceiling is lower than the single-question routes.
   truereg: { perMinute: 8, burst: 3 },

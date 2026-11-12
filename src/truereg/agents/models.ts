@@ -21,7 +21,11 @@
 // there is one place to correct when the API moves.
 // ───────────────────────────────────────────────────────────────────────────
 
-export type ModelId = 'claude-fable-5' | 'claude-opus-5' | 'claude-sonnet-5' | 'claude-haiku-4-5'
+import { AI_MODEL, AI_MODEL_NAME, AI_PRICE } from '../../ai/model.js'
+
+/** One model, platform-wide (src/ai/model.ts). The catalogue shape is kept so
+ *  the picker UI and the server-side clamp keep working; it simply has one row. */
+export type ModelId = typeof AI_MODEL
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export interface ModelDef {
@@ -37,51 +41,29 @@ export interface ModelDef {
   context: number
   /** Can it read an image or a scanned PDF page? */
   vision: boolean
-  /** Does it accept output_config.effort? Pre-4.6 models return 400. */
+  /** Does it accept output_config.effort? */
   supportsEffort: boolean
-  /** Does it accept thinking:{type:'adaptive'}? Pre-4.6 models do not. */
+  /** Does it accept thinking:{type:'adaptive'}? */
   supportsAdaptiveThinking: boolean
   /** Thinking cannot be turned off at all on this model. */
   thinkingAlwaysOn: boolean
-  /** Worth pairing with server-side refusal fallbacks. */
+  /** Paired with server-side refusal fallbacks (to Sonnet 5). */
   refusalFallbacks: boolean
   tier: 'frontier' | 'default' | 'fast' | 'cheap'
 }
 
-/** Ordered most capable first. `claude-opus-5` is the default and the one the
- *  agent workforce is tuned against. */
 export const MODELS: ModelDef[] = [
   {
-    id: 'claude-fable-5', name: 'Claude Fable 5', tier: 'frontier',
-    forEn: 'The most capable model. Worth it for a long, messy installation where the boundary and the precursor chain both have to be reasoned about at once.',
-    forZh: '能力最强的模型。当边界与前体链条需同时推理的复杂装置，值得使用。',
-    inputPerMTok: 10, outputPerMTok: 50, context: 1_000_000, vision: true,
+    id: AI_MODEL, name: AI_MODEL_NAME, tier: 'fast',
+    forEn: 'The platform model. Fast, strong at agentic tool use, and priced for everyday compliance work — the engine does the arithmetic, the model reads and explains.',
+    forZh: '平台统一模型。速度快，擅长代理式工具调用，适合日常合规工作 — 计算由引擎完成，模型负责解读与说明。',
+    inputPerMTok: AI_PRICE.inputPerMTok, outputPerMTok: AI_PRICE.outputPerMTok, context: 1_000_000, vision: true,
+    // `disabled` thinking is a 400 on Sonnet 5.5; adaptive is the default.
     supportsEffort: true, supportsAdaptiveThinking: true, thinkingAlwaysOn: true, refusalFallbacks: true,
-  },
-  {
-    id: 'claude-opus-5', name: 'Claude Opus 5', tier: 'default',
-    forEn: 'The default. Best balance of agentic tool use and cost — this is what the seven agents are written for.',
-    forZh: '默认选项。代理式工具调用与成本的最佳平衡 — 七个代理即以此为基准编写。',
-    inputPerMTok: 5, outputPerMTok: 25, context: 1_000_000, vision: true,
-    supportsEffort: true, supportsAdaptiveThinking: true, thinkingAlwaysOn: false, refusalFallbacks: true,
-  },
-  {
-    id: 'claude-sonnet-5', name: 'Claude Sonnet 5', tier: 'fast',
-    forEn: 'Faster and less than half the price. Good for routine questions where the engine has already done the hard part.',
-    forZh: '更快，价格不到一半。适合引擎已完成主要工作的常规问题。',
-    inputPerMTok: 2, outputPerMTok: 10, context: 1_000_000, vision: true,
-    supportsEffort: true, supportsAdaptiveThinking: true, thinkingAlwaysOn: false, refusalFallbacks: false,
-  },
-  {
-    id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', tier: 'cheap',
-    forEn: 'Cheapest. A smaller 200K context and no effort control — fine for short lookups, not for interpreting a plant record.',
-    forZh: '成本最低。上下文仅200K且不支持思考强度控制 — 适合简短查询，不适合解读工厂记录。',
-    inputPerMTok: 1, outputPerMTok: 5, context: 200_000, vision: true,
-    supportsEffort: false, supportsAdaptiveThinking: false, thinkingAlwaysOn: false, refusalFallbacks: false,
   },
 ]
 
-export const DEFAULT_MODEL: ModelId = 'claude-opus-5'
+export const DEFAULT_MODEL: ModelId = AI_MODEL
 /** Agentic tool-use work rewards a high setting; this is the tuned default. */
 export const DEFAULT_EFFORT: Effort = 'high'
 
@@ -100,8 +82,7 @@ export const EFFORTS: { id: Effort; label: string; hint: string }[] = [
  *
  *  Everything that differs per model lives here, because each of these is a
  *  400 rather than a degraded answer if it is sent to a model that rejects it:
- *  `output_config.effort` on a pre-4.6 model, adaptive thinking on Haiku,
- *  or `thinking:{type:'disabled'}` above effort `high` on Opus 5. */
+ *  e.g. `thinking:{type:'disabled'}` on Sonnet 5.5. */
 export function modelParams(id: ModelId, effort: Effort, opts: { streamReasoning?: boolean } = {}) {
   const m = getModel(id)
   const p: Record<string, unknown> = { model: m.id }

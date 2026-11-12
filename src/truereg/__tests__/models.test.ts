@@ -7,39 +7,33 @@ import { DEFAULT_EFFORT, DEFAULT_MODEL, MODELS, getModel, modelParams, estimateT
 import { readAttachment, summariseIntake, forWire, MAX_FILE_BYTES } from '../agents/attachments'
 
 describe('model catalogue', () => {
-  it('defaults to Opus 5 at high effort — what the agents are tuned for', () => {
-    expect(DEFAULT_MODEL).toBe('claude-opus-5')
+  it('runs Claude Sonnet 5.5 only, at high effort', () => {
+    expect(MODELS.map((m) => m.id)).toEqual(['claude-sonnet-5-5'])
+    expect(DEFAULT_MODEL).toBe('claude-sonnet-5-5')
     expect(DEFAULT_EFFORT).toBe('high')
-    expect(getModel('nonsense').id).toBe('claude-opus-5')
+    // Anything the client names is clamped back to the one model.
+    expect(getModel('claude-opus-5').id).toBe('claude-sonnet-5-5')
+    expect(getModel('nonsense').id).toBe('claude-sonnet-5-5')
   })
 
-  it('sends effort and adaptive thinking to models that take them', () => {
-    const p = modelParams('claude-opus-5', 'xhigh') as any
-    expect(p.model).toBe('claude-opus-5')
+  it('sends effort and summarised adaptive thinking', () => {
+    const p = modelParams('claude-sonnet-5-5', 'xhigh') as any
+    expect(p.model).toBe('claude-sonnet-5-5')
     expect(p.output_config).toEqual({ effort: 'xhigh' })
     // Summarised, or the client sees a silent pause instead of reasoning.
     expect(p.thinking).toEqual({ type: 'adaptive', display: 'summarized' })
   })
 
-  it('sends neither to Haiku 4.5, which rejects both', () => {
-    const p = modelParams('claude-haiku-4-5', 'max') as any
-    expect(p.model).toBe('claude-haiku-4-5')
-    expect(p.output_config).toBeUndefined()
-    expect(p.thinking).toBeUndefined()
-  })
-
-  it('never emits a budget_tokens thinking config — removed on this generation', () => {
+  it('never emits a config Sonnet 5.5 rejects', () => {
     for (const m of MODELS) {
-      const p = modelParams(m.id, 'high') as any
-      expect(JSON.stringify(p ?? {})).not.toMatch(/budget_tokens/)
+      const s = JSON.stringify(modelParams(m.id, 'high') ?? {})
+      expect(s).not.toMatch(/budget_tokens|"disabled"|temperature|top_p|top_k/)
     }
   })
 
-  it('prices a turn in the right order across the tiers', () => {
-    const cost = (id: any) => estimateTurnCostUsd(id)
-    expect(cost('claude-fable-5')).toBeGreaterThan(cost('claude-opus-5'))
-    expect(cost('claude-opus-5')).toBeGreaterThan(cost('claude-sonnet-5'))
-    expect(cost('claude-sonnet-5')).toBeGreaterThan(cost('claude-haiku-4-5'))
+  it('prices a turn from the Sonnet rate card', () => {
+    // 12k in × $2/M + 900 out × $10/M
+    expect(estimateTurnCostUsd('claude-sonnet-5-5')).toBeCloseTo(0.033, 5)
   })
 })
 

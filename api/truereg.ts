@@ -32,15 +32,10 @@ import { CORPUS_VERSION, REGULATIONS, type RegulationId } from '../src/truereg/c
 import { TERMBASE_VERSION } from '../src/truereg/corpus/terms.js'
 import { currentDefaults } from '../src/truereg/cbam/defaults.js'
 import { DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS, MODELS, getModel, modelParams, type Effort, type ModelId } from '../src/truereg/agents/models.js'
-import { requireSession } from './_auth.js'
-import { allow } from './_ratelimit.js'
+import { clip, guardAi, publicError } from './_guard.js'
+import { withFallback } from '../src/ai/model.js'
 
 const MAX_TURNS = 6
-/** Server-side refusal fallback: on a policy decline the API re-runs the same
- *  request on another model inside the same call, so a benign compliance
- *  question never dead-ends on a classifier. Opt-in, and dropped gracefully
- *  below if this deployment's account does not carry the beta. */
-const FALLBACK_BETA = 'server-side-fallback-2026-07-01'
 
 /** Attachments arrive as base64 or extracted text and become content blocks.
  *  Validated here rather than trusted: an oversized or unknown media type is a
@@ -159,12 +154,10 @@ function forModel(r: ReturnType<typeof runToolSafe>): string {
 }
 
 export default async function handler(req: any, res: any) {
-  const session = requireSession(req, res)
-  if (!session) return
-  if (!allow(res, session.workspace, 'truereg')) return
-  if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return }
-
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {}
+  // Attachments travel in the body, so the cap is the wire budget plus headroom.
+  const g = await guardAi(req, res, 'truereg', { maxBytes: MAX_WIRE_BYTES + 1024 * 1024 })
+  if (!g) return
+  const { body } = g
   const mode: 'run' | 'ask' = body.mode === 'ask' ? 'ask' : 'run'
   const allowed: RegulationId[] = (Array.isArray(body.allowed) ? body.allowed : ['cbam-eu', 'cbam-uk'])
     .filter((r: unknown): r is RegulationId => ALL_REGS.includes(r as RegulationId))
@@ -172,8 +165,9 @@ export default async function handler(req: any, res: any) {
   const ctx: ToolContext = defaultContext(DEMO_BUNDLE, DEMO_CONTRACTS, allowed)
   ctx.substituteDefaults = body.substituteDefaults !== false
 
-  // Clamped to the catalogue rather than trusted: an arbitrary model string from
-  // the client is either a 400 or an unbudgeted spend on whatever it names.
+  // The catalogue holds one model (Claude Sonnet 5.5). A model string from the
+  // client is clamped to it, never trusted: an arbitrary one is either a 400 or
+  // an unbudgeted spend on whatever it names.
   const modelId: ModelId = MODELS.some((m) => m.id === body.model) ? body.model : DEFAULT_MODEL
   const effort: Effort = EFFORTS.some((e) => e.id === body.effort) ? body.effort : DEFAULT_EFFORT
   const def = getModel(modelId)
@@ -233,7 +227,7 @@ export default async function handler(req: any, res: any) {
       let stream: any
       if (useFallback) {
         try {
-          stream = client.beta.messages.stream({ ...params, betas: [FALLBACK_BETA], fallbacks: 'default' } as any)
+          stream = client.beta.messages.stream(withFallback(params) as any)
         } catch { useFallback = false; stream = client.messages.stream(params) }
       } else {
         stream = client.messages.stream(params)
@@ -332,7 +326,7 @@ export default async function handler(req: any, res: any) {
     }
 
     // ── mode: ask — a free question to a named agent ────────────────────────
-    const question = String(body.question ?? '').trim()
+    const question = clip(body.question, 4000).trim()
     if (!question && !attachments.length) { send('error', { error: 'question is required' }); res.end(); return }
     const agent = (AGENTS.some((a) => a.id === body.agent) ? body.agent : 'delta') as AgentId
     // No key is not an error. The absence of narration is a stated capability
@@ -348,7 +342,7 @@ export default async function handler(req: any, res: any) {
     send('done', { toolCalls: audit.length, staged: ctx.staged.length, submitted: false })
     res.end(); return
   } catch (e: any) {
-    send('error', { error: String(e?.message ?? e) })
+    send('error', { error: publicError(e) })
     send('done', { toolCalls: audit.length, staged: ctx.staged.length, submitted: false, aborted: true })
     res.end()
   }

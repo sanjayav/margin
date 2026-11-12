@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { hashPassword, issue } from '../_auth.js'
 import { _reset } from '../_ratelimit.js'
+import { _resetGuard } from '../_guard.js'
 
 // ── a scripted Anthropic client ─────────────────────────────────────────────
 type Ev = Record<string, any>
@@ -71,6 +72,7 @@ beforeEach(() => {
   script.length = 0
   seen.length = 0
   _reset()
+  _resetGuard()
   process.env.ANTHROPIC_API_KEY = 'test-key'
 })
 
@@ -86,8 +88,10 @@ describe('the route refuses before it spends anything', () => {
     delete process.env.ANTHROPIC_API_KEY
     const res = fakeRes()
     await handler(req({ message: 'hi' }), res)
-    expect(res.out.code).toBe(500)
-    expect(res.out.body.error).toMatch(/ANTHROPIC_API_KEY/)
+    // 503, and the message does not name server internals.
+    expect(res.out.code).toBe(503)
+    expect(res.out.body.error).toMatch(/not configured/i)
+    expect(res.out.body.error).not.toMatch(/ANTHROPIC_API_KEY/)
   })
 
   it('rejects a non-POST', async () => {
@@ -237,7 +241,9 @@ describe('request shape', () => {
     await handler(req({ message: 'q', context: { ownedModules: ['EU'] } }), fakeRes())
 
     const p = seen[0]
-    expect(p.model).toBe('claude-opus-5')
+    expect(p.model).toBe('claude-sonnet-5-5')
+    // A refusal is rescued inside the Sonnet family, never on another tier.
+    expect(p.fallbacks).toEqual([{ model: 'claude-sonnet-5' }])
     expect(p.thinking).toEqual({ type: 'adaptive', display: 'summarized' })
     expect(p.output_config.effort).toBe('high')
     // Stable doctrine is cached; the volatile situation block sits after it.

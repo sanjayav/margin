@@ -2,6 +2,7 @@
 // Seeds from the bundled official extract (fast, always works). For the full
 // EEA load use `npm run ingest:eu`. Cron-gated via CRON_SECRET (Vercel sends it
 // as a Bearer token); open in local dev when no secret is set.
+import { timingSafeEqual } from 'node:crypto'
 import { putDataset, SOURCES, backend } from './_store.js'
 import fleet from '../src/data/fleet_data.js'
 import type { CountryId, Vehicle } from '../src/engine/types.js'
@@ -12,8 +13,14 @@ function authed(req: any): boolean {
   // unauthenticated caller could replace the data under every customer. Open
   // without a secret in local dev only; in production, no secret means no.
   if (!secret) return process.env.VERCEL_ENV !== 'production'
-  const hdr = req.headers?.authorization || req.headers?.Authorization
-  return hdr === `Bearer ${secret}` || (req.headers?.['x-cron-secret'] || '') === secret
+  const hdr = String(req.headers?.authorization || req.headers?.Authorization || '')
+  return safeEq(hdr, `Bearer ${secret}`) || safeEq(String(req.headers?.['x-cron-secret'] || ''), secret)
+}
+
+/** Constant-time compare, so response timing does not leak the secret. */
+function safeEq(a: string, b: string): boolean {
+  const x = Buffer.from(a), y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
 }
 
 export default async function handler(req: any, res: any) {
