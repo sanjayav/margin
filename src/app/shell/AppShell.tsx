@@ -163,7 +163,7 @@ function Sidebar() {
             <Avatar name={session?.name ?? '?'} size={24} />
           </div>
         ) : (
-          <Popover align="start" width={216}
+          <Popover align="start" side="top" width={216}
             trigger={({ toggle }) => (
               <button onClick={toggle} className="flex w-full items-center gap-2.5 rounded-[var(--r-sm)] px-1.5 py-1.5 text-left transition-colors hover:bg-[var(--nav-hover)]">
                 <Avatar name={session?.name ?? '?'} size={26} />

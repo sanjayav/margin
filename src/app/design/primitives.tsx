@@ -678,10 +678,14 @@ export function Tooltip({ content, children, side = 'top' }: {
 
 /** Anchored popover. Closes on outside click and Escape — the two things a
  *  hand-rolled dropdown always forgets. */
-export function Popover({ trigger, children, align = 'end', width = 240 }: {
+export function Popover({ trigger, children, align = 'end', side = 'bottom', width = 240 }: {
   trigger: (p: { open: boolean; toggle: () => void }) => React.ReactNode
   children: (p: { close: () => void }) => React.ReactNode
-  align?: 'start' | 'end'; width?: number
+  align?: 'start' | 'end'
+  /** 'top' for triggers pinned to the bottom of the viewport (e.g. the nav
+   *  user menu) — opening downward there pushes the menu off-screen. */
+  side?: 'top' | 'bottom'
+  width?: number
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -698,7 +702,8 @@ export function Popover({ trigger, children, align = 'end', width = 240 }: {
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
       {open && (
         <div style={{ width }}
-          className={cx('anim-scale absolute top-[calc(100%+6px)] z-[70] overflow-hidden rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-1)] p-1 shadow-[var(--sh-3)]',
+          className={cx('anim-scale absolute z-[70] overflow-hidden rounded-[var(--r-md)] border border-[var(--line)] bg-[var(--surface-1)] p-1 shadow-[var(--sh-3)]',
+            side === 'top' ? 'bottom-[calc(100%+6px)] origin-bottom' : 'top-[calc(100%+6px)] origin-top',
             align === 'end' ? 'right-0' : 'left-0')}>
           {children({ close: () => setOpen(false) })}
         </div>
